@@ -28,6 +28,8 @@ interface WizardChessAPI {
   setPassAutoFlip?: (autoFlip: boolean) => void;
   flipPassCameraNow?: () => void;
   setVoiceAnnouncerEnabled?: (enabled: boolean) => boolean;
+  setSfxEnabled?: (enabled: boolean) => boolean;
+  getSfxEnabled?: () => boolean;
   announceSanctumEvent?: (eventType: string, payload?: Record<string, unknown>) => void;
   getState?: () => {
     gameMode: 'single' | 'pass' | 'multi';
@@ -38,6 +40,7 @@ interface WizardChessAPI {
     onlineQueueStatus: 'idle' | 'searching' | 'matched';
     inCheck?: boolean;
     voiceEnabled?: boolean;
+    sfxEnabled?: boolean;
     uiHidden?: boolean;
   };
 }
@@ -75,6 +78,14 @@ export default function App() {
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('wizard_chess_voice_enabled');
+      return saved === null ? true : saved !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [sfxEnabled, setSfxEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('wizard_chess_sfx_enabled');
       return saved === null ? true : saved !== 'false';
     } catch {
       return true;
@@ -140,10 +151,17 @@ export default function App() {
 
     const handlePieceCaptured = (ev: Event) => {
       const detail = (ev as CustomEvent).detail;
-      if (!detail || !detail.isHumanCapture) return;
+      if (!detail) return;
       const cType = String(detail.capturedType || 'pawn').toLowerCase();
-      const goldEarned = PIECE_GOLD_BOUNTY[cType] || 20;
       const typeName = cType.charAt(0).toUpperCase() + cType.slice(1);
+      const killTitle = detail.killTitle ? `${detail.killTitle} · ` : '';
+
+      if (!detail.isHumanCapture) {
+        showRewardToast(0, `${killTitle}Your ${typeName} Shattered!`);
+        return;
+      }
+
+      const goldEarned = PIECE_GOLD_BOUNTY[cType] || 20;
 
       setEconomy((prev) => {
         const next: EconomyState = {
@@ -159,7 +177,7 @@ export default function App() {
         return next;
       });
 
-      showRewardToast(goldEarned, `${typeName} Destroyed!`);
+      showRewardToast(goldEarned, `${killTitle}${typeName} Destroyed!`);
     };
 
     const handleMatchWon = (ev: Event) => {
@@ -225,6 +243,13 @@ export default function App() {
       const d = (ev as CustomEvent).detail;
       if (d && typeof d.voiceEnabled === 'boolean') {
         setVoiceEnabled(d.voiceEnabled);
+      }
+    };
+
+    const handleSfxChange = (ev: Event) => {
+      const d = (ev as CustomEvent).detail;
+      if (d && typeof d.sfxEnabled === 'boolean') {
+        setSfxEnabled(d.sfxEnabled);
       }
     };
 
@@ -318,6 +343,7 @@ export default function App() {
     window.addEventListener('wizardchess:statechange', handleStateChange);
     window.addEventListener('wizardchess:uichange', handleUiChange);
     window.addEventListener('wizardchess:voicechange', handleVoiceChange);
+    window.addEventListener('wizardchess:sfxchange', handleSfxChange);
     window.addEventListener('wizardchess:matchfound', handleMatchFound);
     window.addEventListener('wizardchess:matchmakingtick', handleMatchmakingTick);
     window.addEventListener('wizardchess:matchmakingtimeout', handleMatchmakingTimeout);
@@ -330,6 +356,7 @@ export default function App() {
       window.removeEventListener('wizardchess:statechange', handleStateChange);
       window.removeEventListener('wizardchess:uichange', handleUiChange);
       window.removeEventListener('wizardchess:voicechange', handleVoiceChange);
+      window.removeEventListener('wizardchess:sfxchange', handleSfxChange);
       window.removeEventListener('wizardchess:matchfound', handleMatchFound);
       window.removeEventListener('wizardchess:matchmakingtick', handleMatchmakingTick);
       window.removeEventListener('wizardchess:matchmakingtimeout', handleMatchmakingTimeout);
@@ -393,6 +420,15 @@ export default function App() {
     const eng = getEngine();
     if (eng?.setVoiceAnnouncerEnabled) {
       eng.setVoiceAnnouncerEnabled(next);
+    }
+  };
+
+  const handleToggleSfx = () => {
+    const next = !sfxEnabled;
+    setSfxEnabled(next);
+    const eng = getEngine();
+    if (eng?.setSfxEnabled) {
+      eng.setSfxEnabled(next);
     }
   };
 
@@ -783,12 +819,16 @@ export default function App() {
 
       <div id="canvas-container"></div>
 
-      {/* Floating Gold Bounty Notification */}
+      {/* Floating Gold Bounty & Dramatic Kill Effect Notification */}
       {bountyToast && (
         <div className="gold-bounty-toast" key={bountyToast.id} role="status" aria-live="polite">
-          <span className="gold-coin-glyph">◈</span>
-          <span className="gold-bounty-amount">+{bountyToast.amount} Gold</span>
-          <span className="gold-bounty-sep">·</span>
+          <span className="gold-coin-glyph">{bountyToast.amount > 0 ? '◈' : '⚔'}</span>
+          {bountyToast.amount > 0 && (
+            <>
+              <span className="gold-bounty-amount">+{bountyToast.amount} Gold</span>
+              <span className="gold-bounty-sep">·</span>
+            </>
+          )}
           <span className="gold-bounty-label">{bountyToast.label}</span>
         </div>
       )}
@@ -1025,6 +1065,16 @@ export default function App() {
 
           <div className="hud-divider" aria-hidden="true"></div>
           <div className="mobile-sheet-section-label">Display, Voice &amp; Gestures</div>
+
+          <button
+            type="button"
+            className={`hud-btn ${sfxEnabled ? 'active' : ''}`}
+            id="btn-sfx-toggle"
+            title="Toggle Combat & Piece Kill Sound Effects (SFX)"
+            onClick={handleToggleSfx}
+          >
+            {sfxEnabled ? 'SFX: ON' : 'SFX: OFF'}
+          </button>
 
           <button
             type="button"

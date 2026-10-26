@@ -8,6 +8,7 @@ import {
   rebuildBoardArchitectureGroup
 } from './customBoardAndPieceModels.js';
 import { createWorldSceneryManager } from './worldSceneries.js';
+import { createSoundAndVfxManager, PIECE_KILL_PROFILES } from './soundAndVfxEngine.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -351,6 +352,7 @@ export function initWizardChess() {
     let currentWorldSceneryObj = null;
     const cathedralShellMeshes = [];
     const worldSceneryManager = createWorldSceneryManager(scene);
+    const sfxVfxManager = createSoundAndVfxManager(scene, BOARD_SURFACE_Y);
 
     function clampPointToCathedralRoom(pt, isTarget = false) {
       const margin = isTarget ? 0.15 : 0.0;
@@ -2222,6 +2224,7 @@ export function initWizardChess() {
         if (d.mesh) scene.remove(d.mesh);
       }
       shatterDebris.length = 0;
+      sfxVfxManager.clearAllVfx();
       impactFlashLight.intensity = 0;
       impactFlashLight.visible = false;
       if (activeDuelSavedCam) {
@@ -2276,6 +2279,7 @@ export function initWizardChess() {
       preMoveHighlightTask = null;
       activeMoveTweens.length = 0;
       clearCheckmateSequence();
+      sfxVfxManager.clearAllVfx();
       if (activeDuelSavedCam) {
         camera.position.copy(activeDuelSavedCam.pos);
         orbitControls.target.copy(activeDuelSavedCam.target);
@@ -2555,31 +2559,53 @@ export function initWizardChess() {
     const sharedCrystalGeo = new THREE.OctahedronGeometry(1.15, 0);
     const sharedDragonGeo = new THREE.TetrahedronGeometry(1.25, 0);
 
-    function spawnStoneShatter(worldPos, color) {
+    function spawnStoneShatter(worldPos, color, victimType = 'pawn', attackerType = 'queen', dirX = 0, dirZ = 1) {
       const primaryMat = color === 'w' ? whitePieceMat : blackPieceMat;
       const sideArchetype = getSideArchetype(color);
       const sideTrimMat = color === 'w' ? whiteTrimMat : blackTrimMat;
       const sideBladeMat = color === 'w' ? whiteBladeMat : blackBladeMat;
+
+      const vType = String(victimType || 'pawn').toLowerCase();
+      const killProfile = PIECE_KILL_PROFILES[vType] || PIECE_KILL_PROFILES.pawn;
+
+      // Trigger piece-specific procedural SFX and multi-stage 3D Kill VFX spectacle
+      sfxVfxManager.playPieceKillSfx(vType, attackerType);
+      sfxVfxManager.spawnPieceKillVfx(worldPos, vType, color, attackerType, dirX, dirZ);
 
       let mainGeo = sharedShardGeo;
       if (sideArchetype === 'classic_staunton') mainGeo = sharedSplinterGeo;
       else if (sideArchetype === 'arcane_cyber') mainGeo = sharedCrystalGeo;
       else if (sideArchetype === 'dragon_elemental') mainGeo = sharedDragonGeo;
 
-      for (let i = 0; i < 34; i++) {
-        const isAccentShard = i % 4 === 0;
-        const shardMat = isAccentShard
-          ? (sideArchetype === 'arcane_cyber' || sideArchetype === 'dragon_elemental'
-              ? sideBladeMat
-              : sideTrimMat)
-          : primaryMat;
-        const sz = 0.024 + Math.random() * 0.048;
+      const glowingEmberMat = new THREE.MeshBasicMaterial({
+        color: killProfile.primaryHex
+      });
+
+      const shardCount = killProfile.shardCount || 42;
+      const velScale =
+        vType === 'king' ? 1.48 :
+        vType === 'queen' ? 1.35 :
+        vType === 'rook' ? 1.25 :
+        vType === 'knight' ? 1.30 :
+        vType === 'bishop' ? 1.18 : 1.05;
+
+      for (let i = 0; i < shardCount; i++) {
+        const isGlowingCoreShard = i % 6 === 0;
+        const isAccentShard = !isGlowingCoreShard && i % 3 === 0;
+        const shardMat = isGlowingCoreShard
+          ? glowingEmberMat
+          : isAccentShard
+            ? (sideArchetype === 'arcane_cyber' || sideArchetype === 'dragon_elemental'
+                ? sideBladeMat
+                : sideTrimMat)
+            : primaryMat;
+        const sz = (0.022 + Math.random() * 0.052) * (vType === 'rook' || vType === 'king' ? 1.18 : 1.0);
         const frag = new THREE.Mesh(mainGeo, shardMat);
         frag.scale.setScalar(sz);
         frag.position.set(
-          worldPos.x + (Math.random() - 0.5) * 0.16,
-          worldPos.y + 0.10 + Math.random() * 0.28,
-          worldPos.z + (Math.random() - 0.5) * 0.16
+          worldPos.x + (Math.random() - 0.5) * 0.18,
+          worldPos.y + 0.08 + Math.random() * 0.34,
+          worldPos.z + (Math.random() - 0.5) * 0.18
         );
         frag.castShadow = true;
         scene.add(frag);
@@ -2587,20 +2613,21 @@ export function initWizardChess() {
           mesh: frag,
           baseScale: sz,
           vel: new THREE.Vector3(
-            (Math.random() - 0.5) * 2.4,
-            1.3 + Math.random() * 2.1,
-            (Math.random() - 0.5) * 2.4
+            ((Math.random() - 0.5) * 2.5 + dirX * 0.65) * velScale,
+            (1.35 + Math.random() * 2.35) * velScale,
+            ((Math.random() - 0.5) * 2.5 + dirZ * 0.65) * velScale
           ),
           rotVel: new THREE.Vector3(
-            Math.random() * 10,
-            Math.random() * 10,
-            Math.random() * 10
+            (Math.random() - 0.5) * 18,
+            (Math.random() - 0.5) * 18,
+            (Math.random() - 0.5) * 18
           ),
-          life: 2.2
+          life: 2.35
         });
       }
-      impactFlashLight.position.set(worldPos.x, worldPos.y + 0.4, worldPos.z);
-      impactFlashLight.intensity = 7.5;
+      impactFlashLight.color.setHex(killProfile.primaryHex);
+      impactFlashLight.position.set(worldPos.x, worldPos.y + 0.48, worldPos.z);
+      impactFlashLight.intensity = killProfile.flashIntensity || 10.5;
     }
 
     // =========================================================================
@@ -2710,6 +2737,7 @@ export function initWizardChess() {
       const moveHeading = Math.atan2(dx, dz);
       piece.mesh.rotation.y = moveHeading;
       playPieceClip(piece, 'Move', true, 0.10);
+      sfxVfxManager.playMoveStartSfx(piece.type, isCapture);
 
       // Detect Castling (King moves 2 files horizontally: e1->g1/c1 or e8->g8/c8) and animate the Rook simultaneously
       const isCastling = piece.type === 'king' && fromR === toR && Math.abs(toC - fromC) === 2;
@@ -3052,10 +3080,19 @@ export function initWizardChess() {
           const promoted = instantiatePiece('queen', piece.color, toR, toC);
           promoted.hasMoved = true;
           boardState[toR][toC] = promoted;
+          sfxVfxManager.playPromotionSfx();
+          sfxVfxManager.spawnSquarePulseVfx(endPos, 0xe040fb, 0.38, 0.68);
         } else {
           piece.mesh.position.copy(endPos);
           piece.mesh.rotation.y = piece.color === 'w' ? Math.PI : 0;
           playPieceClip(piece, 'Idle', true, 0.18);
+          if (!isCapture) {
+            sfxVfxManager.playMoveLandSfx(piece.type, isCastling);
+            sfxVfxManager.spawnSquarePulseVfx(endPos, isCastling ? 0xf5d76e : 0x4ea8de, isCastling ? 0.30 : 0.21, 0.38);
+            if (isCastling && castleRookEndPos) {
+              sfxVfxManager.spawnSquarePulseVfx(castleRookEndPos, 0xf5d76e, 0.28, 0.38);
+            }
+          }
         }
 
         if (isCapture) {
@@ -3152,6 +3189,7 @@ export function initWizardChess() {
             if (!attackAnimStarted) {
               attackAnimStarted = true;
               playPieceClip(piece, 'Attack', false, 0.08);
+              sfxVfxManager.playAttackChargeAndSwingSfx(piece.type, captured?.type || 'pawn');
             }
 
             // Keep any bystanders immediately adjacent to strikePos yielded slightly outward during the weapon swing
@@ -3223,16 +3261,19 @@ export function initWizardChess() {
               defenderFlinchTriggered = true;
               if (captured) {
                 playPieceClip(captured, 'Shatter', false, 0.04);
+                sfxVfxManager.playWeaponContactClashSfx(piece.type, captured.type);
+                sfxVfxManager.spawnWeaponContactVfx(endPos, dirX, dirZ, captured.type);
+                impactFlashLight.color.setHex(0xffe0a3);
                 impactFlashLight.position.set(
                   endPos.x - dirX * 0.08,
                   BOARD_SURFACE_Y + 0.28,
                   endPos.z - dirZ * 0.08
                 );
-                impactFlashLight.intensity = 4.5;
+                impactFlashLight.intensity = 6.2;
               }
             }
 
-            // Blow Burst: after visible weapon impact & follow-through, defender explodes into stone shards!
+            // Blow Burst: after visible weapon impact & follow-through, defender explodes with piece-specific Kill VFX & SFX!
             if (!shatterTriggered && (atkClipTime >= BLOW_CLIP_TIME || elapsed >= tImpact + 0.06)) {
               shatterTriggered = true;
               impactActualTime = elapsed;
@@ -3240,7 +3281,8 @@ export function initWizardChess() {
               if (captured && captured.mesh) {
                 const shatterOrigin = captured.mesh.position.clone();
                 scene.remove(captured.mesh);
-                spawnStoneShatter(shatterOrigin, captured.color);
+                spawnStoneShatter(shatterOrigin, captured.color, captured.type, piece.type, dirX, dirZ);
+                const killProf = PIECE_KILL_PROFILES[captured.type] || PIECE_KILL_PROFILES.pawn;
                 const isHumanCapture =
                   gameMode === 'pass' ||
                   (gameMode === 'single' && piece.color === playerColor) ||
@@ -3252,6 +3294,8 @@ export function initWizardChess() {
                       attackerType: piece.type,
                       capturedType: captured.type,
                       capturedColor: captured.color,
+                      killTitle: killProf.title,
+                      killSubtitle: killProf.subtitle,
                       isHumanCapture,
                       gameMode,
                       botDifficulty
@@ -4078,35 +4122,38 @@ export function initWizardChess() {
     // Feature 7: Checkmate Rigged King Fall-Over Animation & Cathedral Overlay
     // =========================================================================
     function spawnKingFallImpact(worldPos, color) {
+      sfxVfxManager.playPieceKillSfx('king', 'queen');
+      sfxVfxManager.spawnPieceKillVfx(worldPos, 'king', color, 'queen', 0, 1);
       const mat = color === 'w' ? whitePieceMat : blackPieceMat;
-      for (let i = 0; i < 18; i++) {
-        const sz = 0.015 + Math.random() * 0.028;
+      for (let i = 0; i < 28; i++) {
+        const sz = 0.018 + Math.random() * 0.034;
         const geo = new THREE.DodecahedronGeometry(sz, 0);
         const frag = new THREE.Mesh(geo, mat);
         frag.position.set(
-          worldPos.x + (Math.random() - 0.5) * 0.14,
-          BOARD_SURFACE_Y + 0.04 + Math.random() * 0.10,
-          worldPos.z + (Math.random() - 0.5) * 0.14
+          worldPos.x + (Math.random() - 0.5) * 0.16,
+          BOARD_SURFACE_Y + 0.04 + Math.random() * 0.12,
+          worldPos.z + (Math.random() - 0.5) * 0.16
         );
         frag.castShadow = true;
         scene.add(frag);
         shatterDebris.push({
           mesh: frag,
           vel: new THREE.Vector3(
-            (Math.random() - 0.5) * 1.45,
-            0.65 + Math.random() * 1.25,
-            (Math.random() - 0.5) * 1.45
+            (Math.random() - 0.5) * 1.85,
+            0.85 + Math.random() * 1.55,
+            (Math.random() - 0.5) * 1.85
           ),
           rotVel: new THREE.Vector3(
-            Math.random() * 8,
-            Math.random() * 8,
-            Math.random() * 8
+            Math.random() * 10,
+            Math.random() * 10,
+            Math.random() * 10
           ),
-          life: 1.65
+          life: 1.95
         });
       }
-      impactFlashLight.position.set(worldPos.x, BOARD_SURFACE_Y + 0.35, worldPos.z);
-      impactFlashLight.intensity = 6.2;
+      impactFlashLight.color.setHex(0xff1e42);
+      impactFlashLight.position.set(worldPos.x, BOARD_SURFACE_Y + 0.42, worldPos.z);
+      impactFlashLight.intensity = 14.0;
     }
 
     function showCheckmateBanner(winnerColor, defeatedColor, isCheckWin = false) {
@@ -4595,6 +4642,8 @@ export function initWizardChess() {
         selectedSquare = { r: clickedR, c: clickedC };
         validMoves = getLegalMovesForPiece(clickedR, clickedC);
         showSquareHighlights(clickedR, clickedC, validMoves);
+        sfxVfxManager.playSelectSfx(clickedPiece.type);
+        sfxVfxManager.spawnSquarePulseVfx(boardToWorld(clickedR, clickedC), 0xf5d76e, 0.22, 0.34);
       } else {
         clearSquareHighlights();
         selectedSquare = null;
@@ -5783,6 +5832,12 @@ export function initWizardChess() {
         setCameraForSide(currentTurn, false);
       },
       setVoiceAnnouncerEnabled,
+      setSfxEnabled: (enabled) => sfxVfxManager.setSfxEnabled(enabled),
+      getSfxEnabled: () => sfxVfxManager.getSfxEnabled(),
+      triggerPieceKillVfxPreview: (victimType = 'queen', r = 3, c = 3) => {
+        const wPos = boardToWorld(r, c);
+        spawnStoneShatter(wPos, 'b', victimType, 'queen', 0, -1);
+      },
       announceSanctumEvent,
       holdCameraKey: (code, down = true) => {
         if (down) heldCameraKeys.add(code);
@@ -5892,6 +5947,7 @@ export function initWizardChess() {
         gameOver,
         inCheck: isKingInCheck(currentTurn, boardState),
         voiceEnabled,
+        sfxEnabled: sfxVfxManager.getSfxEnabled(),
         activeWorldScenery: currentWorldSceneryId,
         checkmateState: { ...checkmateState },
         capturedByWhite,
@@ -6293,6 +6349,8 @@ export function initWizardChess() {
 
       // Advance 3D World Scenery sky shaders, orbiting landmarks, soaring dragons & particle weather
       worldSceneryManager.update(dt, elapsedTotal);
+      // Advance Piece-Specific 3D Kill VFX & Procedural Camera Shake
+      sfxVfxManager.update(dt, camera);
       for (let i = 0; i < brazierGlowSprites.length; i++) {
         const sp = brazierGlowSprites[i];
         const baseOp = sp.userData.baseOpacity || 0.4;
