@@ -62,6 +62,27 @@ export interface BoardSkin {
   brazierLightHex: string;
 }
 
+export interface WorldScenery {
+  id: 'gothic_cathedral' | 'celestial_observatory' | 'dragon_sky_citadel' | 'volcanic_titan_forge';
+  name: string;
+  subtitle: string;
+  badge: string;
+  price: number;
+  skyPreviewGradient: string;
+  accentHex: string;
+  landmarksLabel: string;
+  weatherLabel: string;
+  fogHex: string;
+  fogDensity: number;
+  hemiSkyHex: string;
+  hemiGroundHex: string;
+  hemiIntensity: number;
+  keyLightHex: string;
+  keyLightIntensity: number;
+  rimLightHex: string;
+  rimLightIntensity: number;
+}
+
 export const PIECE_ARCHETYPES: PieceArchetype[] = [
   {
     id: 'gothic_warriors',
@@ -361,6 +382,89 @@ export const BOARD_SKINS: BoardSkin[] = [
   }
 ];
 
+export const WORLD_SCENERIES: WorldScenery[] = [
+  {
+    id: 'gothic_cathedral',
+    name: 'Gothic Cathedral Sanctum',
+    subtitle: 'Enclosed moonlit medieval abbey nave with stained glass rose windows, carved ashlar pillars & hearth braziers',
+    badge: 'Indoor Sanctum',
+    price: 0,
+    skyPreviewGradient: 'radial-gradient(circle at 50% 25%, #3a5a8c 0%, #161d2b 58%, #090b12 100%)',
+    accentHex: '#d4af37',
+    landmarksLabel: 'Vaulted Nave Pillars, Rose Tracery & Twin Hearth Braziers',
+    weatherLabel: 'Warm Cathedral Torchlight & Drifting Dust Motes',
+    fogHex: '#080b14',
+    fogDensity: 0.015,
+    hemiSkyHex: '#d8ccb8',
+    hemiGroundHex: '#261d14',
+    hemiIntensity: 0.62,
+    keyLightHex: '#fff0d6',
+    keyLightIntensity: 2.55,
+    rimLightHex: '#d8cbb8',
+    rimLightIntensity: 0.72
+  },
+  {
+    id: 'celestial_observatory',
+    name: 'Celestial Astral Observatory',
+    subtitle: 'Open-air starlight citadel suspended in deep space nebulae with giant rotating armillary astrolabe rings & ringed gas giant',
+    badge: 'Cosmic Realm',
+    price: 120,
+    skyPreviewGradient: 'radial-gradient(circle at 35% 28%, #00f5d4 0%, #6b21a8 46%, #090418 100%)',
+    accentHex: '#00f5d4',
+    landmarksLabel: 'Giant Gyroscopic Armillary Rings, Ringed Gas Giant & 8 Levitating Star Monoliths',
+    weatherLabel: 'Orbiting Golden Stardust & Ascending Astral Mana Wisps',
+    fogHex: '#0b061d',
+    fogDensity: 0.0045,
+    hemiSkyHex: '#b8c0ff',
+    hemiGroundHex: '#1f1138',
+    hemiIntensity: 0.85,
+    keyLightHex: '#f0e6ff',
+    keyLightIntensity: 2.75,
+    rimLightHex: '#00f5d4',
+    rimLightIntensity: 1.15
+  },
+  {
+    id: 'dragon_sky_citadel',
+    name: 'Dragon Peak Sky Citadel',
+    subtitle: 'Sovereign mountain-crest fortress above a billowing sea of golden clouds with soaring dragons & floating waterfall peaks',
+    badge: 'Sky Peak Realm',
+    price: 220,
+    skyPreviewGradient: 'linear-gradient(180deg, #102a56 0%, #2b6cb0 42%, #f6ad55 78%, #ffd166 100%)',
+    accentHex: '#ffb703',
+    landmarksLabel: 'Dragon-Prow Citadel Spires, Soaring Sky Dragons & Floating Waterfall Peaks',
+    weatherLabel: 'Billowing Golden Cloud Sea & Wind-Swept Sun Motes',
+    fogHex: '#1d2740',
+    fogDensity: 0.0042,
+    hemiSkyHex: '#ffe8cc',
+    hemiGroundHex: '#2c3347',
+    hemiIntensity: 0.92,
+    keyLightHex: '#fff2d6',
+    keyLightIntensity: 2.95,
+    rimLightHex: '#90e0ef',
+    rimLightIntensity: 1.05
+  },
+  {
+    id: 'volcanic_titan_forge',
+    name: 'Volcanic Titan Forge',
+    subtitle: 'Colossal chained basalt forge suspended over an active molten caldera with Titan anvil towers & pouring magma falls',
+    badge: 'Molten Caldera',
+    price: 320,
+    skyPreviewGradient: 'radial-gradient(circle at 50% 80%, #ff9100 0%, #ff3d00 42%, #240804 82%, #0d0404 100%)',
+    accentHex: '#ff5400',
+    landmarksLabel: 'Colossal Titan Anchor Chains, Molten Lava Falls & Obsidian Caldera Spires',
+    weatherLabel: 'Convecting Hellfire Embers, Swirling Ash & Bubbling Magma Sea',
+    fogHex: '#1c0805',
+    fogDensity: 0.0052,
+    hemiSkyHex: '#ff9e66',
+    hemiGroundHex: '#2e0a03',
+    hemiIntensity: 0.78,
+    keyLightHex: '#ffe0b2',
+    keyLightIntensity: 2.68,
+    rimLightHex: '#ff4800',
+    rimLightIntensity: 1.28
+  }
+];
+
 export const PIECE_GOLD_BOUNTY: Record<string, number> = {
   pawn: 15,
   knight: 35,
@@ -386,6 +490,8 @@ export interface EconomyState {
   activePieceSkin: string;
   ownedBoardSkins: string[];
   activeBoardSkin: string;
+  ownedSceneries: string[];
+  activeScenery: string;
   stats: {
     wins: number;
     captures: number;
@@ -397,13 +503,15 @@ const ECONOMY_STORAGE_KEY = 'wizard_chess_economy_v1';
 
 export function loadEconomyState(): EconomyState {
   const defaultState: EconomyState = {
-    gold: 150, // Starter Gold so players can test unlocking a piece type, skin, or board style right away
+    gold: 150, // Starter Gold so players can test unlocking a piece type, skin, board style, or world scenery right away
     ownedPieceTypes: ['gothic_warriors'],
     activePieceType: 'gothic_warriors',
     ownedPieceSkins: ['classic_stone'],
     activePieceSkin: 'classic_stone',
     ownedBoardSkins: ['obsidian_sanctum'],
     activeBoardSkin: 'obsidian_sanctum',
+    ownedSceneries: ['gothic_cathedral'],
+    activeScenery: 'gothic_cathedral',
     stats: {
       wins: 0,
       captures: 0,
@@ -441,6 +549,14 @@ export function loadEconomyState(): EconomyState {
         typeof parsed.activeBoardSkin === 'string'
           ? parsed.activeBoardSkin
           : defaultState.activeBoardSkin,
+      ownedSceneries:
+        Array.isArray(parsed.ownedSceneries) && parsed.ownedSceneries.length > 0
+          ? parsed.ownedSceneries
+          : defaultState.ownedSceneries,
+      activeScenery:
+        typeof parsed.activeScenery === 'string'
+          ? parsed.activeScenery
+          : defaultState.activeScenery,
       stats: {
         wins: Number(parsed?.stats?.wins || 0),
         captures: Number(parsed?.stats?.captures || 0),

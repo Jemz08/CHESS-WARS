@@ -13,6 +13,14 @@ interface MoveEntry {
   ts: number;
 }
 
+export interface PlayerLoadout {
+  pieceType: string;
+  pieceTypeName?: string;
+  pieceSkinId?: string;
+  pieceSkinName?: string;
+  pieceSkin?: Record<string, unknown>;
+}
+
 interface RoomState {
   code: string;
   status: 'waiting' | 'playing';
@@ -20,6 +28,8 @@ interface RoomState {
   blackToken: string | null;
   whiteJoined: boolean;
   blackJoined: boolean;
+  whiteLoadout: PlayerLoadout | null;
+  blackLoadout: PlayerLoadout | null;
   turn: 'w' | 'b';
   moves: MoveEntry[];
   resetCount: number;
@@ -31,13 +41,34 @@ interface RoomState {
 interface QueueEntry {
   playerToken: string;
   preferredColor: 'w' | 'b' | 'any';
+  rating: number;
+  loadout: PlayerLoadout | null;
   ws: WebSocket | null;
   joinedAt: number;
+  lastSeenAt: number;
 }
+
+const MATCHMAKING_TIMEOUT_MS = 30_000;
 
 const rooms = new Map<string, RoomState>();
 const matchmakingQueue: QueueEntry[] = [];
-const matchedByToken = new Map<string, { code: string; color: 'w' | 'b'; ts: number }>();
+const matchedByToken = new Map<
+  string,
+  { code: string; color: 'w' | 'b'; opponentRating: number; ts: number }
+>();
+
+function sanitizeLoadout(raw: unknown): PlayerLoadout | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const pieceType = typeof obj.pieceType === 'string' && obj.pieceType ? obj.pieceType : 'gothic_warriors';
+  return {
+    pieceType,
+    pieceTypeName: typeof obj.pieceTypeName === 'string' ? obj.pieceTypeName : undefined,
+    pieceSkinId: typeof obj.pieceSkinId === 'string' ? obj.pieceSkinId : undefined,
+    pieceSkinName: typeof obj.pieceSkinName === 'string' ? obj.pieceSkinName : undefined,
+    pieceSkin: obj.pieceSkin && typeof obj.pieceSkin === 'object' ? (obj.pieceSkin as Record<string, unknown>) : undefined
+  };
+}
 
 function generateRoomCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -57,6 +88,8 @@ function serializeRoom(room: RoomState) {
     status: room.status,
     whiteJoined: room.whiteJoined,
     blackJoined: room.blackJoined,
+    whiteLoadout: room.whiteLoadout,
+    blackLoadout: room.blackLoadout,
     turn: room.turn,
     moves: room.moves,
     resetCount: room.resetCount,
@@ -95,41 +128,119 @@ function pruneQueue() {
   for (let i = matchmakingQueue.length - 1; i >= 0; i--) {
     const entry = matchmakingQueue[i];
     const wsClosed = entry.ws && entry.ws.readyState !== WebSocket.OPEN;
-    const expired = now - entry.joinedAt > 60_000;
+    const expired = now - entry.joinedAt > MATCHMAKING_TIMEOUT_MS;
     if (wsClosed || expired) {
+      if (expired && entry.ws && entry.ws.readyState === WebSocket.OPEN) {
+        try {
+          entry.ws.send(JSON.stringify({ type: 'queue:timeout', timeoutSec: 30 }));
+        } catch {
+          // ignore
+        }
+      }
       matchmakingQueue.splice(i, 1);
     }
   }
 }
 
+function findSuitableOpponentIndex(
+  playerToken: string,
+  preferredColor: 'w' | 'b' | 'any',
+  rating: number,
+  myJoinedAt: number
+): number {
+  const now = Date.now();
+  const myWaitSec = Math.max(0, (now - myJoinedAt) / 1000);
+  let bestIdx = -1;
+  let bestScore = Infinity;
+
+  for (let i = 0; i < matchmakingQueue.length; i++) {
+    const candidate = matchmakingQueue[i];
+    if (candidate.playerToken === playerToken) continue;
+
+    const candidateWaitSec = Math.max(0, (now - candidate.joinedAt) / 1000);
+    const maxWaitSec = Math.max(myWaitSec, candidateWaitSec);
+
+    // Rating window starts at ±150 and expands by +45 per second waited
+    const allowedRatingDelta = 150 + maxWaitSec * 45;
+    const ratingDelta = Math.abs((candidate.rating || 1000) - rating);
+
+    if (ratingDelta > allowedRatingDelta && maxWaitSec < 8) {
+      continue;
+    }
+
+    // Prefer compatible color preferences ('w' vs 'b' or 'any')
+    const colorConflict =
+      preferredColor !== 'any' &&
+      candidate.preferredColor !== 'any' &&
+      preferredColor === candidate.preferredColor;
+
+    // If both want the exact same color, wait 4 seconds for an ideal opposite-color match before pairing anyway
+    if (colorConflict && maxWaitSec < 4) {
+      continue;
+    }
+
+    const score = ratingDelta + (colorConflict ? 120 : 0) - candidateWaitSec * 10;
+    if (score < bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+
+  return bestIdx;
+}
+
 function tryMatchPlayers(
   playerToken: string,
   preferredColor: 'w' | 'b' | 'any' = 'any',
+  rating = 1000,
+  loadout: PlayerLoadout | null = null,
   ws: WebSocket | null = null
-): { status: 'matched'; code: string; color: 'w' | 'b'; room: ReturnType<typeof serializeRoom> } | { status: 'searching'; queueSize: number } {
+):
+  | {
+      status: 'matched';
+      code: string;
+      color: 'w' | 'b';
+      opponentRating: number;
+      room: ReturnType<typeof serializeRoom>;
+    }
+  | {
+      status: 'searching';
+      queueSize: number;
+      waitMs: number;
+    } {
   pruneQueue();
+  const safeRating = Number.isFinite(rating) && rating > 0 ? Math.round(rating) : 1000;
 
   // Check if this player was recently paired by another user's request
   const existingMatch = matchedByToken.get(playerToken);
-  if (existingMatch && Date.now() - existingMatch.ts < 30_000) {
+  if (existingMatch && Date.now() - existingMatch.ts < MATCHMAKING_TIMEOUT_MS) {
     const room = rooms.get(existingMatch.code);
     if (room) {
       matchedByToken.delete(playerToken);
+      if (loadout) {
+        if (existingMatch.color === 'w') room.whiteLoadout = loadout;
+        else room.blackLoadout = loadout;
+        broadcastRoomState(room);
+      }
       if (ws) room.wsClients.add(ws);
       return {
         status: 'matched',
         code: room.code,
         color: existingMatch.color,
+        opponentRating: existingMatch.opponentRating,
         room: serializeRoom(room)
       };
     }
   }
 
-  // Look for another waiting player in the queue with a different token
-  const opponentIdx = matchmakingQueue.findIndex((q) => q.playerToken !== playerToken);
+  const selfEntry = matchmakingQueue.find((q) => q.playerToken === playerToken);
+  const myJoinedAt = selfEntry ? selfEntry.joinedAt : Date.now();
+  const effectiveLoadout = loadout || selfEntry?.loadout || null;
+
+  // Look for the most suitable waiting player in the queue
+  const opponentIdx = findSuitableOpponentIndex(playerToken, preferredColor, safeRating, myJoinedAt);
   if (opponentIdx !== -1) {
     const opponent = matchmakingQueue.splice(opponentIdx, 1)[0];
-    // Also remove any stale entry for current player
     const selfIdx = matchmakingQueue.findIndex((q) => q.playerToken === playerToken);
     if (selfIdx !== -1) matchmakingQueue.splice(selfIdx, 1);
 
@@ -151,6 +262,8 @@ function tryMatchPlayers(
       blackToken: myColor === 'b' ? playerToken : opponent.playerToken,
       whiteJoined: true,
       blackJoined: true,
+      whiteLoadout: myColor === 'w' ? effectiveLoadout : opponent.loadout,
+      blackLoadout: myColor === 'b' ? effectiveLoadout : opponent.loadout,
       turn: 'w',
       moves: [],
       resetCount: 0,
@@ -168,6 +281,7 @@ function tryMatchPlayers(
             type: 'queue:matched',
             code,
             color: oppColor,
+            opponentRating: safeRating,
             room: serializeRoom(room)
           })
         );
@@ -177,34 +291,48 @@ function tryMatchPlayers(
     }
 
     rooms.set(code, room);
-    matchedByToken.set(opponent.playerToken, { code, color: oppColor, ts: Date.now() });
+    matchedByToken.set(opponent.playerToken, {
+      code,
+      color: oppColor,
+      opponentRating: safeRating,
+      ts: Date.now()
+    });
 
     return {
       status: 'matched',
       code,
       color: myColor,
+      opponentRating: opponent.rating || 1000,
       room: serializeRoom(room)
     };
   }
 
-  // Otherwise add/update this player in the queue
+  // Otherwise add/update this player in the queue (preserve original joinedAt for accurate 30s timeout)
   const existingIdx = matchmakingQueue.findIndex((q) => q.playerToken === playerToken);
+  const now = Date.now();
   if (existingIdx !== -1) {
     matchmakingQueue[existingIdx].preferredColor = preferredColor;
-    matchmakingQueue[existingIdx].joinedAt = Date.now();
+    matchmakingQueue[existingIdx].rating = safeRating;
+    if (effectiveLoadout) matchmakingQueue[existingIdx].loadout = effectiveLoadout;
+    matchmakingQueue[existingIdx].lastSeenAt = now;
     if (ws) matchmakingQueue[existingIdx].ws = ws;
   } else {
     matchmakingQueue.push({
       playerToken,
       preferredColor,
+      rating: safeRating,
+      loadout: effectiveLoadout,
       ws,
-      joinedAt: Date.now()
+      joinedAt: now,
+      lastSeenAt: now
     });
   }
 
+  const activeEntry = matchmakingQueue.find((q) => q.playerToken === playerToken);
   return {
     status: 'searching',
-    queueSize: matchmakingQueue.length
+    queueSize: matchmakingQueue.length,
+    waitMs: activeEntry ? now - activeEntry.joinedAt : 0
   };
 }
 
@@ -257,7 +385,9 @@ async function startServer() {
     const playerToken = String(req.body?.playerToken || 'anon_' + Date.now());
     const pref = req.body?.preferredColor;
     const preferredColor: 'w' | 'b' | 'any' = pref === 'w' || pref === 'b' ? pref : 'any';
-    const result = tryMatchPlayers(playerToken, preferredColor, null);
+    const rating = Number(req.body?.rating) || 1000;
+    const loadout = sanitizeLoadout(req.body?.loadout);
+    const result = tryMatchPlayers(playerToken, preferredColor, rating, loadout, null);
     res.json({ ok: true, playerToken, ...result });
   });
 
@@ -272,6 +402,7 @@ async function startServer() {
   app.post('/api/rooms/create', (req, res) => {
     const playerToken = String(req.body?.playerToken || 'tok_' + Date.now());
     const preferredColor: 'w' | 'b' = req.body?.preferredColor === 'b' ? 'b' : 'w';
+    const loadout = sanitizeLoadout(req.body?.loadout);
     const code = generateRoomCode();
     const room: RoomState = {
       code,
@@ -280,6 +411,8 @@ async function startServer() {
       blackToken: preferredColor === 'b' ? playerToken : null,
       whiteJoined: preferredColor === 'w',
       blackJoined: preferredColor === 'b',
+      whiteLoadout: preferredColor === 'w' ? loadout : null,
+      blackLoadout: preferredColor === 'b' ? loadout : null,
       turn: 'w',
       moves: [],
       resetCount: 0,
@@ -300,6 +433,7 @@ async function startServer() {
   app.post('/api/rooms/join', (req, res) => {
     const code = String(req.body?.code || '').trim().toUpperCase();
     const playerToken = String(req.body?.playerToken || 'tok_' + Date.now());
+    const loadout = sanitizeLoadout(req.body?.loadout);
     if (!code) {
       res.status(400).json({ ok: false, error: 'Room code required' });
       return;
@@ -316,6 +450,8 @@ async function startServer() {
         blackToken: null,
         whiteJoined: true,
         blackJoined: false,
+        whiteLoadout: loadout,
+        blackLoadout: null,
         turn: 'w',
         moves: [],
         resetCount: 0,
@@ -339,6 +475,10 @@ async function startServer() {
         room.blackJoined = true;
         assignedColor = 'b';
       }
+      if (loadout) {
+        if (assignedColor === 'w') room.whiteLoadout = loadout;
+        else room.blackLoadout = loadout;
+      }
       room.status = room.whiteJoined && room.blackJoined ? 'playing' : 'waiting';
       room.updatedAt = Date.now();
       broadcastRoomState(room);
@@ -351,6 +491,24 @@ async function startServer() {
       playerToken,
       room: serializeRoom(room)
     });
+  });
+
+  app.post('/api/rooms/:code/loadout', (req, res) => {
+    const code = String(req.params.code || '').trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room) {
+      res.status(404).json({ ok: false, error: 'Room not found' });
+      return;
+    }
+    const color: 'w' | 'b' = req.body?.color === 'b' ? 'b' : 'w';
+    const loadout = sanitizeLoadout(req.body?.loadout);
+    if (loadout) {
+      if (color === 'w') room.whiteLoadout = loadout;
+      else room.blackLoadout = loadout;
+      room.updatedAt = Date.now();
+      broadcastRoomState(room);
+    }
+    res.json({ ok: true, room: serializeRoom(room) });
   });
 
   app.get('/api/rooms/:code/state', (req, res) => {
@@ -427,7 +585,15 @@ async function startServer() {
         if (msg.type === 'queue:join') {
           const pref = msg.preferredColor;
           const preferredColor: 'w' | 'b' | 'any' = pref === 'w' || pref === 'b' ? pref : 'any';
-          const result = tryMatchPlayers(clientToken || 'anon_' + Date.now(), preferredColor, ws);
+          const rating = Number(msg.rating) || 1000;
+          const loadout = sanitizeLoadout(msg.loadout);
+          const result = tryMatchPlayers(
+            clientToken || 'anon_' + Date.now(),
+            preferredColor,
+            rating,
+            loadout,
+            ws
+          );
           if (result.status === 'matched') {
             subscribedRoom = rooms.get(result.code) || null;
             ws.send(
@@ -435,6 +601,7 @@ async function startServer() {
                 type: 'queue:matched',
                 code: result.code,
                 color: result.color,
+                opponentRating: result.opponentRating,
                 room: result.room
               })
             );
@@ -442,7 +609,8 @@ async function startServer() {
             ws.send(
               JSON.stringify({
                 type: 'queue:searching',
-                queueSize: result.queueSize
+                queueSize: result.queueSize,
+                waitMs: result.waitMs
               })
             );
           }
@@ -460,6 +628,16 @@ async function startServer() {
             subscribedRoom = room;
             room.wsClients.add(ws);
             ws.send(JSON.stringify({ type: 'room:state', room: serializeRoom(room) }));
+          }
+        } else if (msg.type === 'room:loadout') {
+          const code = String(msg.code || '').trim().toUpperCase();
+          const room = rooms.get(code) || subscribedRoom;
+          const loadout = sanitizeLoadout(msg.loadout);
+          if (room && loadout) {
+            if (msg.color === 'b') room.blackLoadout = loadout;
+            else room.whiteLoadout = loadout;
+            room.updatedAt = Date.now();
+            broadcastRoomState(room);
           }
         } else if (msg.type === 'room:move') {
           const code = String(msg.code || '').trim().toUpperCase();

@@ -4,6 +4,7 @@ import {
   PIECE_ARCHETYPES,
   PIECE_SKINS,
   BOARD_SKINS,
+  WORLD_SCENERIES,
   PIECE_GOLD_BOUNTY,
   MATCH_WIN_BOUNTY,
   loadEconomyState,
@@ -16,10 +17,11 @@ interface WizardChessAPI {
   applyPieceArchetype?: (archetype: unknown) => void;
   applyPieceSkin?: (skin: unknown) => void;
   applyBoardSkin?: (skin: unknown) => void;
+  applyWorldScenery?: (scenery: unknown, options?: { flyToVista?: boolean }) => void;
   startBotMatch?: (difficulty: 'easy' | 'medium' | 'hard', side: 'w' | 'b') => void;
   startPassAndPlayMatch?: (autoFlip: boolean) => void;
-  startOnlineMatchmaking?: (preferredColor?: 'w' | 'b' | 'any') => Promise<void>;
-  cancelOnlineMatchmaking?: () => Promise<void>;
+  startOnlineMatchmaking?: (preferredColor?: 'w' | 'b' | 'any', rating?: number) => Promise<void>;
+  cancelOnlineMatchmaking?: (reason?: string) => Promise<void>;
   createMultiplayerRoom?: (preferredColor: 'w' | 'b') => Promise<{ code: string; color: 'w' | 'b'; room: unknown }>;
   joinMultiplayerRoom?: (code: string) => Promise<boolean>;
   setBotDifficulty?: (diff: 'easy' | 'medium' | 'hard') => void;
@@ -58,7 +60,7 @@ export default function App() {
     new URLSearchParams(window.location.search).get('room') ? 'none' : 'arena'
   );
   const [arenaTab, setArenaTab] = useState<'bot' | 'online' | 'pass'>('bot');
-  const [armoryTab, setArmoryTab] = useState<'types' | 'pieces' | 'boards'>('types');
+  const [armoryTab, setArmoryTab] = useState<'types' | 'boards' | 'sceneries' | 'pieces'>('types');
 
   // Engine & Mode State
   const [gameMode, setGameMode] = useState<'single' | 'pass' | 'multi'>('single');
@@ -81,15 +83,27 @@ export default function App() {
 
   // Online PvP State
   const [onlinePreferredSide, setOnlinePreferredSide] = useState<'w' | 'b'>('w');
+  const [matchmakingPreferredColor, setMatchmakingPreferredColor] = useState<'any' | 'w' | 'b'>('any');
   const [onlineQueueStatus, setOnlineQueueStatus] = useState<'idle' | 'searching' | 'matched'>('idle');
+  const [matchmakingRemainingSec, setMatchmakingRemainingSec] = useState<number>(30);
+  const [matchmakingRatingWindow, setMatchmakingRatingWindow] = useState<number>(150);
+  const [matchmakingQueueCount, setMatchmakingQueueCount] = useState<number>(1);
+  const [matchmakingTimedOut, setMatchmakingTimedOut] = useState<boolean>(false);
   const [activeRoomCode, setActiveRoomCode] = useState<string | null>(null);
   const [bothPlayersConnected, setBothPlayersConnected] = useState(false);
+  const [onlineWhiteArmyName, setOnlineWhiteArmyName] = useState<string>('');
+  const [onlineBlackArmyName, setOnlineBlackArmyName] = useState<string>('');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [onlineStatusText, setOnlineStatusText] = useState('');
 
   // Economy & Skin State
   const [economy, setEconomy] = useState<EconomyState>(() => loadEconomyState());
   const [bountyToast, setBountyToast] = useState<{ id: number; amount: number; label: string } | null>(null);
+  const playerRating = 1000 + economy.stats.wins * 35 + economy.stats.captures * 3;
+  const equippedArchetypeObj =
+    PIECE_ARCHETYPES.find((a) => a.id === economy.activePieceType) || PIECE_ARCHETYPES[0];
+  const equippedPieceSkinObj =
+    PIECE_SKINS.find((s) => s.id === economy.activePieceSkin) || PIECE_SKINS[0];
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -97,7 +111,7 @@ export default function App() {
     initWizardChess();
   }, []);
 
-  // Apply saved piece archetype, piece material skin & 3D board style when engine is ready or when equipped items change
+  // Apply saved piece archetype, piece material skin, 3D board style & 3D world scenery when engine is ready or when equipped items change
   useEffect(() => {
     const applyEquippedSkins = () => {
       const eng = getEngine();
@@ -105,15 +119,18 @@ export default function App() {
       const pArch = PIECE_ARCHETYPES.find((a) => a.id === economy.activePieceType) || PIECE_ARCHETYPES[0];
       const pSkin = PIECE_SKINS.find((s) => s.id === economy.activePieceSkin) || PIECE_SKINS[0];
       const bSkin = BOARD_SKINS.find((s) => s.id === economy.activeBoardSkin) || BOARD_SKINS[0];
+      const wScenery =
+        WORLD_SCENERIES.find((w) => w.id === economy.activeScenery) || WORLD_SCENERIES[0];
       eng.applyPieceSkin?.(pSkin);
       eng.applyPieceArchetype?.(pArch);
       eng.applyBoardSkin?.(bSkin);
+      eng.applyWorldScenery?.(wScenery);
     };
 
     applyEquippedSkins();
     window.addEventListener('wizardchess:ready', applyEquippedSkins);
     return () => window.removeEventListener('wizardchess:ready', applyEquippedSkins);
-  }, [economy.activePieceType, economy.activePieceSkin, economy.activeBoardSkin]);
+  }, [economy.activePieceType, economy.activePieceSkin, economy.activeBoardSkin, economy.activeScenery]);
 
   // Listen to engine events for Gold bounties, Matchmaking, and 1-Phone Turn Switching
   useEffect(() => {
@@ -211,15 +228,59 @@ export default function App() {
       }
     };
 
+    const resolveLoadoutLabel = (loadout: Record<string, unknown> | null | undefined) => {
+      if (!loadout) return '';
+      const archId = typeof loadout.pieceType === 'string' ? loadout.pieceType : '';
+      const archObj = PIECE_ARCHETYPES.find((a) => a.id === archId);
+      const archName =
+        (typeof loadout.pieceTypeName === 'string' && loadout.pieceTypeName) ||
+        archObj?.name ||
+        'Gothic Sanctum Warriors';
+      const skinName =
+        (typeof loadout.pieceSkinName === 'string' && loadout.pieceSkinName) || '';
+      return skinName ? `${archName} (${skinName})` : archName;
+    };
+
     const handleMatchFound = (ev: Event) => {
       const d = (ev as CustomEvent).detail;
       if (!d) return;
       setHasStartedGame(true);
       setOnlineQueueStatus('matched');
+      setMatchmakingTimedOut(false);
       setActiveRoomCode(d.code || null);
       setBothPlayersConnected(true);
-      setOnlineStatusText(`Matched! Playing as ${d.color === 'b' ? 'Black' : 'White'} in Room ${d.code}`);
+      const wLabel = resolveLoadoutLabel(d.room?.whiteLoadout);
+      const bLabel = resolveLoadoutLabel(d.room?.blackLoadout);
+      if (wLabel) setOnlineWhiteArmyName(wLabel);
+      if (bLabel) setOnlineBlackArmyName(bLabel);
+      const oppRatingText = d.opponentRating ? ` (${d.opponentRating} ELO)` : '';
+      setOnlineStatusText(
+        `Matched with Suitable Challenger${oppRatingText}! Playing as ${d.color === 'b' ? 'Black' : 'White'} in Room ${d.code}`
+      );
       setActiveDialog('none');
+    };
+
+    const handleMatchmakingTick = (ev: Event) => {
+      const d = (ev as CustomEvent).detail;
+      if (!d) return;
+      if (typeof d.remainingSec === 'number') {
+        setMatchmakingRemainingSec(d.remainingSec);
+      }
+      if (typeof d.ratingWindow === 'number') {
+        setMatchmakingRatingWindow(d.ratingWindow);
+      }
+      if (typeof d.queueSize === 'number') {
+        setMatchmakingQueueCount(Math.max(1, d.queueSize));
+      }
+    };
+
+    const handleMatchmakingTimeout = () => {
+      setOnlineQueueStatus('idle');
+      setMatchmakingRemainingSec(30);
+      setMatchmakingTimedOut(true);
+      setOnlineStatusText(
+        'No suitable online player found within 30 seconds — Matchmaking automatically cancelled.'
+      );
     };
 
     const handleRoomUpdate = (ev: Event) => {
@@ -227,6 +288,10 @@ export default function App() {
       if (!d) return;
       setActiveRoomCode(d.code || null);
       setBothPlayersConnected(Boolean(d.bothReady));
+      const wLabel = resolveLoadoutLabel(d.room?.whiteLoadout);
+      const bLabel = resolveLoadoutLabel(d.room?.blackLoadout);
+      if (wLabel) setOnlineWhiteArmyName(wLabel);
+      if (bLabel) setOnlineBlackArmyName(bLabel);
       setOnlineStatusText(
         d.bothReady
           ? `Opponent Connected! Room ${d.code} Live`
@@ -254,6 +319,8 @@ export default function App() {
     window.addEventListener('wizardchess:uichange', handleUiChange);
     window.addEventListener('wizardchess:voicechange', handleVoiceChange);
     window.addEventListener('wizardchess:matchfound', handleMatchFound);
+    window.addEventListener('wizardchess:matchmakingtick', handleMatchmakingTick);
+    window.addEventListener('wizardchess:matchmakingtimeout', handleMatchmakingTimeout);
     window.addEventListener('wizardchess:roomupdate', handleRoomUpdate);
     window.addEventListener('wizardchess:turnswitch', handleTurnSwitch);
 
@@ -264,6 +331,8 @@ export default function App() {
       window.removeEventListener('wizardchess:uichange', handleUiChange);
       window.removeEventListener('wizardchess:voicechange', handleVoiceChange);
       window.removeEventListener('wizardchess:matchfound', handleMatchFound);
+      window.removeEventListener('wizardchess:matchmakingtick', handleMatchmakingTick);
+      window.removeEventListener('wizardchess:matchmakingtimeout', handleMatchmakingTimeout);
       window.removeEventListener('wizardchess:roomupdate', handleRoomUpdate);
       window.removeEventListener('wizardchess:turnswitch', handleTurnSwitch);
     };
@@ -295,7 +364,7 @@ export default function App() {
       }
     };
     const handleResize = () => {
-      if (window.innerWidth > 1080 && window.innerHeight > 560) {
+      if (window.innerWidth > 1220 && window.innerHeight > 600) {
         setMobileSheetOpen(false);
       }
     };
@@ -348,16 +417,23 @@ export default function App() {
 
   const handleQuickMatchmaking = async () => {
     const eng = getEngine();
-    setOnlineStatusText('Searching for an online opponent...');
+    setMatchmakingTimedOut(false);
+    setMatchmakingRemainingSec(30);
+    setMatchmakingRatingWindow(150);
+    setOnlineStatusText(
+      `Searching for suitable online challenger near ${playerRating} ELO (30s timeout)...`
+    );
     setOnlineQueueStatus('searching');
-    await eng?.startOnlineMatchmaking?.(onlinePreferredSide);
+    await eng?.startOnlineMatchmaking?.(matchmakingPreferredColor, playerRating);
   };
 
   const handleCancelMatchmaking = async () => {
     const eng = getEngine();
-    await eng?.cancelOnlineMatchmaking?.();
+    await eng?.cancelOnlineMatchmaking?.('user');
     setOnlineQueueStatus('idle');
-    setOnlineStatusText('Matchmaking canceled.');
+    setMatchmakingRemainingSec(30);
+    setMatchmakingTimedOut(false);
+    setOnlineStatusText('Matchmaking search cancelled.');
   };
 
   const handleCreatePrivateRoom = async () => {
@@ -479,14 +555,230 @@ export default function App() {
     getEngine()?.applyBoardSkin?.(skin);
   };
 
+  const handleSelectOrBuyWorldScenery = (sceneryId: string, flyToVista = true) => {
+    const scenery = WORLD_SCENERIES.find((w) => w.id === sceneryId);
+    if (!scenery) return;
+
+    const isOwned = economy.ownedSceneries.includes(scenery.id);
+    if (isOwned) {
+      const next: EconomyState = { ...economy, activeScenery: scenery.id };
+      setEconomy(next);
+      saveEconomyState(next);
+      getEngine()?.applyWorldScenery?.(scenery, { flyToVista });
+      return;
+    }
+
+    if (economy.gold < scenery.price) return;
+
+    const next: EconomyState = {
+      ...economy,
+      gold: economy.gold - scenery.price,
+      ownedSceneries: [...economy.ownedSceneries, scenery.id],
+      activeScenery: scenery.id
+    };
+    setEconomy(next);
+    saveEconomyState(next);
+    getEngine()?.applyWorldScenery?.(scenery, { flyToVista });
+  };
+
+  const handlePreviewWorldScenery = (sceneryId: string) => {
+    const scenery = WORLD_SCENERIES.find((w) => w.id === sceneryId);
+    if (!scenery) return;
+    getEngine()?.applyWorldScenery?.(scenery, { flyToVista: true });
+  };
+
   return (
     <>
       <div id="loading-overlay">
-        <div className="loader-title">Wizard Chess</div>
-        <div className="loader-bar-wrap">
-          <div className="loader-bar" id="loader-bar"></div>
+        <div className="loader-ambient-glow" aria-hidden="true"></div>
+        <div className="loader-arch-grid" aria-hidden="true"></div>
+        <div className="loader-embers" aria-hidden="true">
+          <span className="loader-ember e1"></span>
+          <span className="loader-ember e2"></span>
+          <span className="loader-ember e3"></span>
+          <span className="loader-ember e4"></span>
+          <span className="loader-ember e5"></span>
+          <span className="loader-ember e6"></span>
         </div>
-        <div id="loader-text">Summoning Sanctum Architecture &amp; Sculpted Pieces...</div>
+
+        <div className="loader-sanctum-panel">
+          <div className="loader-kicker">
+            <span>SANCTUM OF THE OBSIDIAN ALTAR</span>
+            <span className="loader-kicker-dot" aria-hidden="true">◆</span>
+            <span>ANNO DOMINI MMXXVI</span>
+          </div>
+
+          <div className="loader-crest-wrap" aria-hidden="true">
+            <svg className="loader-rose-svg" viewBox="0 0 220 220" fill="none">
+              <defs>
+                <linearGradient id="sanctumGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#fff3c4" />
+                  <stop offset="50%" stopColor="#d4af37" />
+                  <stop offset="100%" stopColor="#8a6412" />
+                </linearGradient>
+                <radialGradient id="sanctumCoreGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="rgba(245, 215, 110, 0.36)" />
+                  <stop offset="65%" stopColor="rgba(212, 175, 55, 0.1)" />
+                  <stop offset="100%" stopColor="rgba(8, 10, 15, 0)" />
+                </radialGradient>
+              </defs>
+
+              <circle cx="110" cy="110" r="98" fill="url(#sanctumCoreGlow)" />
+
+              {/* Outer Rotating Runic Astrolabe Ring */}
+              <g className="loader-ring-outer">
+                <circle
+                  cx="110"
+                  cy="110"
+                  r="96"
+                  stroke="url(#sanctumGoldGrad)"
+                  strokeWidth="1.2"
+                  strokeOpacity="0.55"
+                />
+                <circle
+                  cx="110"
+                  cy="110"
+                  r="89"
+                  stroke="url(#sanctumGoldGrad)"
+                  strokeWidth="1.5"
+                  strokeDasharray="6 8 2 8"
+                  strokeOpacity="0.75"
+                />
+                <polygon
+                  points="110,10 114,22 110,19 106,22"
+                  fill="url(#sanctumGoldGrad)"
+                />
+                <polygon
+                  points="110,210 114,198 110,201 106,198"
+                  fill="url(#sanctumGoldGrad)"
+                />
+                <polygon
+                  points="10,110 22,114 19,110 22,106"
+                  fill="url(#sanctumGoldGrad)"
+                />
+                <polygon
+                  points="210,110 198,114 201,110 198,106"
+                  fill="url(#sanctumGoldGrad)"
+                />
+              </g>
+
+              {/* Counter-Rotating Gothic Rose Tracery */}
+              <g className="loader-ring-inner">
+                <rect
+                  x="52"
+                  y="52"
+                  width="116"
+                  height="116"
+                  stroke="url(#sanctumGoldGrad)"
+                  strokeWidth="1.1"
+                  strokeOpacity="0.48"
+                />
+                <rect
+                  x="52"
+                  y="52"
+                  width="116"
+                  height="116"
+                  transform="rotate(45 110 110)"
+                  stroke="url(#sanctumGoldGrad)"
+                  strokeWidth="1.1"
+                  strokeOpacity="0.48"
+                />
+                <circle
+                  cx="110"
+                  cy="110"
+                  r="64"
+                  stroke="url(#sanctumGoldGrad)"
+                  strokeWidth="1.2"
+                  strokeDasharray="14 6"
+                  strokeOpacity="0.7"
+                />
+              </g>
+
+              {/* Central Medallion & Sculpted King Crown Silhouette */}
+              <circle
+                cx="110"
+                cy="110"
+                r="44"
+                fill="rgba(11, 14, 21, 0.92)"
+                stroke="url(#sanctumGoldGrad)"
+                strokeWidth="1.8"
+              />
+              <circle
+                cx="110"
+                cy="110"
+                r="38"
+                stroke="rgba(245, 215, 110, 0.35)"
+                strokeWidth="0.9"
+                strokeDasharray="3 3"
+              />
+              {/* Sovereign Cross & Crown */}
+              <path
+                d="M110 77 V89 M104 83 H116"
+                stroke="url(#sanctumGoldGrad)"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+              />
+              <path
+                d="M90 124 L86 98 L99 107 L110 92 L121 107 L134 98 L130 124 Z"
+                fill="rgba(212, 175, 55, 0.2)"
+                stroke="url(#sanctumGoldGrad)"
+                strokeWidth="2"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M86 130 H134 M82 136 H138"
+                stroke="url(#sanctumGoldGrad)"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+              <circle cx="110" cy="112" r="3" fill="#fff3c4" />
+              <circle cx="98" cy="115" r="2.2" fill="#f5d76e" />
+              <circle cx="122" cy="115" r="2.2" fill="#f5d76e" />
+            </svg>
+          </div>
+
+          <div className="loader-title">Wizard Chess</div>
+          <div className="loader-subtitle">
+            Cathedral Sanctum &amp; Sculpted Battle Automata
+          </div>
+
+          {/* 7-Relic Summoning Milestone Track */}
+          <div className="loader-nodes-row" aria-hidden="true">
+            {[
+              { step: 1, label: 'Sanctum', glyph: '❖' },
+              { step: 2, label: 'Pawn', glyph: '♙' },
+              { step: 3, label: 'Rook', glyph: '♖' },
+              { step: 4, label: 'Knight', glyph: '♘' },
+              { step: 5, label: 'Bishop', glyph: '♗' },
+              { step: 6, label: 'Queen', glyph: '♕' },
+              { step: 7, label: 'King', glyph: '♔' }
+            ].map((item) => (
+              <div key={item.step} className="loader-node-pip" data-step={item.step}>
+                <span className="loader-node-glyph">{item.glyph}</span>
+                <span className="loader-node-name">{item.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="loader-progress-meta">
+            <span id="loader-step-count">0 / 7 Relics Awakened</span>
+            <span id="loader-pct">6%</span>
+          </div>
+
+          <div className="loader-bar-wrap">
+            <div className="loader-bar" id="loader-bar"></div>
+          </div>
+
+          <div id="loader-text">Summoning Sanctum Architecture &amp; Sculpted Pieces...</div>
+
+          <div className="loader-lore-box">
+            <span className="loader-lore-tag">SANCTUM EDICT</span>
+            <p className="loader-lore-copy">
+              Placing the enemy Sovereign in Check claims immediate triumph upon the Obsidian Altar.
+              Earn Gold from every shattered statue to unlock new 3D Sculptures and Arenas in the Armory.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div id="canvas-container"></div>
@@ -857,6 +1149,21 @@ export default function App() {
                 type="button"
                 className="loadout-ledger-slot"
                 onClick={() => {
+                  setArmoryTab('sceneries');
+                  setActiveDialog('armory');
+                }}
+              >
+                <span className="ledger-slot-label">3D World Scenery</span>
+                <span className="ledger-slot-value">
+                  {WORLD_SCENERIES.find((w) => w.id === economy.activeScenery)?.name}
+                </span>
+                <span className="ledger-slot-action">Change Scenery</span>
+              </button>
+
+              <button
+                type="button"
+                className="loadout-ledger-slot"
+                onClick={() => {
                   setArmoryTab('pieces');
                   setActiveDialog('armory');
                 }}
@@ -1009,36 +1316,151 @@ export default function App() {
                     <div>
                       <div className="sanctum-field-label">Public Matchmaking Queue</div>
                       <p className="online-section-sub">
-                        Pair automatically with an available challenger in the cathedral queue. Victory grants +300 Gold.
+                        Finds suitable online players currently searching in the queue by Skill Rating &amp; Army preference. Auto-cancels after 30s if no match is found.
                       </p>
+                    </div>
+                    <div className="matchmaking-rating-badge">
+                      <span className="rating-badge-label">Your Rating</span>
+                      <span className="rating-badge-val">{playerRating} ELO</span>
                     </div>
                   </div>
 
-                  {onlineQueueStatus === 'searching' ? (
-                    <div className="matchmaking-searching-box">
-                      <div className="searching-spinner" aria-hidden="true"></div>
-                      <div className="searching-text-wrap">
-                        <div className="searching-title">Searching for Challenger...</div>
-                        <div className="searching-sub">
-                          Open another window or invite a friend to queue and pair immediately.
-                        </div>
+                  <div className="online-loadout-plaque">
+                    <div className="online-loadout-info">
+                      <span className="online-loadout-kicker">
+                        Your Equipped Online Army (Visible to Opponent)
+                      </span>
+                      <div className="online-loadout-name">
+                        <span className="online-loadout-glyph" aria-hidden="true">
+                          {equippedArchetypeObj.id === 'dragon_elemental'
+                            ? '🐉'
+                            : equippedArchetypeObj.id === 'arcane_cyber'
+                              ? '⚡'
+                              : equippedArchetypeObj.id === 'classic_staunton'
+                                ? '♔'
+                                : '⚔'}
+                        </span>
+                        <span>{equippedArchetypeObj.name}</span>
+                        <span className="online-loadout-sep">·</span>
+                        <span className="online-loadout-skin">{equippedPieceSkinObj.name}</span>
                       </div>
-                      <button
-                        type="button"
-                        className="sanctum-modal-close"
-                        onClick={handleCancelMatchmaking}
-                      >
-                        Leave Queue
-                      </button>
+                      <p className="online-loadout-desc">
+                        Both players&apos; equipped 3D sculptures &amp; finishes render live on their side of the altar.
+                      </p>
                     </div>
-                  ) : (
                     <button
                       type="button"
-                      className="arena-primary-btn"
-                      onClick={handleQuickMatchmaking}
+                      className="sanctum-modal-close gold-trim"
+                      onClick={() => {
+                        setArmoryTab('types');
+                        setActiveDialog('armory');
+                      }}
                     >
-                      Find Online Match
+                      Change Set
                     </button>
+                  </div>
+
+                  {(onlineWhiteArmyName || onlineBlackArmyName) && activeRoomCode && (
+                    <div className="online-clash-banner">
+                      <div className="online-clash-side">
+                        <span className="clash-side-tag">♔ White Army</span>
+                        <span className="clash-side-val">
+                          {onlineWhiteArmyName || 'Awaiting Challenger...'}
+                        </span>
+                      </div>
+                      <span className="online-clash-vs">VS</span>
+                      <div className="online-clash-side">
+                        <span className="clash-side-tag">♚ Black Army</span>
+                        <span className="clash-side-val">
+                          {onlineBlackArmyName || 'Awaiting Challenger...'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {onlineQueueStatus !== 'searching' && (
+                    <div className="matchmaking-pref-row">
+                      <span className="matchmaking-pref-label">Preferred Army:</span>
+                      <div className="matchmaking-pref-btns">
+                        {(
+                          [
+                            { id: 'any', label: '⚔ Any Army (Fastest)' },
+                            { id: 'w', label: '♔ White' },
+                            { id: 'b', label: '♚ Black' }
+                          ] as const
+                        ).map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            className={`matchmaking-pref-btn ${matchmakingPreferredColor === opt.id ? 'selected' : ''}`}
+                            onClick={() => setMatchmakingPreferredColor(opt.id)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {onlineQueueStatus === 'searching' ? (
+                    <div className="matchmaking-searching-box">
+                      <div className="searching-top-row">
+                        <div className="searching-spinner" aria-hidden="true"></div>
+                        <div className="searching-text-wrap">
+                          <div className="searching-title-row">
+                            <span className="searching-title">
+                              Finding Suitable Online Player...
+                            </span>
+                            <span className="searching-timer-badge">
+                              {matchmakingRemainingSec}s / 30s
+                            </span>
+                          </div>
+                          <div className="searching-sub">
+                            Skill Range: {Math.max(800, playerRating - matchmakingRatingWindow)} –{' '}
+                            {playerRating + matchmakingRatingWindow} ELO ·{' '}
+                            {matchmakingQueueCount > 1
+                              ? `${matchmakingQueueCount} Players in Queue`
+                              : 'Scanning Sanctum Queue (Auto-cancels in ' +
+                                matchmakingRemainingSec +
+                                's)'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="sanctum-modal-close"
+                          onClick={handleCancelMatchmaking}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="searching-progress-track" aria-hidden="true">
+                        <div
+                          className="searching-progress-fill"
+                          style={{
+                            width: `${Math.max(0, Math.min(100, (matchmakingRemainingSec / 30) * 100))}%`
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {matchmakingTimedOut && (
+                        <div className="matchmaking-timeout-banner" role="status">
+                          <span>
+                            ⏱ No suitable online challenger found within 30s. Matchmaking was cancelled.
+                          </span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className="arena-primary-btn"
+                        onClick={handleQuickMatchmaking}
+                      >
+                        {matchmakingTimedOut
+                          ? 'Search Again for Suitable Challenger (30s)'
+                          : 'Find Suitable Online Match (30s Max)'}
+                      </button>
+                    </>
                   )}
                 </div>
 
@@ -1257,7 +1679,16 @@ export default function App() {
                 className={`sanctum-tab-btn ${armoryTab === 'types' ? 'active' : ''}`}
                 onClick={() => setArmoryTab('types')}
               >
-                <span className="tab-numeral">I.</span> Piece Sculptures ({economy.ownedPieceTypes.length}/{PIECE_ARCHETYPES.length})
+                <span className="tab-numeral">I.</span> Sculptures ({economy.ownedPieceTypes.length}/{PIECE_ARCHETYPES.length})
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={armoryTab === 'sceneries'}
+                className={`sanctum-tab-btn ${armoryTab === 'sceneries' ? 'active' : ''}`}
+                onClick={() => setArmoryTab('sceneries')}
+              >
+                <span className="tab-numeral">II.</span> Sceneries ({economy.ownedSceneries.length}/{WORLD_SCENERIES.length})
               </button>
               <button
                 type="button"
@@ -1266,7 +1697,7 @@ export default function App() {
                 className={`sanctum-tab-btn ${armoryTab === 'boards' ? 'active' : ''}`}
                 onClick={() => setArmoryTab('boards')}
               >
-                <span className="tab-numeral">II.</span> Board &amp; Sanctum ({economy.ownedBoardSkins.length}/{BOARD_SKINS.length})
+                <span className="tab-numeral">III.</span> Boards ({economy.ownedBoardSkins.length}/{BOARD_SKINS.length})
               </button>
               <button
                 type="button"
@@ -1275,7 +1706,7 @@ export default function App() {
                 className={`sanctum-tab-btn ${armoryTab === 'pieces' ? 'active' : ''}`}
                 onClick={() => setArmoryTab('pieces')}
               >
-                <span className="tab-numeral">III.</span> Material Finishes ({economy.ownedPieceSkins.length}/{PIECE_SKINS.length})
+                <span className="tab-numeral">IV.</span> Finishes ({economy.ownedPieceSkins.length}/{PIECE_SKINS.length})
               </button>
             </div>
 
@@ -1443,6 +1874,77 @@ export default function App() {
                           ? `Unlock · ${bSkin.price} Gold`
                           : `Requires ${bSkin.price} Gold`}
                       </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {armoryTab === 'sceneries' && (
+              <div className="skin-grid">
+                {WORLD_SCENERIES.map((scenery) => {
+                  const isOwned = economy.ownedSceneries.includes(scenery.id);
+                  const isEquipped = economy.activeScenery === scenery.id;
+                  const canAfford = economy.gold >= scenery.price;
+
+                  return (
+                    <div
+                      key={scenery.id}
+                      className={`skin-card scenery-card ${isEquipped ? 'equipped' : ''}`}
+                    >
+                      <div
+                        className="scenery-sky-banner"
+                        style={{
+                          background: scenery.skyPreviewGradient,
+                          borderColor: scenery.accentHex
+                        }}
+                      >
+                        <span
+                          className="skin-kicker-tag scenery-badge"
+                          style={{ color: scenery.accentHex }}
+                        >
+                          {scenery.badge}
+                        </span>
+                        <span className="skin-price-tag">
+                          {isOwned ? 'Unlocked' : `${scenery.price} Gold`}
+                        </span>
+                      </div>
+
+                      <div className="skin-card-title">{scenery.name}</div>
+                      <p className="skin-card-sub">{scenery.subtitle}</p>
+                      <div className="skin-meta-line">
+                        <span>Landmarks: <strong>{scenery.landmarksLabel}</strong></span>
+                      </div>
+                      <div className="skin-meta-line">
+                        <span>Atmosphere: <strong>{scenery.weatherLabel}</strong></span>
+                      </div>
+
+                      <div className="scenery-card-actions">
+                        <button
+                          type="button"
+                          className={`skin-action-btn ${
+                            isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                          }`}
+                          disabled={!isOwned && !canAfford}
+                          onClick={() => handleSelectOrBuyWorldScenery(scenery.id, true)}
+                        >
+                          {isEquipped
+                            ? 'Equipped Realm'
+                            : isOwned
+                            ? 'Equip World Scenery'
+                            : canAfford
+                            ? `Unlock · ${scenery.price} Gold`
+                            : `Requires ${scenery.price} Gold`}
+                        </button>
+                        <button
+                          type="button"
+                          className="sanctum-modal-close scenery-preview-btn"
+                          title="Fly camera out to preview this 3D World Scenery live around the board"
+                          onClick={() => handlePreviewWorldScenery(scenery.id)}
+                        >
+                          Preview 3D
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

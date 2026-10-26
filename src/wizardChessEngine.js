@@ -7,6 +7,7 @@ import {
   updateProceduralPieceAnimation,
   rebuildBoardArchitectureGroup
 } from './customBoardAndPieceModels.js';
+import { createWorldSceneryManager } from './worldSceneries.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -101,7 +102,7 @@ export function initWizardChess() {
       scene.environmentIntensity = 0.24;
     }
 
-    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.22, 65);
+    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.22, 180);
     camera.position.set(0, 2.22, 2.72);
 
     const orbitControls = new OrbitControls(camera, renderer.domElement);
@@ -346,8 +347,20 @@ export function initWizardChess() {
       { x: 3.65,  z: 0.00, r: 0.68, maxY: 1.95, isColumn: false }
     ];
 
+    let currentWorldSceneryId = 'gothic_cathedral';
+    let currentWorldSceneryObj = null;
+    const cathedralShellMeshes = [];
+    const worldSceneryManager = createWorldSceneryManager(scene);
+
     function clampPointToCathedralRoom(pt, isTarget = false) {
       const margin = isTarget ? 0.15 : 0.0;
+      if (currentWorldSceneryId !== 'gothic_cathedral') {
+        pt.x = Math.max(-28.0 - margin, Math.min(28.0 + margin, pt.x));
+        pt.z = Math.max(-28.0 - margin, Math.min(28.0 + margin, pt.z));
+        const localMinY = isTarget ? 0.20 : 0.34;
+        pt.y = Math.max(localMinY, Math.min(22.0, pt.y));
+        return;
+      }
       pt.x = Math.max(CATHEDRAL_BOUNDS.minX - margin, Math.min(CATHEDRAL_BOUNDS.maxX + margin, pt.x));
       pt.z = Math.max(CATHEDRAL_BOUNDS.minZ - margin, Math.min(CATHEDRAL_BOUNDS.maxZ + margin, pt.z));
       // Account for the sloped side-aisle ceiling vault outside x = +/-4.15
@@ -379,6 +392,7 @@ export function initWizardChess() {
       const isContinuousStep = Boolean(prevPos) && moveLen > 1e-5 && moveLen < 8.0;
 
       for (const p of CATHEDRAL_SOLID_PILLARS) {
+        if (p.isColumn && currentWorldSceneryId !== 'gothic_cathedral') continue;
         if (curPos.y > p.maxY) continue;
 
         let tClosest = 1.0;
@@ -836,7 +850,7 @@ export function initWizardChess() {
     scene.add(impactFlashLight);
 
     // =========================================================================
-    // Materials for White & Black Sculpted Stone Chess Pieces
+    // Materials for White & Black Sculpted Stone Chess Pieces (Independent Per-Side Support)
     // =========================================================================
     const whitePieceMat = new THREE.MeshStandardMaterial({
       color: 0xe6dfd0,
@@ -850,19 +864,33 @@ export function initWizardChess() {
       metalness: 0.24
     });
 
-    const goldTrimMat = new THREE.MeshStandardMaterial({
+    const whiteTrimMat = new THREE.MeshStandardMaterial({
       color: 0xd4af37,
       roughness: 0.26,
       metalness: 0.86
     });
+    const blackTrimMat = new THREE.MeshStandardMaterial({
+      color: 0xd4af37,
+      roughness: 0.26,
+      metalness: 0.86
+    });
+    const goldTrimMat = whiteTrimMat;
 
-    const forgedSteelMat = new THREE.MeshStandardMaterial({
+    const whiteBladeMat = new THREE.MeshStandardMaterial({
       color: 0xdce4ee,
       roughness: 0.20,
       metalness: 0.88,
       emissive: 0x222832,
       emissiveIntensity: 0.25
     });
+    const blackBladeMat = new THREE.MeshStandardMaterial({
+      color: 0xdce4ee,
+      roughness: 0.20,
+      metalness: 0.88,
+      emissive: 0x222832,
+      emissiveIntensity: 0.25
+    });
+    const forgedSteelMat = whiteBladeMat;
 
     // =========================================================================
     // Asset Loading (Cathedral GLB + 12 Rigged Piece GLBs)
@@ -882,6 +910,10 @@ export function initWizardChess() {
     const boardSquareMeshes = [];
 
     let currentPieceArchetype = 'gothic_warriors';
+    let currentPieceArchetypeName = 'Gothic Sanctum Warriors';
+    let currentPieceSkinObj = null;
+    let whitePieceArchetype = 'gothic_warriors';
+    let blackPieceArchetype = 'gothic_warriors';
     let currentBoardSkinObj = null;
 
     const lightSqMat = new THREE.MeshStandardMaterial({
@@ -922,35 +954,61 @@ export function initWizardChess() {
 
     buildChessBoardGrid();
 
+    function applySkinToSideMaterials(side, skin) {
+      if (!skin) return;
+      if (side === 'w') {
+        whitePieceMat.color.set(skin.whiteHex || '#e6dfd0');
+        whitePieceMat.roughness = skin.whiteRoughness ?? 0.34;
+        whitePieceMat.metalness = skin.whiteMetalness ?? 0.06;
+        whitePieceMat.emissive.set(skin.whiteEmissiveHex || '#000000');
+        whitePieceMat.emissiveIntensity = skin.whiteEmissiveIntensity ?? 0;
+        whitePieceMat.needsUpdate = true;
+
+        whiteTrimMat.color.set(skin.trimHex || '#d4af37');
+        whiteTrimMat.roughness = skin.trimRoughness ?? 0.26;
+        whiteTrimMat.metalness = skin.trimMetalness ?? 0.86;
+        whiteTrimMat.needsUpdate = true;
+
+        whiteBladeMat.color.set(skin.bladeHex || '#dce4ee');
+        whiteBladeMat.roughness = skin.bladeRoughness ?? 0.20;
+        whiteBladeMat.metalness = skin.bladeMetalness ?? 0.88;
+        whiteBladeMat.emissive.set(skin.bladeEmissiveHex || '#222832');
+        whiteBladeMat.emissiveIntensity = skin.bladeEmissiveIntensity ?? 0.25;
+        whiteBladeMat.needsUpdate = true;
+      } else {
+        blackPieceMat.color.set(skin.blackHex || '#222630');
+        blackPieceMat.roughness = skin.blackRoughness ?? 0.28;
+        blackPieceMat.metalness = skin.blackMetalness ?? 0.24;
+        blackPieceMat.emissive.set(skin.blackEmissiveHex || '#000000');
+        blackPieceMat.emissiveIntensity = skin.blackEmissiveIntensity ?? 0;
+        blackPieceMat.needsUpdate = true;
+
+        blackTrimMat.color.set(skin.trimHex || '#d4af37');
+        blackTrimMat.roughness = skin.trimRoughness ?? 0.26;
+        blackTrimMat.metalness = skin.trimMetalness ?? 0.86;
+        blackTrimMat.needsUpdate = true;
+
+        blackBladeMat.color.set(skin.bladeHex || '#dce4ee');
+        blackBladeMat.roughness = skin.bladeRoughness ?? 0.20;
+        blackBladeMat.metalness = skin.bladeMetalness ?? 0.88;
+        blackBladeMat.emissive.set(skin.bladeEmissiveHex || '#222832');
+        blackBladeMat.emissiveIntensity = skin.bladeEmissiveIntensity ?? 0.25;
+        blackBladeMat.needsUpdate = true;
+      }
+      renderer.shadowMap.needsUpdate = true;
+    }
+
     function applyPieceSkin(skin) {
       if (!skin) return;
-      whitePieceMat.color.set(skin.whiteHex || '#e6dfd0');
-      whitePieceMat.roughness = skin.whiteRoughness ?? 0.34;
-      whitePieceMat.metalness = skin.whiteMetalness ?? 0.06;
-      whitePieceMat.emissive.set(skin.whiteEmissiveHex || '#000000');
-      whitePieceMat.emissiveIntensity = skin.whiteEmissiveIntensity ?? 0;
-      whitePieceMat.needsUpdate = true;
-
-      blackPieceMat.color.set(skin.blackHex || '#222630');
-      blackPieceMat.roughness = skin.blackRoughness ?? 0.28;
-      blackPieceMat.metalness = skin.blackMetalness ?? 0.24;
-      blackPieceMat.emissive.set(skin.blackEmissiveHex || '#000000');
-      blackPieceMat.emissiveIntensity = skin.blackEmissiveIntensity ?? 0;
-      blackPieceMat.needsUpdate = true;
-
-      goldTrimMat.color.set(skin.trimHex || '#d4af37');
-      goldTrimMat.roughness = skin.trimRoughness ?? 0.26;
-      goldTrimMat.metalness = skin.trimMetalness ?? 0.86;
-      goldTrimMat.needsUpdate = true;
-
-      forgedSteelMat.color.set(skin.bladeHex || '#dce4ee');
-      forgedSteelMat.roughness = skin.bladeRoughness ?? 0.20;
-      forgedSteelMat.metalness = skin.bladeMetalness ?? 0.88;
-      forgedSteelMat.emissive.set(skin.bladeEmissiveHex || '#222832');
-      forgedSteelMat.emissiveIntensity = skin.bladeEmissiveIntensity ?? 0.25;
-      forgedSteelMat.needsUpdate = true;
-
-      renderer.shadowMap.needsUpdate = true;
+      currentPieceSkinObj = skin;
+      if (gameMode === 'multi') {
+        const mySide = playerColor === 'b' ? 'b' : 'w';
+        applySkinToSideMaterials(mySide, skin);
+        broadcastLocalLoadoutToRoom();
+      } else {
+        applySkinToSideMaterials('w', skin);
+        applySkinToSideMaterials('b', skin);
+      }
     }
 
     function applyBoardSkin(boardSkin) {
@@ -979,7 +1037,7 @@ export function initWizardChess() {
       if (typeof boardSkin.floorLookIndex === 'number' && typeof setFloorStoneLook === 'function') {
         setFloorStoneLook(boardSkin.floorLookIndex);
       }
-      if (boardSkin.fogHex && scene.fog) {
+      if (boardSkin.fogHex && scene.fog && currentWorldSceneryId === 'gothic_cathedral') {
         scene.fog.color.set(boardSkin.fogHex);
         scene.background = new THREE.Color(boardSkin.fogHex);
       }
@@ -1007,6 +1065,63 @@ export function initWizardChess() {
         }
         for (const sp of brazierGlowSprites) {
           if (sp.material) sp.material.color.set(boardSkin.brazierLightHex);
+        }
+      }
+
+      renderer.shadowMap.needsUpdate = true;
+    }
+
+    function applyWorldScenery(scenery, options = {}) {
+      if (!scenery) return;
+      const sceneryId = typeof scenery === 'string' ? scenery : scenery.id || 'gothic_cathedral';
+      currentWorldSceneryId = sceneryId;
+      if (typeof scenery === 'object') {
+        currentWorldSceneryObj = scenery;
+      }
+
+      const isIndoorCathedral = sceneryId === 'gothic_cathedral';
+      for (const shellMesh of cathedralShellMeshes) {
+        shellMesh.visible = isIndoorCathedral;
+      }
+
+      worldSceneryManager.setScenery(scenery);
+
+      if (isIndoorCathedral) {
+        hemiLight.color.setHex(0xd8ccb8);
+        hemiLight.groundColor.setHex(0x261d14);
+        hemiLight.intensity = 0.62;
+        keyLight.color.setHex(0xfff0d6);
+        keyLight.intensity = 2.55;
+        rimLight.color.setHex(0xd8cbb8);
+        rimLight.intensity = 0.72;
+        const fogHex = currentBoardSkinObj?.fogHex || '#080b14';
+        if (scene.fog) {
+          scene.fog.color.set(fogHex);
+          scene.fog.density = 0.015;
+        }
+        scene.background = new THREE.Color(fogHex);
+      } else if (currentWorldSceneryObj) {
+        hemiLight.color.set(currentWorldSceneryObj.hemiSkyHex || '#b8c0ff');
+        hemiLight.groundColor.set(currentWorldSceneryObj.hemiGroundHex || '#1f1138');
+        hemiLight.intensity = currentWorldSceneryObj.hemiIntensity ?? 0.85;
+        keyLight.color.set(currentWorldSceneryObj.keyLightHex || '#f0e6ff');
+        keyLight.intensity = currentWorldSceneryObj.keyLightIntensity ?? 2.75;
+        rimLight.color.set(currentWorldSceneryObj.rimLightHex || '#00f5d4');
+        rimLight.intensity = currentWorldSceneryObj.rimLightIntensity ?? 1.1;
+        const fogHex = currentWorldSceneryObj.fogHex || '#0b061d';
+        if (scene.fog) {
+          scene.fog.color.set(fogHex);
+          scene.fog.density = currentWorldSceneryObj.fogDensity ?? 0.0045;
+        }
+        scene.background = new THREE.Color(fogHex);
+      }
+
+      if (options && options.flyToVista && typeof smoothCameraTo === 'function') {
+        const zSign = playerColor === 'b' ? -1 : 1;
+        if (isIndoorCathedral) {
+          smoothCameraTo(new THREE.Vector3(0, 2.55, zSign * 6.65), new THREE.Vector3(0, 1.95, -zSign * 2.50), 0.9);
+        } else {
+          smoothCameraTo(new THREE.Vector3(zSign * 3.8, 3.35, zSign * 7.85), new THREE.Vector3(0, 1.85, -zSign * 4.5), 0.95);
         }
       }
 
@@ -1251,7 +1366,13 @@ export function initWizardChess() {
     async function loadAllAssets() {
       const loaderBar = document.getElementById('loader-bar');
       const loaderText = document.getElementById('loader-text');
+      const loaderPct = document.getElementById('loader-pct');
+      const loaderStepCount = document.getElementById('loader-step-count');
       const totalItems = PIECE_TYPES.length + 1;
+
+      if (loaderBar) loaderBar.style.width = '6%';
+      if (loaderPct) loaderPct.textContent = '6%';
+      if (loaderStepCount) loaderStepCount.textContent = `0 / ${totalItems} Relics Awakened`;
 
       async function loadGltfModel(baseName) {
         let arrayBuffer = null;
@@ -1289,6 +1410,14 @@ export function initWizardChess() {
         const pct = Math.min(100, Math.round((loadedCount / totalItems) * 100));
         if (loaderBar) loaderBar.style.width = `${pct}%`;
         if (loaderText) loaderText.textContent = label;
+        if (loaderPct) loaderPct.textContent = `${pct}%`;
+        if (loaderStepCount) {
+          loaderStepCount.textContent = `${loadedCount} / ${totalItems} Relics Awakened`;
+        }
+        for (let i = 1; i <= loadedCount; i++) {
+          const pip = document.querySelector(`.loader-node-pip[data-step="${i}"]`);
+          if (pip) pip.classList.add('active');
+        }
       }
 
       // Instantiate custom GLSL shaders for the 3 sculpted brazier flame layers & charred ember logs
@@ -1465,6 +1594,19 @@ export function initWizardChess() {
                 }
                 mat.needsUpdate = true;
               }
+
+              const isAltarOrBrazier =
+                meshName.includes('Obsidian_Altar') ||
+                meshName.includes('Altar_Golden_Runes') ||
+                meshName.includes('Altar') ||
+                meshName.includes('Brazier') ||
+                meshName.includes('Flame') ||
+                meshName.includes('Ember');
+              const isGodRayMesh = meshName.includes('GodRay') || mNameFirst.includes('GodRay');
+              if (!isAltarOrBrazier && !isGodRayMesh) {
+                cathedralShellMeshes.push(child);
+                child.visible = currentWorldSceneryId === 'gothic_cathedral';
+              }
             });
 
             // Initialize default Look 1/6 (Original Ashlar & Abbey Flagstone) on Wall/Column Stone and Floor Stone
@@ -1606,6 +1748,13 @@ export function initWizardChess() {
       }
     }
 
+    function getSideArchetype(color) {
+      if (gameMode === 'multi') {
+        return (color === 'w' ? whitePieceArchetype : blackPieceArchetype) || currentPieceArchetype || 'gothic_warriors';
+      }
+      return currentPieceArchetype || 'gothic_warriors';
+    }
+
     function instantiatePiece(type, color, r, c) {
       const tpl = pieceTemplates[`${type}_${color}`];
       let root;
@@ -1613,12 +1762,16 @@ export function initWizardChess() {
       const actions = {};
       let proceduralAnim = null;
 
-      if (currentPieceArchetype !== 'gothic_warriors') {
-        const built = buildProceduralPieceGroup(currentPieceArchetype, type, color, {
+      const sideArchetype = getSideArchetype(color);
+      const sideTrimMat = color === 'w' ? whiteTrimMat : blackTrimMat;
+      const sideBladeMat = color === 'w' ? whiteBladeMat : blackBladeMat;
+
+      if (sideArchetype !== 'gothic_warriors') {
+        const built = buildProceduralPieceGroup(sideArchetype, type, color, {
           whitePieceMat,
           blackPieceMat,
-          goldTrimMat,
-          forgedSteelMat
+          goldTrimMat: sideTrimMat,
+          forgedSteelMat: sideBladeMat
         });
         root = built.root;
         proceduralAnim = {
@@ -1639,9 +1792,9 @@ export function initWizardChess() {
           if (child.isMesh) {
             const mName = child.material?.name || '';
             if (mName.includes('Gold') || mName.includes('Trim') || mName.includes('Bronze') || mName.includes('Glow')) {
-              child.material = goldTrimMat;
+              child.material = sideTrimMat;
             } else if (mName.includes('Steel')) {
-              child.material = forgedSteelMat;
+              child.material = sideBladeMat;
             } else {
               child.material = primaryMat;
             }
@@ -1672,6 +1825,7 @@ export function initWizardChess() {
       const pieceObj = {
         type,
         color,
+        archetype: sideArchetype,
         r,
         c,
         mesh: root,
@@ -1690,22 +1844,17 @@ export function initWizardChess() {
       return pieceObj;
     }
 
-    function applyPieceArchetype(archetypeInput) {
-      const nextId = typeof archetypeInput === 'string' ? archetypeInput : archetypeInput?.id;
-      if (!nextId) return;
-      currentPieceArchetype = nextId;
-      if (archetypeInput && typeof archetypeInput === 'object' && archetypeInput.flashColorHex) {
-        impactFlashLight.color.set(archetypeInput.flashColorHex);
-      }
-
-      // Rebuild all active board pieces in place with the newly selected 3D Piece Archetype
-      activeMixers.length = 0;
+    function rebuildBoardPieces(filterColor = null) {
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
           const existing = boardState[r][c];
-          if (existing) {
+          if (existing && (!filterColor || existing.color === filterColor)) {
             const savedMoved = Boolean(existing.hasMoved);
             const savedRotY = existing.mesh ? existing.mesh.rotation.y : (existing.color === 'w' ? Math.PI : 0);
+            if (existing.mixer) {
+              const mIdx = activeMixers.indexOf(existing.mixer);
+              if (mIdx !== -1) activeMixers.splice(mIdx, 1);
+            }
             if (existing.mesh) {
               scene.remove(existing.mesh);
             }
@@ -1719,6 +1868,30 @@ export function initWizardChess() {
         }
       }
       renderer.shadowMap.needsUpdate = true;
+    }
+
+    function applyPieceArchetype(archetypeInput) {
+      const nextId = typeof archetypeInput === 'string' ? archetypeInput : archetypeInput?.id;
+      if (!nextId) return;
+      currentPieceArchetype = nextId;
+      if (archetypeInput && typeof archetypeInput === 'object' && archetypeInput.name) {
+        currentPieceArchetypeName = archetypeInput.name;
+      }
+      if (archetypeInput && typeof archetypeInput === 'object' && archetypeInput.flashColorHex) {
+        impactFlashLight.color.set(archetypeInput.flashColorHex);
+      }
+
+      if (gameMode === 'multi') {
+        const mySide = playerColor === 'b' ? 'b' : 'w';
+        if (mySide === 'w') whitePieceArchetype = nextId;
+        else blackPieceArchetype = nextId;
+        rebuildBoardPieces(mySide);
+        broadcastLocalLoadoutToRoom();
+      } else {
+        whitePieceArchetype = nextId;
+        blackPieceArchetype = nextId;
+        rebuildBoardPieces(null);
+      }
     }
 
     // Exact per-piece Attack keyframe synchronization (24 fps Blender clips, zero overhead suspension freeze):
@@ -2384,17 +2557,21 @@ export function initWizardChess() {
 
     function spawnStoneShatter(worldPos, color) {
       const primaryMat = color === 'w' ? whitePieceMat : blackPieceMat;
+      const sideArchetype = getSideArchetype(color);
+      const sideTrimMat = color === 'w' ? whiteTrimMat : blackTrimMat;
+      const sideBladeMat = color === 'w' ? whiteBladeMat : blackBladeMat;
+
       let mainGeo = sharedShardGeo;
-      if (currentPieceArchetype === 'classic_staunton') mainGeo = sharedSplinterGeo;
-      else if (currentPieceArchetype === 'arcane_cyber') mainGeo = sharedCrystalGeo;
-      else if (currentPieceArchetype === 'dragon_elemental') mainGeo = sharedDragonGeo;
+      if (sideArchetype === 'classic_staunton') mainGeo = sharedSplinterGeo;
+      else if (sideArchetype === 'arcane_cyber') mainGeo = sharedCrystalGeo;
+      else if (sideArchetype === 'dragon_elemental') mainGeo = sharedDragonGeo;
 
       for (let i = 0; i < 34; i++) {
         const isAccentShard = i % 4 === 0;
         const shardMat = isAccentShard
-          ? (currentPieceArchetype === 'arcane_cyber' || currentPieceArchetype === 'dragon_elemental'
-              ? forgedSteelMat
-              : goldTrimMat)
+          ? (sideArchetype === 'arcane_cyber' || sideArchetype === 'dragon_elemental'
+              ? sideBladeMat
+              : sideTrimMat)
           : primaryMat;
         const sz = 0.024 + Math.random() * 0.048;
         const frag = new THREE.Mesh(mainGeo, shardMat);
@@ -4434,14 +4611,45 @@ export function initWizardChess() {
       window.location.hostname.includes('github.io') ||
       window.location.protocol === 'file:';
 
+    const MATCHMAKING_TIMEOUT_MS = 30000;
+    let matchmakingTimeoutTimer = null;
+    let matchmakingCountdownTimer = null;
+    let matchmakingStartedAt = 0;
+    let matchmakingPreferredColor = 'any';
+    let matchmakingRating = 1000;
+    let matchmakingQueueSize = 1;
+
+    function clearMatchmakingTimers() {
+      if (matchmakingPollTimer) {
+        clearInterval(matchmakingPollTimer);
+        matchmakingPollTimer = null;
+      }
+      if (matchmakingTimeoutTimer) {
+        clearTimeout(matchmakingTimeoutTimer);
+        matchmakingTimeoutTimer = null;
+      }
+      if (matchmakingCountdownTimer) {
+        clearInterval(matchmakingCountdownTimer);
+        matchmakingCountdownTimer = null;
+      }
+    }
+
     let staticBroadcastChannel = null;
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         staticBroadcastChannel = new BroadcastChannel('wizard_chess_mp_channel');
         staticBroadcastChannel.onmessage = (ev) => {
           const msg = ev.data;
-          if (msg && msg.type === 'room_state' && msg.room && msg.room.code === roomCode) {
+          if (!msg) return;
+          if (msg.type === 'room_state' && msg.room && msg.room.code === roomCode) {
             applyRemoteRoomState(msg.room);
+          } else if (
+            msg.type === 'static_queue_matched' &&
+            onlineQueueStatus === 'searching' &&
+            msg.targetToken === playerToken &&
+            msg.code
+          ) {
+            handleMatchmakingSuccess(msg.code, msg.color || 'w', msg.room, msg.opponentRating);
           }
         };
       }
@@ -4503,6 +4711,77 @@ export function initWizardChess() {
       return null;
     }
 
+    function getLocalPlayerLoadout() {
+      return {
+        pieceType: currentPieceArchetype || 'gothic_warriors',
+        pieceTypeName: currentPieceArchetypeName || 'Gothic Sanctum Warriors',
+        pieceSkinId: currentPieceSkinObj?.id || 'pale_alabaster',
+        pieceSkinName: currentPieceSkinObj?.name || 'Alabaster & Obsidian',
+        pieceSkin: currentPieceSkinObj || null
+      };
+    }
+
+    function syncRoomLoadouts(room, rebuildIfNeeded = true) {
+      if (!room) return;
+      if (room.whiteLoadout) {
+        if (room.whiteLoadout.pieceSkin) {
+          applySkinToSideMaterials('w', room.whiteLoadout.pieceSkin);
+        }
+        const nextWType = room.whiteLoadout.pieceType || 'gothic_warriors';
+        if (whitePieceArchetype !== nextWType) {
+          whitePieceArchetype = nextWType;
+          if (rebuildIfNeeded && !isAnimatingMove) {
+            rebuildBoardPieces('w');
+          }
+        }
+      }
+      if (room.blackLoadout) {
+        if (room.blackLoadout.pieceSkin) {
+          applySkinToSideMaterials('b', room.blackLoadout.pieceSkin);
+        }
+        const nextBType = room.blackLoadout.pieceType || 'gothic_warriors';
+        if (blackPieceArchetype !== nextBType) {
+          blackPieceArchetype = nextBType;
+          if (rebuildIfNeeded && !isAnimatingMove) {
+            rebuildBoardPieces('b');
+          }
+        }
+      }
+    }
+
+    async function broadcastLocalLoadoutToRoom() {
+      if (gameMode !== 'multi' || !roomCode) return;
+      const mySide = playerColor === 'b' ? 'b' : 'w';
+      const loadout = getLocalPlayerLoadout();
+
+      const stRoom = getStaticRoom(roomCode);
+      if (stRoom) {
+        if (mySide === 'w') stRoom.whiteLoadout = loadout;
+        else stRoom.blackLoadout = loadout;
+        stRoom.updatedAt = Date.now();
+        saveAndBroadcastStaticRoom(stRoom);
+      }
+
+      if (activeWebSocket && activeWebSocket.readyState === WebSocket.OPEN) {
+        try {
+          activeWebSocket.send(
+            JSON.stringify({
+              type: 'room:loadout',
+              code: roomCode,
+              color: mySide,
+              loadout
+            })
+          );
+        } catch (e) {}
+      }
+
+      await mpApiRequest(`/api/rooms/${roomCode}/loadout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color: mySide, loadout })
+      });
+    }
+
     function ensureWebSocketConnection() {
       if (isStaticHost) return null;
       if (activeWebSocket && (activeWebSocket.readyState === WebSocket.OPEN || activeWebSocket.readyState === WebSocket.CONNECTING)) {
@@ -4516,7 +4795,15 @@ export function initWizardChess() {
 
         ws.addEventListener('open', () => {
           if (onlineQueueStatus === 'searching') {
-            ws.send(JSON.stringify({ type: 'queue:join', playerToken: ensurePlayerToken(), preferredColor: 'any' }));
+            ws.send(
+              JSON.stringify({
+                type: 'queue:join',
+                playerToken: ensurePlayerToken(),
+                preferredColor: matchmakingPreferredColor,
+                rating: matchmakingRating,
+                loadout: getLocalPlayerLoadout()
+              })
+            );
           } else if (gameMode === 'multi' && roomCode) {
             ws.send(JSON.stringify({ type: 'room:subscribe', code: roomCode, playerToken: ensurePlayerToken() }));
           }
@@ -4527,7 +4814,15 @@ export function initWizardChess() {
             const msg = JSON.parse(String(ev.data));
             if (!msg || !msg.type) return;
             if (msg.type === 'queue:matched' && msg.code) {
-              handleMatchmakingSuccess(msg.code, msg.color || 'w', msg.room);
+              handleMatchmakingSuccess(msg.code, msg.color || 'w', msg.room, msg.opponentRating);
+            } else if (msg.type === 'queue:searching') {
+              if (typeof msg.queueSize === 'number') {
+                matchmakingQueueSize = Math.max(1, msg.queueSize);
+              }
+            } else if (msg.type === 'queue:timeout') {
+              if (onlineQueueStatus === 'searching') {
+                cancelOnlineMatchmaking('timeout');
+              }
             } else if (msg.type === 'room:state' && msg.room && msg.room.code === roomCode) {
               saveAndBroadcastStaticRoom(msg.room);
               applyRemoteRoomState(msg.room);
@@ -4593,14 +4888,13 @@ export function initWizardChess() {
         clearInterval(roomPollTimer);
         roomPollTimer = null;
       }
-      if (matchmakingPollTimer) {
-        clearInterval(matchmakingPollTimer);
-        matchmakingPollTimer = null;
-      }
+      clearMatchmakingTimers();
     }
 
     function applyRemoteRoomState(room) {
       if (!room) return;
+      syncRoomLoadouts(room, true);
+
       const statusEl = document.getElementById('hud-room-status');
       const bothReady = room.whiteJoined && room.blackJoined;
       if (statusEl) {
@@ -4696,11 +4990,8 @@ export function initWizardChess() {
       }, 1500);
     }
 
-    function handleMatchmakingSuccess(code, assignedColor, roomObj) {
-      if (matchmakingPollTimer) {
-        clearInterval(matchmakingPollTimer);
-        matchmakingPollTimer = null;
-      }
+    function handleMatchmakingSuccess(code, assignedColor, roomObj, opponentRating = 1000) {
+      clearMatchmakingTimers();
       matchStarted = true;
       onlineQueueStatus = 'matched';
       scriptedGameActive = false;
@@ -4710,7 +5001,19 @@ export function initWizardChess() {
       appliedMoveSeq = 0;
       appliedResetCount = roomObj?.resetCount || 0;
 
+      // Ensure our own side starts with our local loadout and sync opponent's loadout from roomObj
+      const myLoadout = getLocalPlayerLoadout();
+      if (playerColor === 'w') {
+        whitePieceArchetype = myLoadout.pieceType;
+        if (myLoadout.pieceSkin) applySkinToSideMaterials('w', myLoadout.pieceSkin);
+      } else {
+        blackPieceArchetype = myLoadout.pieceType;
+        if (myLoadout.pieceSkin) applySkinToSideMaterials('b', myLoadout.pieceSkin);
+      }
       if (roomObj) {
+        if (playerColor === 'w' && !roomObj.whiteLoadout) roomObj.whiteLoadout = myLoadout;
+        if (playerColor === 'b' && !roomObj.blackLoadout) roomObj.blackLoadout = myLoadout;
+        syncRoomLoadouts(roomObj, false);
         saveAndBroadcastStaticRoom(roomObj);
       }
 
@@ -4719,12 +5022,14 @@ export function initWizardChess() {
       if (roomObj) {
         applyRemoteRoomState(roomObj);
       }
+      broadcastLocalLoadoutToRoom();
       window.history.replaceState({}, '', `?room=${roomCode}`);
       window.dispatchEvent(
         new CustomEvent('wizardchess:matchfound', {
           detail: {
             code: roomCode,
             color: playerColor,
+            opponentRating: opponentRating || 1000,
             room: roomObj
           }
         })
@@ -4732,66 +5037,163 @@ export function initWizardChess() {
       updateTurnUI();
     }
 
-    async function startOnlineMatchmaking(preferredColor = 'any') {
+    function emitMatchmakingTick() {
+      if (onlineQueueStatus !== 'searching') return;
+      const elapsedMs = Math.max(0, Date.now() - matchmakingStartedAt);
+      const remainingMs = Math.max(0, MATCHMAKING_TIMEOUT_MS - elapsedMs);
+      const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
+      const ratingWindow = 150 + Math.floor(elapsedMs / 1000) * 45;
+      window.dispatchEvent(
+        new CustomEvent('wizardchess:matchmakingtick', {
+          detail: {
+            elapsedMs,
+            remainingMs,
+            remainingSec,
+            timeoutSec: 30,
+            rating: matchmakingRating,
+            ratingWindow,
+            queueSize: matchmakingQueueSize
+          }
+        })
+      );
+      if (elapsedMs >= MATCHMAKING_TIMEOUT_MS) {
+        cancelOnlineMatchmaking('timeout');
+      }
+    }
+
+    async function startOnlineMatchmaking(preferredColor = 'any', rating = 1000) {
       stopMultiplayerSync();
       ensurePlayerToken();
+      matchmakingPreferredColor =
+        preferredColor === 'w' || preferredColor === 'b' ? preferredColor : 'any';
+      matchmakingRating = Number(rating) || 1000;
+      matchmakingStartedAt = Date.now();
+      matchmakingQueueSize = 1;
       onlineQueueStatus = 'searching';
       updateTurnUI();
+      emitMatchmakingTick();
 
+      // Automatically cancel matchmaking after 30 seconds if no suitable opponent is found
+      matchmakingTimeoutTimer = setTimeout(() => {
+        if (onlineQueueStatus === 'searching') {
+          cancelOnlineMatchmaking('timeout');
+        }
+      }, MATCHMAKING_TIMEOUT_MS);
+
+      matchmakingCountdownTimer = setInterval(() => {
+        emitMatchmakingTick();
+      }, 250);
+
+      const myLoadout = getLocalPlayerLoadout();
       const ws = ensureWebSocketConnection();
       if (ws && ws.readyState === WebSocket.OPEN) {
         try {
-          ws.send(JSON.stringify({ type: 'queue:join', playerToken, preferredColor }));
+          ws.send(
+            JSON.stringify({
+              type: 'queue:join',
+              playerToken,
+              preferredColor: matchmakingPreferredColor,
+              rating: matchmakingRating,
+              loadout: myLoadout
+            })
+          );
         } catch (e) {}
       }
 
       const pollMatch = async () => {
         if (onlineQueueStatus !== 'searching') return;
+        if (Date.now() - matchmakingStartedAt >= MATCHMAKING_TIMEOUT_MS) {
+          cancelOnlineMatchmaking('timeout');
+          return;
+        }
+        const currentLoadout = getLocalPlayerLoadout();
         const res = await mpApiRequest('/api/matchmaking/join', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ playerToken, preferredColor })
+          body: JSON.stringify({
+            playerToken,
+            preferredColor: matchmakingPreferredColor,
+            rating: matchmakingRating,
+            loadout: currentLoadout
+          })
         });
-        if (res && res.ok && res.status === 'matched' && res.code) {
-          handleMatchmakingSuccess(res.code, res.color, res.room);
-          return;
+        if (onlineQueueStatus !== 'searching') return;
+        if (res && res.ok) {
+          if (typeof res.queueSize === 'number') {
+            matchmakingQueueSize = Math.max(1, res.queueSize);
+          }
+          if (res.status === 'matched' && res.code) {
+            handleMatchmakingSuccess(res.code, res.color, res.room, res.opponentRating);
+            return;
+          }
         }
-        // Fallback local/cross-tab matchmaking queue via localStorage if server is static
+        // Fallback cross-tab matchmaking queue via localStorage if server is static
         if (!res) {
           try {
             const rawQ = localStorage.getItem('wizard_chess_static_queue');
             const parsedQ = rawQ ? JSON.parse(rawQ) : null;
-            if (parsedQ && parsedQ.playerToken !== playerToken && Date.now() - parsedQ.ts < 30000) {
-              localStorage.removeItem('wizard_chess_static_queue');
-              const room = getStaticRoom(parsedQ.code);
-              if (room) {
-                room.blackJoined = true;
-                room.status = 'playing';
-                room.updatedAt = Date.now();
-                saveAndBroadcastStaticRoom(room);
-                handleMatchmakingSuccess(parsedQ.code, 'b', room);
+            const now = Date.now();
+            if (
+              parsedQ &&
+              parsedQ.playerToken !== playerToken &&
+              now - parsedQ.ts < MATCHMAKING_TIMEOUT_MS
+            ) {
+              const waitSec = Math.max(0, (now - parsedQ.ts) / 1000);
+              const allowedDelta = 150 + waitSec * 45;
+              const ratingDelta = Math.abs((parsedQ.rating || 1000) - matchmakingRating);
+              if (ratingDelta <= allowedDelta || waitSec >= 8) {
+                localStorage.removeItem('wizard_chess_static_queue');
+                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                let genCode = '';
+                for (let i = 0; i < 4; i++) {
+                  genCode += chars[Math.floor(Math.random() * chars.length)];
+                }
+                let oppColor = 'w';
+                let myColor = 'b';
+                if (parsedQ.preferredColor === 'b' && matchmakingPreferredColor !== 'b') {
+                  oppColor = 'b';
+                  myColor = 'w';
+                } else if (matchmakingPreferredColor === 'w' && parsedQ.preferredColor !== 'w') {
+                  myColor = 'w';
+                  oppColor = 'b';
+                }
+                const staticRoom = {
+                  code: genCode,
+                  status: 'playing',
+                  whiteJoined: true,
+                  blackJoined: true,
+                  whiteLoadout: myColor === 'w' ? currentLoadout : parsedQ.loadout || null,
+                  blackLoadout: myColor === 'b' ? currentLoadout : parsedQ.loadout || null,
+                  turn: 'w',
+                  moves: [],
+                  resetCount: 0,
+                  updatedAt: now
+                };
+                saveAndBroadcastStaticRoom(staticRoom);
+                if (staticBroadcastChannel) {
+                  staticBroadcastChannel.postMessage({
+                    type: 'static_queue_matched',
+                    targetToken: parsedQ.playerToken,
+                    code: genCode,
+                    color: oppColor,
+                    opponentRating: matchmakingRating,
+                    room: staticRoom
+                  });
+                }
+                handleMatchmakingSuccess(genCode, myColor, staticRoom, parsedQ.rating || 1000);
                 return;
               }
-            } else if (!parsedQ || Date.now() - parsedQ.ts >= 30000) {
-              const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-              let genCode = '';
-              for (let i = 0; i < 4; i++) genCode += chars[Math.floor(Math.random() * chars.length)];
-              const staticRoom = {
-                code: genCode,
-                status: 'waiting',
-                whiteJoined: true,
-                blackJoined: false,
-                turn: 'w',
-                moves: [],
-                resetCount: 0,
-                updatedAt: Date.now()
-              };
-              saveAndBroadcastStaticRoom(staticRoom);
+            } else if (!parsedQ || parsedQ.playerToken === playerToken || now - parsedQ.ts >= MATCHMAKING_TIMEOUT_MS) {
               localStorage.setItem(
                 'wizard_chess_static_queue',
-                JSON.stringify({ playerToken, code: genCode, ts: Date.now() })
+                JSON.stringify({
+                  playerToken,
+                  preferredColor: matchmakingPreferredColor,
+                  rating: matchmakingRating,
+                  loadout: currentLoadout,
+                  ts: matchmakingStartedAt
+                })
               );
-              handleMatchmakingSuccess(genCode, 'w', staticRoom);
             }
           } catch (e) {}
         }
@@ -4799,16 +5201,25 @@ export function initWizardChess() {
 
       await pollMatch();
       if (onlineQueueStatus === 'searching') {
-        matchmakingPollTimer = setInterval(pollMatch, 1500);
+        matchmakingPollTimer = setInterval(pollMatch, 1200);
       }
     }
 
-    async function cancelOnlineMatchmaking() {
-      if (matchmakingPollTimer) {
-        clearInterval(matchmakingPollTimer);
-        matchmakingPollTimer = null;
-      }
+    async function cancelOnlineMatchmaking(reason = 'user') {
+      const wasSearching = onlineQueueStatus === 'searching';
+      clearMatchmakingTimers();
       onlineQueueStatus = 'idle';
+
+      try {
+        const rawQ = localStorage.getItem('wizard_chess_static_queue');
+        if (rawQ) {
+          const parsedQ = JSON.parse(rawQ);
+          if (parsedQ && parsedQ.playerToken === playerToken) {
+            localStorage.removeItem('wizard_chess_static_queue');
+          }
+        }
+      } catch (e) {}
+
       if (activeWebSocket && activeWebSocket.readyState === WebSocket.OPEN) {
         try {
           activeWebSocket.send(JSON.stringify({ type: 'queue:leave', playerToken }));
@@ -4819,6 +5230,14 @@ export function initWizardChess() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playerToken })
       });
+
+      if (wasSearching && reason === 'timeout') {
+        window.dispatchEvent(
+          new CustomEvent('wizardchess:matchmakingtimeout', {
+            detail: { timeoutSec: 30 }
+          })
+        );
+      }
       updateTurnUI();
     }
 
@@ -4832,6 +5251,12 @@ export function initWizardChess() {
       roomCode = null;
       onlineQueueStatus = 'idle';
       playerColor = side === 'b' ? 'b' : 'w';
+      whitePieceArchetype = currentPieceArchetype;
+      blackPieceArchetype = currentPieceArchetype;
+      if (currentPieceSkinObj) {
+        applySkinToSideMaterials('w', currentPieceSkinObj);
+        applySkinToSideMaterials('b', currentPieceSkinObj);
+      }
       window.history.replaceState({}, '', window.location.pathname);
       resetChessBoard(true);
     }
@@ -4846,6 +5271,12 @@ export function initWizardChess() {
       roomCode = null;
       onlineQueueStatus = 'idle';
       playerColor = 'w';
+      whitePieceArchetype = currentPieceArchetype;
+      blackPieceArchetype = currentPieceArchetype;
+      if (currentPieceSkinObj) {
+        applySkinToSideMaterials('w', currentPieceSkinObj);
+        applySkinToSideMaterials('b', currentPieceSkinObj);
+      }
       window.history.replaceState({}, '', window.location.pathname);
       resetChessBoard(true);
     }
@@ -4855,11 +5286,12 @@ export function initWizardChess() {
       const mpMsg = document.getElementById('mp-status-msg');
       if (mpMsg) mpMsg.textContent = 'Creating room...';
       ensurePlayerToken();
+      const myLoadout = getLocalPlayerLoadout();
 
       let data = await mpApiRequest('/api/rooms/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preferredColor, playerToken })
+        body: JSON.stringify({ preferredColor, playerToken, loadout: myLoadout })
       });
 
       // Pure static fallback if neither local nor remote server is reachable
@@ -4875,6 +5307,8 @@ export function initWizardChess() {
           status: 'waiting',
           whiteJoined: side === 'w',
           blackJoined: side === 'b',
+          whiteLoadout: side === 'w' ? myLoadout : null,
+          blackLoadout: side === 'b' ? myLoadout : null,
           turn: 'w',
           moves: [],
           resetCount: 0,
@@ -4905,6 +5339,17 @@ export function initWizardChess() {
       appliedMoveSeq = 0;
       appliedResetCount = data.room.resetCount || 0;
 
+      if (playerColor === 'w') {
+        whitePieceArchetype = myLoadout.pieceType;
+        if (myLoadout.pieceSkin) applySkinToSideMaterials('w', myLoadout.pieceSkin);
+      } else {
+        blackPieceArchetype = myLoadout.pieceType;
+        if (myLoadout.pieceSkin) applySkinToSideMaterials('b', myLoadout.pieceSkin);
+      }
+      if (data.room) {
+        syncRoomLoadouts(data.room, false);
+      }
+
       const modalRoomEl = document.getElementById('modal-room-code');
       if (modalRoomEl) modalRoomEl.textContent = roomCode;
       const createdPanelEl = document.getElementById('room-created-panel');
@@ -4927,33 +5372,44 @@ export function initWizardChess() {
       }
       if (mpMsg) mpMsg.textContent = `Joining room ${code}...`;
       ensurePlayerToken();
+      const myLoadout = getLocalPlayerLoadout();
 
       let data = await mpApiRequest('/api/rooms/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, playerToken })
+        body: JSON.stringify({ code, playerToken, loadout: myLoadout })
       });
 
       if (!data || !data.ok) {
         let stRoom = getStaticRoom(code);
+        let assignedColor = 'b';
         if (!stRoom) {
+          assignedColor = 'w';
           stRoom = {
             code,
             status: 'playing',
             whiteJoined: true,
             blackJoined: true,
+            whiteLoadout: myLoadout,
+            blackLoadout: null,
             turn: 'w',
             moves: [],
             resetCount: 0,
             updatedAt: Date.now()
           };
         } else {
-          if (!stRoom.whiteJoined) stRoom.whiteJoined = true;
-          else if (!stRoom.blackJoined) stRoom.blackJoined = true;
+          if (!stRoom.whiteJoined) {
+            stRoom.whiteJoined = true;
+            assignedColor = 'w';
+            stRoom.whiteLoadout = myLoadout;
+          } else {
+            stRoom.blackJoined = true;
+            assignedColor = 'b';
+            stRoom.blackLoadout = myLoadout;
+          }
           stRoom.status = stRoom.whiteJoined && stRoom.blackJoined ? 'playing' : 'waiting';
           stRoom.updatedAt = Date.now();
         }
-        const assignedColor = !stRoom.blackJoined ? 'w' : 'b';
         saveAndBroadcastStaticRoom(stRoom);
         data = {
           ok: true,
@@ -4979,9 +5435,21 @@ export function initWizardChess() {
       appliedMoveSeq = 0;
       appliedResetCount = data.room.resetCount || 0;
 
+      if (playerColor === 'w') {
+        whitePieceArchetype = myLoadout.pieceType;
+        if (myLoadout.pieceSkin) applySkinToSideMaterials('w', myLoadout.pieceSkin);
+      } else {
+        blackPieceArchetype = myLoadout.pieceType;
+        if (myLoadout.pieceSkin) applySkinToSideMaterials('b', myLoadout.pieceSkin);
+      }
+      if (data.room) {
+        syncRoomLoadouts(data.room, false);
+      }
+
       resetChessBoard(true);
       startMultiplayerSync(roomCode);
       applyRemoteRoomState(data.room);
+      broadcastLocalLoadoutToRoom();
       window.history.replaceState({}, '', `?room=${roomCode}`);
       closeLobbyModal();
       return true;
@@ -5059,7 +5527,10 @@ export function initWizardChess() {
           cathedralWideSide = playerColor === 'b' ? 'south' : 'north';
         }
         setActiveCamButton('btn-cam-wide');
-        if (cathedralWideSide === 'south') {
+        if (currentWorldSceneryId !== 'gothic_cathedral') {
+          const zSign = cathedralWideSide === 'south' ? -1 : 1;
+          smoothCameraTo(new THREE.Vector3(zSign * 3.6, 3.25, zSign * 7.8), new THREE.Vector3(0, 1.85, -zSign * 4.2), 0.85);
+        } else if (cathedralWideSide === 'south') {
           // Black's wide Cathedral perspective looking South toward the Narthex Triptych (chessboard centered in frame)
           smoothCameraTo(new THREE.Vector3(0, 2.55, -6.65), new THREE.Vector3(0, 1.95, 2.50), 0.85);
         } else {
@@ -5292,6 +5763,7 @@ export function initWizardChess() {
       applyPieceArchetype,
       applyPieceSkin,
       applyBoardSkin,
+      applyWorldScenery,
       startBotMatch,
       startPassAndPlayMatch,
       startOnlineMatchmaking,
@@ -5420,6 +5892,7 @@ export function initWizardChess() {
         gameOver,
         inCheck: isKingInCheck(currentTurn, boardState),
         voiceEnabled,
+        activeWorldScenery: currentWorldSceneryId,
         checkmateState: { ...checkmateState },
         capturedByWhite,
         capturedByBlack,
@@ -5817,6 +6290,9 @@ export function initWizardChess() {
       for (let i = 0; i < brazierFireUniforms.length; i++) {
         brazierFireUniforms[i].uTime.value = elapsedTotal;
       }
+
+      // Advance 3D World Scenery sky shaders, orbiting landmarks, soaring dragons & particle weather
+      worldSceneryManager.update(dt, elapsedTotal);
       for (let i = 0; i < brazierGlowSprites.length; i++) {
         const sp = brazierGlowSprites[i];
         const baseOp = sp.userData.baseOpacity || 0.4;

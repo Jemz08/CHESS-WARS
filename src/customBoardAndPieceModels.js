@@ -78,8 +78,9 @@ function buildSculptedLathe(controlPairs, options = {}) {
         z *= scale;
       }
       if (scallopCount > 0 && y >= scallopYMin) {
-        const sy = Math.min(1, (y - scallopYMin) / 0.12);
-        y += Math.pow(Math.max(0, Math.cos((ang * scallopCount) / 2)), 2) * scallopAmp * sy;
+        const sy = Math.min(1, (y - scallopYMin) / 0.10);
+        const sr = Math.pow(Math.min(1, r / 0.16), 2);
+        y += Math.pow(Math.max(0, Math.cos((ang * scallopCount) / 2)), 2) * scallopAmp * sy * sr;
       }
       pos.setXYZ(i, x, y, z);
     }
@@ -621,7 +622,7 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
 }
 
 // ============================================================================
-// 2. ARCANE RUNIC & CYBER-MECH (Sculpted Paladin Exoskeletons, Wings & Blades)
+// 2. ARCANE RUNIC & CYBER-MECH (Master-Crafted Paladin Exoskeletons & Crowns)
 // ============================================================================
 function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animParts) {
   const heightMap = {
@@ -634,23 +635,24 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
   };
   const h = heightMap[type] || 1.15;
 
-  // 1. Sculpted Fluted Runic Dais Pedestal + 4 Curved Claw Stabilizers
-  const plinthGeo = getCachedGeo('cyber_plinth', () =>
+  // 1. Sculpted Multi-Tiered Runic Dais Pedestal + 4 Flush Corner Buttresses
+  const plinthGeo = getCachedGeo('cyber_plinth_v2', () =>
     buildSculptedLathe(
       [
         [0.0, 0.0],
-        [0.37, 0.0],
-        [0.38, 0.04],
-        [0.33, 0.08],
-        [0.35, 0.12],
-        [0.26, 0.17],
-        [0.0, 0.17]
+        [0.375, 0.0],
+        [0.385, 0.038],
+        [0.34, 0.072],
+        [0.355, 0.115],
+        [0.295, 0.155],
+        [0.255, 0.185],
+        [0.0, 0.185]
       ],
       {
-        sampleCount: 36,
-        radialSegments: 48,
+        sampleCount: 44,
+        radialSegments: 52,
         fluteCount: 12,
-        fluteDepth: 0.01,
+        fluteDepth: 0.009,
         fluteYMin: 0.02,
         fluteYMax: 0.15
       }
@@ -658,82 +660,186 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
   );
   rig.add(new THREE.Mesh(plinthGeo, primaryMat));
 
+  // Recessed Glowing Runic Conduit Ring & Upper Gold Pedestal Collar
   const runeRing = new THREE.Mesh(
-    getCachedGeo('cyber_base_rune_ring', () => new THREE.TorusGeometry(0.345, 0.014, 16, 48)),
+    getCachedGeo('cyber_base_rune_ring_v2', () => new THREE.TorusGeometry(0.348, 0.013, 18, 52)),
     bladeMat
   );
   runeRing.rotation.x = Math.PI / 2;
-  runeRing.position.y = 0.085;
+  runeRing.position.y = 0.075;
   rig.add(runeRing);
 
-  // 2. Sculpted Hourglass Paladin Cuirass & Armored Lower Greaves Column
-  const torsoGeo = getCachedGeo(`cyber_torso_${type}`, () =>
+  const plinthCollar = new THREE.Mesh(
+    getCachedGeo('cyber_base_gold_collar', () => new THREE.TorusGeometry(0.275, 0.014, 18, 52)),
+    trimMat
+  );
+  plinthCollar.rotation.x = Math.PI / 2;
+  plinthCollar.position.y = 0.172;
+  rig.add(plinthCollar);
+
+  // 4 Flush-Mounted Corner Stabilizer Buttress Fins on Pedestal
+  const buttressGeo = getCachedGeo('cyber_plinth_buttress', () => {
+    const s = new THREE.Shape();
+    s.moveTo(0.24, 0.01);
+    s.lineTo(0.39, 0.01);
+    s.lineTo(0.36, 0.12);
+    s.lineTo(0.25, 0.175);
+    s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 0.028,
+      bevelEnabled: true,
+      bevelSegments: 3,
+      steps: 1,
+      bevelSize: 0.006,
+      bevelThickness: 0.006
+    });
+    g.translate(0, 0, -0.014);
+    return g;
+  });
+  for (let i = 0; i < 4; i++) {
+    const buttress = new THREE.Mesh(buttressGeo, trimMat);
+    buttress.rotation.y = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    rig.add(buttress);
+  }
+
+  // 2. Sculpted Hourglass Paladin Cuirass, Waist Tassets, Gorget & Flush Chest Crest
+  const topY = 0.69 * h;
+  const torsoGeo = getCachedGeo(`cyber_torso_v2_${type}`, () =>
     buildSculptedLathe(
       [
-        [0.0, 0.15],
-        [0.24, 0.16],
-        [0.21, 0.28 * h],
-        [0.145, 0.42 * h],
-        [0.22, 0.56 * h],
-        [0.25, 0.64 * h],
-        [0.16, 0.70 * h],
-        [0.0, 0.70 * h]
+        [0.0, 0.16],
+        [0.245, 0.175],
+        [0.215, 0.29 * h],
+        [0.155, 0.42 * h], // Armored waist
+        [0.215, 0.55 * h], // Broad Paladin breastplate
+        [0.235, 0.62 * h], // Upper chest & shoulder shelf
+        [0.165, 0.675 * h],
+        [0.155, topY],
+        [0.0, topY]
       ],
       {
         sampleCount: 56,
-        radialSegments: 48,
+        radialSegments: 52,
         fluteCount: 8,
-        fluteDepth: 0.009,
-        fluteYMin: 0.18,
-        fluteYMax: 0.62 * h
+        fluteDepth: 0.008,
+        fluteYMin: 0.20,
+        fluteYMax: 0.60 * h
       }
     )
   );
   rig.add(new THREE.Mesh(torsoGeo, primaryMat));
 
-  // Sculpted Layered Pauldrons (Curved Shoulder Armor Plates)
-  const pauldronGeo = getCachedGeo('cyber_pauldron', () => {
-    const g = new THREE.SphereGeometry(0.135, 24, 20, 0, Math.PI * 1.15, 0, Math.PI * 0.65);
-    g.scale(1.15, 0.85, 0.95);
-    return g;
-  });
-  for (const s of [-1, 1]) {
-    const pauldron = new THREE.Mesh(pauldronGeo, trimMat);
-    pauldron.position.set(s * 0.21, 0.62 * h, 0);
-    pauldron.rotation.z = -s * 0.45;
-    pauldron.rotation.y = s > 0 ? 0 : Math.PI;
-    rig.add(pauldron);
-  }
-
-  // Spinning TorusKnot Arcane Core & Orbital Astrolabe Ring
-  const coreKnot = new THREE.Mesh(
-    getCachedGeo('cyber_core_knot', () => new THREE.TorusKnotGeometry(0.068, 0.018, 64, 14, 2, 3)),
-    bladeMat
-  );
-  coreKnot.position.set(0, 0.50 * h, 0.14);
-  rig.add(coreKnot);
-  animParts.push({ mesh: coreKnot, kind: 'spinFloat', baseY: coreKnot.position.y, speed: 2.6 });
-
-  const astrolabe = new THREE.Mesh(
-    getCachedGeo('cyber_astrolabe_ring', () => new THREE.TorusGeometry(0.28, 0.012, 14, 48)),
+  // Waist Belt Molding & Collar Gorget Ring (solidly seated on torso)
+  const beltRing = new THREE.Mesh(
+    getCachedGeo('cyber_waist_belt', () => new THREE.TorusGeometry(0.162, 0.015, 16, 48)),
     trimMat
   );
-  astrolabe.rotation.x = Math.PI * 0.42;
-  astrolabe.position.y = 0.54 * h;
-  rig.add(astrolabe);
-  animParts.push({ mesh: astrolabe, kind: 'orbitRing', baseY: astrolabe.position.y, speed: 1.9 });
+  beltRing.rotation.x = Math.PI / 2;
+  beltRing.position.y = 0.42 * h;
+  rig.add(beltRing);
 
-  // Helper: Swept Feathered Valkyrie Energy Wings (smooth beveled feather blades)
+  const gorgetRing = new THREE.Mesh(
+    getCachedGeo('cyber_gorget_ring', () => new THREE.TorusGeometry(0.178, 0.016, 18, 48)),
+    trimMat
+  );
+  gorgetRing.rotation.x = Math.PI / 2;
+  gorgetRing.position.y = 0.675 * h;
+  rig.add(gorgetRing);
+
+  // Flush-Mounted Chest Aegis Emblem (seated cleanly on the front breastplate, never floating!)
+  const chestFrameGeo = getCachedGeo('cyber_chest_frame', () => {
+    const s = new THREE.Shape();
+    s.moveTo(0, 0.075);
+    s.lineTo(0.062, 0.015);
+    s.lineTo(0, -0.085);
+    s.lineTo(-0.062, 0.015);
+    s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 0.022,
+      bevelEnabled: true,
+      bevelSegments: 3,
+      steps: 1,
+      bevelSize: 0.006,
+      bevelThickness: 0.006
+    });
+    g.translate(0, 0, -0.011);
+    return g;
+  });
+  const chestFrame = new THREE.Mesh(chestFrameGeo, trimMat);
+  chestFrame.position.set(0, 0.55 * h, 0.212);
+  chestFrame.rotation.x = -0.16;
+  rig.add(chestFrame);
+
+  const chestGemGeo = getCachedGeo('cyber_chest_gem', () => {
+    const g = new THREE.OctahedronGeometry(0.036, 1);
+    g.scale(0.85, 1.25, 0.45);
+    return g;
+  });
+  const chestGem = new THREE.Mesh(chestGemGeo, bladeMat);
+  chestGem.position.set(0, 0.55 * h, 0.224);
+  chestGem.rotation.x = -0.16;
+  rig.add(chestGem);
+
+  // Sculpted Layered Pauldrons & Hip Tasset Plates (-X and +X)
+  const pauldronGeo = getCachedGeo('cyber_pauldron_v2', () => {
+    const g = new THREE.SphereGeometry(0.128, 24, 20, 0, Math.PI * 1.15, 0, Math.PI * 0.62);
+    g.scale(1.12, 0.88, 0.96);
+    return g;
+  });
+  const tassetGeo = getCachedGeo('cyber_hip_tasset', () => {
+    const s = new THREE.Shape();
+    s.moveTo(-0.055, 0.06);
+    s.lineTo(0.055, 0.06);
+    s.lineTo(0.07, -0.06);
+    s.lineTo(0, -0.11);
+    s.lineTo(-0.07, -0.06);
+    s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 0.018,
+      bevelEnabled: true,
+      bevelSegments: 3,
+      steps: 1,
+      bevelSize: 0.005,
+      bevelThickness: 0.005
+    });
+    g.translate(0, 0, -0.009);
+    return g;
+  });
+
+  for (const s of [-1, 1]) {
+    const pauldron = new THREE.Mesh(pauldronGeo, trimMat);
+    pauldron.position.set(s * 0.195, 0.61 * h, 0);
+    pauldron.rotation.z = -s * 0.42;
+    pauldron.rotation.y = s > 0 ? 0 : Math.PI;
+    rig.add(pauldron);
+
+    const tasset = new THREE.Mesh(tassetGeo, trimMat);
+    tasset.position.set(s * 0.185, 0.34 * h, 0);
+    tasset.rotation.y = s * (Math.PI / 2);
+    tasset.rotation.z = s * 0.18;
+    rig.add(tasset);
+  }
+
+  // Helper: Swept Feathered Valkyrie Energy Wings (anchored cleanly to a dorsal backplate)
   const addValkyrieWings = (yPos, wingScale = 1.0, featherCount = 6) => {
     const wingGroup = new THREE.Group();
-    wingGroup.position.set(0, yPos, -0.10);
+    wingGroup.position.set(0, yPos, -0.14);
     rig.add(wingGroup);
 
-    const featherGeo = getCachedGeo('cyber_valkyrie_feather', () => {
+    // Solid Dorsal Wing Mount Bracket connecting wings to backplate
+    const mountBracket = new THREE.Mesh(
+      getCachedGeo('cyber_wing_mount', () => new THREE.CylinderGeometry(0.055, 0.07, 0.12, 16)),
+      trimMat
+    );
+    mountBracket.rotation.x = Math.PI / 2;
+    mountBracket.position.set(0, 0.02, 0.04);
+    wingGroup.add(mountBracket);
+
+    const featherGeo = getCachedGeo('cyber_valkyrie_feather_v2', () => {
       const s = new THREE.Shape();
       s.moveTo(0, 0);
-      s.bezierCurveTo(0.06, 0.08, 0.10, 0.28, 0.02, 0.46);
-      s.bezierCurveTo(-0.02, 0.32, -0.03, 0.14, 0, 0);
+      s.bezierCurveTo(0.055, 0.08, 0.095, 0.28, 0.018, 0.45);
+      s.bezierCurveTo(-0.022, 0.32, -0.028, 0.14, 0, 0);
       return new THREE.ExtrudeGeometry(s, {
         depth: 0.014,
         bevelEnabled: true,
@@ -748,319 +854,821 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
       for (let f = 0; f < featherCount; f++) {
         const u = f / Math.max(1, featherCount - 1);
         const feather = new THREE.Mesh(featherGeo, f % 2 === 0 ? bladeMat : trimMat);
-        feather.scale.set(side * wingScale * (1.05 - u * 0.32), wingScale * (1.1 - u * 0.28), 1);
-        feather.position.set(side * (0.12 + u * 0.14) * wingScale, 0.04 - u * 0.08, -0.02 - u * 0.02);
-        feather.rotation.z = -side * (0.38 + u * 0.72);
-        feather.rotation.y = -side * 0.24;
+        feather.scale.set(side * wingScale * (1.04 - u * 0.30), wingScale * (1.08 - u * 0.26), 1);
+        feather.position.set(side * (0.09 + u * 0.13) * wingScale, 0.04 - u * 0.07, -0.01 - u * 0.015);
+        feather.rotation.z = -side * (0.35 + u * 0.68);
+        feather.rotation.y = -side * 0.20;
         wingGroup.add(feather);
       }
     }
     animParts.push({ mesh: wingGroup, kind: 'wingPulse', baseY: yPos });
   };
 
-  // Helper: Sculpted Beveled Runic Greatsword / Halberd Blade
-  const swordBladeGeo = getCachedGeo('cyber_runic_sword', () => {
+  // Helper: Sculpted Beveled Runic Blade Geometry
+  const swordBladeGeo = getCachedGeo('cyber_runic_sword_v2', () => {
     const s = new THREE.Shape();
-    s.moveTo(0, -0.26);
-    s.lineTo(0.038, -0.18);
-    s.lineTo(0.026, 0.22);
-    s.lineTo(0, 0.30);
-    s.lineTo(-0.026, 0.22);
-    s.lineTo(-0.038, -0.18);
+    s.moveTo(0, -0.24);
+    s.lineTo(0.036, -0.18);
+    s.lineTo(0.025, 0.20);
+    s.lineTo(0, 0.28);
+    s.lineTo(-0.025, 0.20);
+    s.lineTo(-0.036, -0.18);
     s.closePath();
-    return new THREE.ExtrudeGeometry(s, {
+    const g = new THREE.ExtrudeGeometry(s, {
       depth: 0.014,
       bevelEnabled: true,
       bevelSegments: 3,
       steps: 1,
-      bevelSize: 0.006,
-      bevelThickness: 0.006
+      bevelSize: 0.005,
+      bevelThickness: 0.005
     });
+    g.translate(0, 0, -0.007);
+    return g;
   });
 
-  const topY = 0.69 * h;
-
   if (type === 'pawn') {
-    // Aegis Vanguard Paladin: Sculpted Great-Helm, Curved Visor, Kite Shield & Halberd
-    const helmGeo = getCachedGeo('cyber_pawn_helm', () =>
+    // Aegis Vanguard Sentinel: Corinthian-Cyber Great-Helm, Plume Crest, Crusader Shield & Grounded Halberd
+    const helmGeo = getCachedGeo('cyber_pawn_helm_v2', () =>
       buildSmoothSplineLathe(
         [
           [0.0, 0.0],
-          [0.14, 0.02],
-          [0.175, 0.12],
-          [0.165, 0.24],
-          [0.11, 0.32],
-          [0.0, 0.35]
+          [0.145, 0.01],
+          [0.172, 0.10],
+          [0.168, 0.21],
+          [0.125, 0.29],
+          [0.0, 0.32]
         ],
-        36,
-        40
+        40,
+        44
       )
     );
     const helm = new THREE.Mesh(helmGeo, primaryMat);
     helm.position.y = topY - 0.01;
     rig.add(helm);
 
-    // Swept Glowing Visor Arc & Helmet Crest Fin
+    // Flush Glowing Visor Band & Gold Brow Guard
     const visor = new THREE.Mesh(
       getCachedGeo(
-        'cyber_visor_arc',
-        () => new THREE.CylinderGeometry(0.178, 0.172, 0.052, 32, 1, false, -Math.PI * 0.38, Math.PI * 0.76)
+        'cyber_pawn_visor_v2',
+        () => new THREE.CylinderGeometry(0.173, 0.170, 0.044, 32, 1, false, -Math.PI * 0.36, Math.PI * 0.72)
       ),
       bladeMat
     );
-    visor.position.y = topY + 0.16;
+    visor.position.y = topY + 0.145;
     rig.add(visor);
 
-    // Sculpted Curved Kite Shield on left side (-X) & Runic Blade on right (+X)
-    const shieldGeo = getCachedGeo('cyber_kite_shield', () => {
+    const browBand = new THREE.Mesh(
+      getCachedGeo('cyber_pawn_brow', () => new THREE.TorusGeometry(0.168, 0.012, 14, 40)),
+      trimMat
+    );
+    browBand.rotation.x = Math.PI / 2;
+    browBand.position.y = topY + 0.175;
+    rig.add(browBand);
+
+    // Swept Dorsal Helmet Crest Fin (anchored cleanly along top of helmet)
+    const crestGeo = getCachedGeo('cyber_pawn_crest_fin', () => {
+      const s = new THREE.Shape();
+      s.moveTo(-0.12, 0.20);
+      s.bezierCurveTo(-0.14, 0.34, 0.02, 0.42, 0.14, 0.27);
+      s.bezierCurveTo(0.06, 0.25, -0.04, 0.22, -0.12, 0.20);
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.018,
+        bevelEnabled: true,
+        bevelSegments: 3,
+        steps: 1,
+        bevelSize: 0.005,
+        bevelThickness: 0.005
+      });
+      g.translate(0, 0, -0.009);
+      g.rotateY(-Math.PI / 2);
+      return g;
+    });
+    const crest = new THREE.Mesh(crestGeo, trimMat);
+    crest.position.y = topY;
+    rig.add(crest);
+
+    // Sculpted Crusader Kite Shield (-X) with Gold Trim & Glowing Rune Cross
+    const shieldGroup = new THREE.Group();
+    shieldGroup.position.set(-0.215, 0.46 * h, 0.11);
+    shieldGroup.rotation.y = -0.32;
+    rig.add(shieldGroup);
+
+    const shieldGeo = getCachedGeo('cyber_kite_shield_v2', () => {
       const s = new THREE.Shape();
       s.moveTo(0, -0.20);
-      s.bezierCurveTo(0.11, -0.10, 0.14, 0.08, 0.11, 0.18);
+      s.bezierCurveTo(0.115, -0.10, 0.14, 0.08, 0.11, 0.18);
+      s.lineTo(0, 0.21);
       s.lineTo(-0.11, 0.18);
-      s.bezierCurveTo(-0.14, 0.08, -0.11, -0.10, 0, -0.20);
-      return new THREE.ExtrudeGeometry(s, {
-        depth: 0.02,
+      s.bezierCurveTo(-0.14, 0.08, -0.115, -0.10, 0, -0.20);
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.018,
         bevelEnabled: true,
         bevelSegments: 4,
         steps: 1,
-        bevelSize: 0.008,
-        bevelThickness: 0.008
+        bevelSize: 0.007,
+        bevelThickness: 0.007
       });
+      g.translate(0, 0, -0.009);
+      return g;
     });
-    const shield = new THREE.Mesh(shieldGeo, trimMat);
-    shield.position.set(-0.22, 0.48 * h, 0.12);
-    shield.rotation.y = -0.35;
-    rig.add(shield);
+    shieldGroup.add(new THREE.Mesh(shieldGeo, trimMat));
 
-    const spear = new THREE.Mesh(swordBladeGeo, bladeMat);
-    spear.position.set(0.23, 0.56 * h, 0.10);
-    spear.rotation.x = 0.22;
-    rig.add(spear);
+    const shieldCore = new THREE.Mesh(shieldGeo, primaryMat);
+    shieldCore.scale.set(0.84, 0.86, 1.05);
+    shieldCore.position.z = 0.003;
+    shieldGroup.add(shieldCore);
+
+    const shieldBoss = new THREE.Mesh(chestGemGeo, bladeMat);
+    shieldBoss.position.set(0, 0.02, 0.018);
+    shieldGroup.add(shieldBoss);
+
+    // Grounded Sentinel Halberd on Right Side (+X)
+    const halberdGroup = new THREE.Group();
+    halberdGroup.position.set(0.22, 0, 0.09);
+    rig.add(halberdGroup);
+
+    const shaft = new THREE.Mesh(
+      getCachedGeo('cyber_halberd_shaft', () => new THREE.CylinderGeometry(0.015, 0.017, 0.78, 16)),
+      trimMat
+    );
+    shaft.position.y = 0.48;
+    halberdGroup.add(shaft);
+
+    const halberdHead = new THREE.Mesh(swordBladeGeo, bladeMat);
+    halberdHead.scale.set(0.78, 0.65, 0.85);
+    halberdHead.position.y = 0.90;
+    halberdGroup.add(halberdHead);
   } else if (type === 'rook') {
-    // Aegis Citadel Bastion: 4 Curved Magnetic Containment Ribs & Multi-Ring Tesla Spire
-    const ribGeo = getCachedGeo('cyber_rook_rib', () =>
-      buildTaperedCurveGeo(
+    // Aegis Citadel Bastion: Solid Flared Cyber-Turret Crown, 6 Merlons, Buttress Shields & Seated Obelisk Pylon
+    const turretGeo = getCachedGeo('cyber_rook_turret_v2', () =>
+      buildSmoothSplineLathe(
         [
-          new THREE.Vector3(0.22, 0.0, 0),
-          new THREE.Vector3(0.28, 0.16, 0),
-          new THREE.Vector3(0.26, 0.34, 0),
-          new THREE.Vector3(0.18, 0.44, 0)
+          [0.0, 0.0],
+          [0.175, 0.0],
+          [0.245, 0.06],
+          [0.265, 0.14],
+          [0.27, 0.25],
+          [0.20, 0.25],
+          [0.19, 0.17],
+          [0.0, 0.17]
         ],
-        0.032,
-        0.022,
-        28,
-        16
+        48,
+        52
       )
     );
-    for (let i = 0; i < 4; i++) {
-      const rib = new THREE.Mesh(ribGeo, primaryMat);
-      rib.position.y = topY - 0.04;
-      rib.rotation.y = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      rig.add(rib);
+    const turret = new THREE.Mesh(turretGeo, primaryMat);
+    turret.position.y = topY - 0.01;
+    rig.add(turret);
 
-      const trimShield = new THREE.Mesh(
-        getCachedGeo('cyber_rook_plate', () => new THREE.SphereGeometry(0.08, 20, 16)),
-        trimMat
-      );
-      trimShield.scale.set(0.5, 2.2, 1.1);
-      const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      trimShield.position.set(Math.cos(ang) * 0.26, topY + 0.18, Math.sin(ang) * 0.26);
-      trimShield.rotation.y = -ang;
-      rig.add(trimShield);
-    }
-
-    const teslaOrb = new THREE.Mesh(
-      getCachedGeo('cyber_rook_orb', () => new THREE.IcosahedronGeometry(0.115, 3)),
+    // Recessed Glowing Conduit Ring & Gold Corbel Collar on Turret
+    const turretGlowRing = new THREE.Mesh(
+      getCachedGeo('cyber_rook_glow_ring', () => new THREE.TorusGeometry(0.264, 0.013, 16, 52)),
       bladeMat
     );
-    teslaOrb.position.y = topY + 0.24;
-    rig.add(teslaOrb);
-    animParts.push({ mesh: teslaOrb, kind: 'spinFloat', baseY: teslaOrb.position.y, speed: 3.0 });
+    turretGlowRing.rotation.x = Math.PI / 2;
+    turretGlowRing.position.y = topY + 0.135;
+    rig.add(turretGlowRing);
+
+    const turretGoldRing = new THREE.Mesh(
+      getCachedGeo('cyber_rook_gold_ring', () => new THREE.TorusGeometry(0.252, 0.015, 16, 52)),
+      trimMat
+    );
+    turretGoldRing.rotation.x = Math.PI / 2;
+    turretGoldRing.position.y = topY + 0.065;
+    rig.add(turretGoldRing);
+
+    // 6 Sculpted Cyber-Battlement Merlons & External Gold Buttress Plates around Turret Rim
+    const merlonCount = 6;
+    const merlonArc = (Math.PI * 2) / merlonCount;
+    const cyberMerlonGeo = getCachedGeo('cyber_rook_merlon_v2', () => {
+      const s = new THREE.Shape();
+      const rOut = 0.272;
+      const rIn = 0.198;
+      const halfA = merlonArc * 0.33;
+      s.absarc(0, 0, rOut, -halfA, halfA, false);
+      s.absarc(0, 0, rIn, halfA, -halfA, true);
+      s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.11,
+        bevelEnabled: true,
+        bevelSegments: 3,
+        steps: 1,
+        bevelSize: 0.007,
+        bevelThickness: 0.007
+      });
+      g.rotateX(-Math.PI / 2);
+      return g;
+    });
+
+    const buttressPlateGeo = getCachedGeo('cyber_rook_buttress_plate', () => {
+      const g = new THREE.BoxGeometry(0.036, 0.26, 0.042);
+      return g;
+    });
+
+    for (let i = 0; i < merlonCount; i++) {
+      const ang = i * merlonArc;
+      const merlon = new THREE.Mesh(cyberMerlonGeo, primaryMat);
+      merlon.position.y = topY + 0.235;
+      merlon.rotation.y = ang;
+      rig.add(merlon);
+
+      const plate = new THREE.Mesh(buttressPlateGeo, trimMat);
+      plate.position.set(Math.cos(ang) * 0.258, topY + 0.19, Math.sin(ang) * 0.258);
+      plate.rotation.y = -ang + Math.PI / 2;
+      rig.add(plate);
+    }
+
+    // Seated Central Hexagonal Arcane Spire Pylon (firmly mounted in a gold socket on turret deck)
+    const pylonSocket = new THREE.Mesh(
+      getCachedGeo('cyber_rook_socket', () => new THREE.CylinderGeometry(0.095, 0.125, 0.07, 6)),
+      trimMat
+    );
+    pylonSocket.position.y = topY + 0.185;
+    rig.add(pylonSocket);
+
+    const pylonSpire = new THREE.Mesh(
+      getCachedGeo('cyber_rook_pylon', () => new THREE.CylinderGeometry(0.018, 0.078, 0.22, 6)),
+      bladeMat
+    );
+    pylonSpire.position.y = topY + 0.31;
+    rig.add(pylonSpire);
   } else if (type === 'knight') {
-    // Mecha-Pegasus Valkyrie Steed: Sculpted Armored Warhorse + Swept Valkyrie Energy Wings
-    addValkyrieWings(topY - 0.06, 0.92, 6);
+    // Mecha-Pegasus Valkyrie Charger: Sculpted Armored Warhorse Bust, Chanfron Plate, Mane & Valkyrie Wings
+    addValkyrieWings(topY - 0.07, 0.90, 6);
 
     const pegasusGroup = new THREE.Group();
-    pegasusGroup.position.y = topY - 0.05;
+    pegasusGroup.position.y = topY - 0.04;
     rig.add(pegasusGroup);
 
-    const neckGeo = getCachedGeo('cyber_pegasus_neck', () =>
+    // Sculpted Arched Neck
+    const neckGeo = getCachedGeo('cyber_pegasus_neck_v2', () =>
       buildTaperedCurveGeo(
         [
-          new THREE.Vector3(0, 0.0, -0.02),
-          new THREE.Vector3(0, 0.18, -0.06),
-          new THREE.Vector3(0, 0.36, 0.02),
-          new THREE.Vector3(0, 0.32, 0.22)
+          new THREE.Vector3(0, 0.0, -0.01),
+          new THREE.Vector3(0, 0.14, -0.05),
+          new THREE.Vector3(0, 0.29, -0.02),
+          new THREE.Vector3(0, 0.38, 0.05)
         ],
-        0.15,
-        0.075,
+        0.165,
+        0.105,
         32,
         24
       )
     );
     pegasusGroup.add(new THREE.Mesh(neckGeo, primaryMat));
 
-    // Curved Plasma Unicorn Horn & Crested Mane
-    const hornGeo = getCachedGeo('cyber_pegasus_horn', () =>
+    // Sculpted Armored Equine Head & Muzzle
+    const headGeo = getCachedGeo('cyber_pegasus_head_v2', () => {
+      const s = new THREE.Shape();
+      s.moveTo(-0.07, 0.24);
+      s.bezierCurveTo(-0.11, 0.35, -0.04, 0.45, 0.05, 0.44);
+      s.bezierCurveTo(0.14, 0.42, 0.21, 0.35, 0.26, 0.28);
+      s.bezierCurveTo(0.27, 0.24, 0.24, 0.20, 0.19, 0.20);
+      s.bezierCurveTo(0.13, 0.20, 0.08, 0.22, 0.04, 0.20);
+      s.bezierCurveTo(-0.01, 0.18, -0.05, 0.19, -0.07, 0.24);
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.10,
+        bevelEnabled: true,
+        bevelSegments: 5,
+        steps: 2,
+        bevelSize: 0.032,
+        bevelThickness: 0.036
+      });
+      g.translate(0, 0, -0.05);
+      g.rotateY(-Math.PI / 2);
+      return g;
+    });
+    pegasusGroup.add(new THREE.Mesh(headGeo, primaryMat));
+
+    // Golden Chanfron Armor Crest along Nose Bridge
+    const chanfronGeo = getCachedGeo('cyber_pegasus_chanfron', () =>
       buildTaperedCurveGeo(
         [
-          new THREE.Vector3(0, 0.38, 0.08),
-          new THREE.Vector3(0, 0.49, 0.20),
-          new THREE.Vector3(0, 0.58, 0.32)
+          new THREE.Vector3(0, 0.44, 0.02),
+          new THREE.Vector3(0, 0.39, 0.14),
+          new THREE.Vector3(0, 0.30, 0.26)
         ],
-        0.032,
+        0.042,
+        0.020,
+        20,
+        14
+      )
+    );
+    pegasusGroup.add(new THREE.Mesh(chanfronGeo, trimMat));
+
+    // Seated Valkyrie Lance-Horn on Forehead
+    const hornGeo = getCachedGeo('cyber_pegasus_horn_v2', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.41, 0.08),
+          new THREE.Vector3(0, 0.50, 0.19),
+          new THREE.Vector3(0, 0.58, 0.29)
+        ],
+        0.028,
         0.004,
         20,
-        16
+        14
       )
     );
     pegasusGroup.add(new THREE.Mesh(hornGeo, bladeMat));
 
-    for (let i = 0; i < 6; i++) {
-      const fin = new THREE.Mesh(
-        getCachedGeo('cyber_mane_fin', () => new THREE.ConeGeometry(0.032, 0.14, 16)),
-        i % 2 === 0 ? trimMat : bladeMat
+    // Alert Ears & Glowing Cyber-Optic Eyes
+    const earGeo = getCachedGeo('cyber_pegasus_ear', () => new THREE.ConeGeometry(0.028, 0.10, 14));
+    for (const s of [-1, 1]) {
+      const ear = new THREE.Mesh(earGeo, trimMat);
+      ear.position.set(s * 0.048, 0.46, -0.01);
+      ear.rotation.x = 0.20;
+      ear.rotation.z = -s * 0.16;
+      pegasusGroup.add(ear);
+
+      const eye = new THREE.Mesh(
+        getCachedGeo('cyber_pegasus_eye', () => new THREE.SphereGeometry(0.018, 12, 12)),
+        bladeMat
       );
-      fin.position.set(0, 0.12 + i * 0.055, -0.13);
-      fin.rotation.x = -0.65;
+      eye.position.set(s * 0.072, 0.36, 0.08);
+      pegasusGroup.add(eye);
+    }
+
+    // 7 Articulated Metallic Mane Fins seated directly along Neck Spine
+    const maneFinGeo = getCachedGeo('cyber_mane_blade_v2', () => {
+      const s = new THREE.Shape();
+      s.moveTo(0, 0);
+      s.lineTo(0.025, 0.04);
+      s.lineTo(-0.075, 0.09);
+      s.lineTo(-0.095, 0.02);
+      s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.016,
+        bevelEnabled: true,
+        bevelSegments: 2,
+        steps: 1,
+        bevelSize: 0.004,
+        bevelThickness: 0.004
+      });
+      g.translate(0, 0, -0.008);
+      g.rotateY(-Math.PI / 2);
+      return g;
+    });
+    for (let i = 0; i < 7; i++) {
+      const u = i / 6;
+      const fin = new THREE.Mesh(maneFinGeo, i % 2 === 0 ? trimMat : bladeMat);
+      fin.position.set(0, 0.06 + u * 0.33, -0.06 - Math.sin(u * Math.PI) * 0.03);
       pegasusGroup.add(fin);
     }
     animParts.push({ mesh: pegasusGroup, kind: 'headNod' });
   } else if (type === 'bishop') {
-    // Chronomancer Archon: Sculpted Hooded Mantle, Twin Interlocking Gyro Astrolabes & Crescent Staff
-    const hoodGeo = getCachedGeo('cyber_bishop_hood', () =>
+    // Chronomancer Archon: Sculpted Gothic-Cyber Split Mitre Crown, Sunburst Halo & Grounded Archon Crozier
+    const mitreGeo = getCachedGeo('cyber_bishop_mitre_v2', () =>
       buildSmoothSplineLathe(
         [
           [0.0, 0.0],
-          [0.18, 0.02],
-          [0.20, 0.14],
-          [0.16, 0.28],
-          [0.09, 0.40],
-          [0.0, 0.45]
+          [0.16, 0.01],
+          [0.205, 0.11],
+          [0.195, 0.23],
+          [0.145, 0.34],
+          [0.075, 0.42],
+          [0.0, 0.46]
         ],
-        48,
-        44
+        52,
+        52
       )
     );
-    const hood = new THREE.Mesh(hoodGeo, primaryMat);
-    hood.position.y = topY - 0.02;
-    rig.add(hood);
+    const mitre = new THREE.Mesh(mitreGeo, primaryMat);
+    mitre.position.y = topY - 0.01;
+    rig.add(mitre);
 
-    const gyro1 = new THREE.Mesh(
-      getCachedGeo('cyber_bishop_gyro1', () => new THREE.TorusGeometry(0.23, 0.013, 16, 48)),
-      bladeMat
-    );
-    gyro1.position.y = topY + 0.22;
-    rig.add(gyro1);
-    animParts.push({ mesh: gyro1, kind: 'gyroRing', speed: 2.6 });
-
-    const gyro2 = new THREE.Mesh(
-      getCachedGeo('cyber_bishop_gyro2', () => new THREE.TorusGeometry(0.185, 0.012, 16, 48)),
+    // Golden Mitre Circlet Brow Band & Vertical Orphrey Rib
+    const mitreCirclet = new THREE.Mesh(
+      getCachedGeo('cyber_bishop_circlet', () => new THREE.TorusGeometry(0.202, 0.014, 16, 48)),
       trimMat
     );
-    gyro2.position.y = topY + 0.22;
-    gyro2.rotation.y = Math.PI / 2;
-    rig.add(gyro2);
-    animParts.push({ mesh: gyro2, kind: 'orbitRing', baseY: gyro2.position.y, speed: 2.2 });
-  } else if (type === 'queen') {
-    // Valkyrie Seraph Empress: 6-Winged Feather Halo, Sculpted Empress Helm & Radiant Tiara
-    addValkyrieWings(topY - 0.02, 1.12, 7);
+    mitreCirclet.rotation.x = Math.PI / 2;
+    mitreCirclet.position.y = topY + 0.115;
+    rig.add(mitreCirclet);
 
-    const headGeo = getCachedGeo('cyber_queen_head', () =>
+    const frontRuneStrip = new THREE.Mesh(
+      getCachedGeo('cyber_bishop_rune_strip', () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(0, 0.12, 0.20),
+            new THREE.Vector3(0, 0.25, 0.185),
+            new THREE.Vector3(0, 0.38, 0.11)
+          ],
+          0.020,
+          0.010,
+          20,
+          12
+        )
+      ),
+      bladeMat
+    );
+    frontRuneStrip.position.y = topY;
+    rig.add(frontRuneStrip);
+
+    // Seated Mitre Finial Star at Apex
+    const apexOrb = new THREE.Mesh(
+      getCachedGeo('cyber_bishop_apex_orb', () => new THREE.OctahedronGeometry(0.042, 1)),
+      trimMat
+    );
+    apexOrb.position.y = topY + 0.475;
+    rig.add(apexOrb);
+
+    // Stationary Sacred Sunburst Halo mounted cleanly BEHIND the Mitre (-Z)
+    const haloGroup = new THREE.Group();
+    haloGroup.position.set(0, topY + 0.24, -0.14);
+    rig.add(haloGroup);
+
+    const haloRing = new THREE.Mesh(
+      getCachedGeo('cyber_bishop_halo_ring', () => new THREE.TorusGeometry(0.21, 0.013, 16, 48)),
+      trimMat
+    );
+    haloGroup.add(haloRing);
+
+    const rayGeo = getCachedGeo('cyber_bishop_halo_ray', () => new THREE.ConeGeometry(0.018, 0.085, 8));
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      const ray = new THREE.Mesh(rayGeo, i % 2 === 0 ? bladeMat : trimMat);
+      ray.position.set(Math.cos(ang) * 0.245, Math.sin(ang) * 0.245, 0);
+      ray.rotation.z = ang - Math.PI / 2;
+      haloGroup.add(ray);
+    }
+
+    // Grounded Archon Crozier Staff on Right Side (+X)
+    const staffGroup = new THREE.Group();
+    staffGroup.position.set(0.22, 0, 0.08);
+    rig.add(staffGroup);
+
+    const staffShaft = new THREE.Mesh(
+      getCachedGeo('cyber_bishop_staff_shaft', () => new THREE.CylinderGeometry(0.015, 0.017, 0.88, 16)),
+      trimMat
+    );
+    staffShaft.position.y = 0.54;
+    staffGroup.add(staffShaft);
+
+    const crozierRing = new THREE.Mesh(
+      getCachedGeo('cyber_bishop_crozier_head', () => new THREE.TorusGeometry(0.065, 0.012, 14, 32, Math.PI * 1.65)),
+      trimMat
+    );
+    crozierRing.position.y = 1.03;
+    staffGroup.add(crozierRing);
+
+    const crozierGem = new THREE.Mesh(chestGemGeo, bladeMat);
+    crozierGem.position.y = 1.03;
+    staffGroup.add(crozierGem);
+  } else if (type === 'queen') {
+    // Valkyrie Seraph Empress: Swept Seraph Wings, Sculpted Empress Helm & Solid 8-Spire Royal Diadem Coronet
+    addValkyrieWings(topY - 0.04, 1.08, 7);
+
+    // 1. Sculpted Seraph Empress Helm & Inner Crown Cushion Dome
+    const headGeo = getCachedGeo('cyber_queen_head_v2', () =>
       buildSmoothSplineLathe(
         [
           [0.0, 0.0],
-          [0.15, 0.02],
-          [0.18, 0.14],
-          [0.15, 0.26],
-          [0.0, 0.30]
+          [0.145, 0.01],
+          [0.18, 0.11],
+          [0.185, 0.20],
+          [0.165, 0.28],
+          [0.11, 0.33],
+          [0.0, 0.35]
         ],
-        40,
-        44
+        48,
+        52
       )
     );
     const head = new THREE.Mesh(headGeo, primaryMat);
     head.position.y = topY - 0.01;
     rig.add(head);
 
-    const tiaraGroup = new THREE.Group();
-    tiaraGroup.position.y = topY + 0.26;
-    rig.add(tiaraGroup);
+    // Sleek Glowing V-Visor on Empress Helm
+    const queenVisor = new THREE.Mesh(
+      getCachedGeo(
+        'cyber_queen_visor_v2',
+        () => new THREE.CylinderGeometry(0.184, 0.180, 0.042, 32, 1, false, -Math.PI * 0.34, Math.PI * 0.68)
+      ),
+      bladeMat
+    );
+    queenVisor.position.y = topY + 0.135;
+    rig.add(queenVisor);
 
-    const spireGeo = getCachedGeo('cyber_queen_spire', () =>
+    // 2. Solid Seated Imperial Diadem Circlet Band (Double Gold Rim + Glowing Inlay)
+    const crownBaseY = topY + 0.195;
+    const diademLowerRim = new THREE.Mesh(
+      getCachedGeo('cyber_queen_diadem_lower', () => new THREE.TorusGeometry(0.188, 0.016, 18, 52)),
+      trimMat
+    );
+    diademLowerRim.rotation.x = Math.PI / 2;
+    diademLowerRim.position.y = crownBaseY;
+    rig.add(diademLowerRim);
+
+    const diademGlowBand = new THREE.Mesh(
+      getCachedGeo('cyber_queen_diadem_glow', () => new THREE.CylinderGeometry(0.194, 0.186, 0.042, 48)),
+      bladeMat
+    );
+    diademGlowBand.position.y = crownBaseY + 0.024;
+    rig.add(diademGlowBand);
+
+    const diademUpperRim = new THREE.Mesh(
+      getCachedGeo('cyber_queen_diadem_upper', () => new THREE.TorusGeometry(0.195, 0.014, 18, 52)),
+      trimMat
+    );
+    diademUpperRim.rotation.x = Math.PI / 2;
+    diademUpperRim.position.y = crownBaseY + 0.046;
+    rig.add(diademUpperRim);
+
+    // 3. 8 Sculpted Royal Coronet Spires (alternating tall Fleur-Spire & secondary Spire) + Pearl Tips
+    const tallSpireGeo = getCachedGeo('cyber_queen_tall_spire_v2', () =>
       buildTaperedCurveGeo(
         [
-          new THREE.Vector3(0.17, 0.0, 0),
-          new THREE.Vector3(0.21, 0.10, 0),
-          new THREE.Vector3(0.18, 0.21, 0)
+          new THREE.Vector3(0.188, 0.0, 0),
+          new THREE.Vector3(0.215, 0.09, 0),
+          new THREE.Vector3(0.228, 0.18, 0)
+        ],
+        0.028,
+        0.008,
+        20,
+        14
+      )
+    );
+    const shortSpireGeo = getCachedGeo('cyber_queen_short_spire_v2', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0.188, 0.0, 0),
+          new THREE.Vector3(0.205, 0.06, 0),
+          new THREE.Vector3(0.212, 0.13, 0)
         ],
         0.024,
-        0.004,
+        0.007,
         18,
         14
       )
     );
-    for (let i = 0; i < 8; i++) {
-      const sp = new THREE.Mesh(spireGeo, i % 2 === 0 ? bladeMat : trimMat);
-      sp.rotation.y = (i / 8) * Math.PI * 2;
-      tiaraGroup.add(sp);
-    }
-    animParts.push({ mesh: tiaraGroup, kind: 'orbitRing', baseY: tiaraGroup.position.y, speed: 1.5 });
-  } else if (type === 'king') {
-    // Sovereign Prime Imperator: Grand Wings, Crowned Great-Helm & Planted Runic Greatsword
-    addValkyrieWings(topY, 1.22, 8);
+    const crownPearlGeo = getCachedGeo('cyber_queen_pearl_v2', () => new THREE.SphereGeometry(0.022, 16, 16));
 
-    const helmGeo = getCachedGeo('cyber_king_helm', () =>
-      buildSculptedLathe(
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      const isTall = i % 2 === 0;
+      const spire = new THREE.Mesh(isTall ? tallSpireGeo : shortSpireGeo, trimMat);
+      spire.position.y = crownBaseY + 0.035;
+      spire.rotation.y = ang;
+      rig.add(spire);
+
+      const pearlR = isTall ? 0.228 : 0.212;
+      const pearlY = crownBaseY + 0.035 + (isTall ? 0.185 : 0.135);
+      const pearl = new THREE.Mesh(crownPearlGeo, bladeMat);
+      pearl.position.set(Math.cos(ang) * pearlR, pearlY, -Math.sin(ang) * pearlR);
+      rig.add(pearl);
+    }
+
+    // 4. Central Royal Lotus Finial seated on top of the Empress Helm Dome
+    const apexRing = new THREE.Mesh(
+      getCachedGeo('cyber_queen_apex_collar', () => new THREE.TorusGeometry(0.055, 0.012, 14, 32)),
+      trimMat
+    );
+    apexRing.rotation.x = Math.PI / 2;
+    apexRing.position.y = topY + 0.34;
+    rig.add(apexRing);
+
+    const apexLotus = new THREE.Mesh(
+      getCachedGeo('cyber_queen_apex_lotus', () => {
+        const g = new THREE.OctahedronGeometry(0.048, 1);
+        g.scale(0.85, 1.45, 0.85);
+        return g;
+      }),
+      bladeMat
+    );
+    apexLotus.position.y = topY + 0.39;
+    rig.add(apexLotus);
+
+    // 5. Royal Empress Scepter on Right Side (+X)
+    const scepterGroup = new THREE.Group();
+    scepterGroup.position.set(0.225, 0, 0.08);
+    rig.add(scepterGroup);
+
+    const scepterShaft = new THREE.Mesh(
+      getCachedGeo('cyber_queen_scepter_shaft', () => new THREE.CylinderGeometry(0.014, 0.016, 0.92, 16)),
+      trimMat
+    );
+    scepterShaft.position.y = 0.56;
+    scepterGroup.add(scepterShaft);
+
+    const scepterOrb = new THREE.Mesh(
+      getCachedGeo('cyber_queen_scepter_orb', () => new THREE.OctahedronGeometry(0.044, 1)),
+      bladeMat
+    );
+    scepterOrb.position.y = 1.05;
+    scepterGroup.add(scepterOrb);
+  } else if (type === 'king') {
+    // Sovereign Prime Imperator: Grand Wings, Imperator Helm, Arched Imperial Crown & Planted Greatsword
+    addValkyrieWings(topY - 0.02, 1.18, 8);
+
+    // 1. Sculpted Imperator Great-Helm
+    const helmGeo = getCachedGeo('cyber_king_helm_v2', () =>
+      buildSmoothSplineLathe(
         [
           [0.0, 0.0],
-          [0.17, 0.0],
-          [0.21, 0.12],
-          [0.23, 0.26],
-          [0.16, 0.30],
-          [0.0, 0.30]
+          [0.16, 0.01],
+          [0.195, 0.11],
+          [0.20, 0.21],
+          [0.175, 0.29],
+          [0.12, 0.34],
+          [0.0, 0.35]
         ],
-        {
-          sampleCount: 44,
-          radialSegments: 48,
-          scallopCount: 8,
-          scallopAmp: 0.045,
-          scallopYMin: 0.18
-        }
+        48,
+        52
       )
     );
     const helm = new THREE.Mesh(helmGeo, primaryMat);
     helm.position.y = topY - 0.01;
     rig.add(helm);
 
+    // Glowing Sovereign Visor & Gold Faceplate Nose-Guard
     const visor = new THREE.Mesh(
       getCachedGeo(
-        'cyber_king_visor',
-        () => new THREE.CylinderGeometry(0.215, 0.21, 0.055, 32, 1, false, -Math.PI * 0.35, Math.PI * 0.7)
+        'cyber_king_visor_v2',
+        () => new THREE.CylinderGeometry(0.201, 0.198, 0.048, 32, 1, false, -Math.PI * 0.35, Math.PI * 0.70)
       ),
       bladeMat
     );
-    visor.position.y = topY + 0.14;
+    visor.position.y = topY + 0.135;
     rig.add(visor);
 
-    // Planted Two-Handed Runic Greatsword in front (+Z) & Sovereign Halo Crest above
-    const greatsword = new THREE.Mesh(swordBladeGeo, bladeMat);
-    greatsword.scale.set(1.25, 1.35, 1.25);
-    greatsword.position.set(0, 0.52 * h, 0.23);
-    rig.add(greatsword);
-
-    const crossguard = new THREE.Mesh(
-      getCachedGeo('cyber_crossguard', () => new THREE.TorusGeometry(0.095, 0.016, 12, 28, Math.PI)),
+    // 2. Solid Imperial Crown Band Seated on the Great-Helm
+    const crownBaseY = topY + 0.195;
+    const crownLowerTorus = new THREE.Mesh(
+      getCachedGeo('cyber_king_crown_lower', () => new THREE.TorusGeometry(0.204, 0.018, 18, 52)),
       trimMat
     );
-    crossguard.position.set(0, 0.78 * h, 0.235);
-    crossguard.rotation.z = Math.PI;
-    rig.add(crossguard);
+    crownLowerTorus.rotation.x = Math.PI / 2;
+    crownLowerTorus.position.y = crownBaseY;
+    rig.add(crownLowerTorus);
 
-    const crownStar = new THREE.Mesh(swordBladeGeo, trimMat);
-    crownStar.scale.set(0.85, 0.72, 0.85);
-    crownStar.position.set(0, topY + 0.44, 0);
-    rig.add(crownStar);
+    const crownInlayBand = new THREE.Mesh(
+      getCachedGeo('cyber_king_crown_inlay', () => new THREE.CylinderGeometry(0.212, 0.202, 0.052, 48)),
+      bladeMat
+    );
+    crownInlayBand.position.y = crownBaseY + 0.028;
+    rig.add(crownInlayBand);
+
+    const crownUpperTorus = new THREE.Mesh(
+      getCachedGeo('cyber_king_crown_upper', () => new THREE.TorusGeometry(0.214, 0.016, 18, 52)),
+      trimMat
+    );
+    crownUpperTorus.rotation.x = Math.PI / 2;
+    crownUpperTorus.position.y = crownBaseY + 0.055;
+    rig.add(crownUpperTorus);
+
+    // 3. 8 Beveled Heraldic Crown Peaks around the Crown Rim
+    const peakGeo = getCachedGeo('cyber_king_crown_peak', () => {
+      const s = new THREE.Shape();
+      s.moveTo(-0.034, 0);
+      s.lineTo(0.034, 0);
+      s.lineTo(0.022, 0.065);
+      s.lineTo(0, 0.115);
+      s.lineTo(-0.022, 0.065);
+      s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.018,
+        bevelEnabled: true,
+        bevelSegments: 3,
+        steps: 1,
+        bevelSize: 0.005,
+        bevelThickness: 0.005
+      });
+      g.translate(0, 0, -0.009);
+      return g;
+    });
+
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      const peak = new THREE.Mesh(peakGeo, trimMat);
+      const r = 0.212;
+      peak.position.set(Math.cos(ang) * r, crownBaseY + 0.052, Math.sin(ang) * r);
+      peak.rotation.y = -ang + Math.PI / 2;
+      if (i % 2 === 1) peak.scale.set(0.82, 0.76, 0.85);
+      rig.add(peak);
+    }
+
+    // 4. 4 Sweeping Imperial Crown Arches rising from the Cardinal Crown Peaks to the Apex Monde
+    const archGeo = getCachedGeo('cyber_king_imperial_arch', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0.212, 0.0, 0),
+          new THREE.Vector3(0.205, 0.12, 0),
+          new THREE.Vector3(0.115, 0.21, 0),
+          new THREE.Vector3(0.0, 0.195, 0)
+        ],
+        0.022,
+        0.016,
+        24,
+        14
+      )
+    );
+    for (let i = 0; i < 4; i++) {
+      const arch = new THREE.Mesh(archGeo, trimMat);
+      arch.position.y = crownBaseY + 0.055;
+      arch.rotation.y = (i / 4) * Math.PI * 2;
+      rig.add(arch);
+    }
+
+    // 5. Seated Imperial Monde Orb & Sovereign Cross Finial at the Crown Apex (zero gap!)
+    const mondeY = crownBaseY + 0.255;
+    const mondeOrb = new THREE.Mesh(
+      getCachedGeo('cyber_king_monde_orb', () => new THREE.SphereGeometry(0.046, 24, 24)),
+      trimMat
+    );
+    mondeOrb.position.y = mondeY;
+    rig.add(mondeOrb);
+
+    const sovereignCrossGeo = getCachedGeo('cyber_king_sovereign_cross', () => {
+      const s = new THREE.Shape();
+      s.moveTo(-0.022, 0.0);
+      s.lineTo(0.022, 0.0);
+      s.lineTo(0.018, 0.075);
+      s.lineTo(0.082, 0.062);
+      s.lineTo(0.082, 0.115);
+      s.lineTo(0.018, 0.102);
+      s.lineTo(0.028, 0.185);
+      s.lineTo(-0.028, 0.185);
+      s.lineTo(-0.018, 0.102);
+      s.lineTo(-0.082, 0.115);
+      s.lineTo(-0.082, 0.062);
+      s.lineTo(-0.018, 0.075);
+      s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.028,
+        bevelEnabled: true,
+        bevelSegments: 3,
+        steps: 1,
+        bevelSize: 0.006,
+        bevelThickness: 0.006
+      });
+      g.translate(0, 0, -0.014);
+      return g;
+    });
+    const sovereignCross = new THREE.Mesh(sovereignCrossGeo, trimMat);
+    sovereignCross.position.y = mondeY + 0.032;
+    rig.add(sovereignCross);
+
+    const crossCoreGem = new THREE.Mesh(chestGemGeo, bladeMat);
+    crossCoreGem.scale.setScalar(0.65);
+    crossCoreGem.position.set(0, mondeY + 0.12, 0.016);
+    rig.add(crossCoreGem);
+
+    // 6. Planted Two-Handed Sovereign Runic Greatsword in front (+Z) with Aligned Crossguard, Hilt & Pommel
+    const swordGroup = new THREE.Group();
+    swordGroup.position.set(0, 0, 0.245);
+    rig.add(swordGroup);
+
+    const greatswordBlade = new THREE.Mesh(swordBladeGeo, bladeMat);
+    greatswordBlade.scale.set(1.22, 1.35, 1.2);
+    greatswordBlade.position.set(0, 0.49, 0);
+    swordGroup.add(greatswordBlade);
+
+    // Central Gold Fuller Ridge along the blade
+    const fuller = new THREE.Mesh(
+      getCachedGeo('cyber_king_fuller', () => new THREE.BoxGeometry(0.022, 0.56, 0.024)),
+      trimMat
+    );
+    fuller.position.set(0, 0.54, 0);
+    swordGroup.add(fuller);
+
+    // Winged Gold Crossguard directly at top of blade (y = 0.86)
+    const crossguardGeo = getCachedGeo('cyber_king_crossguard_v2', () => {
+      const s = new THREE.Shape();
+      s.moveTo(-0.14, 0.025);
+      s.quadraticCurveTo(0, -0.02, 0.14, 0.025);
+      s.lineTo(0.12, -0.022);
+      s.quadraticCurveTo(0, -0.05, -0.12, -0.022);
+      s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.028,
+        bevelEnabled: true,
+        bevelSegments: 3,
+        steps: 1,
+        bevelSize: 0.006,
+        bevelThickness: 0.006
+      });
+      g.translate(0, 0, -0.014);
+      return g;
+    });
+    const crossguard = new THREE.Mesh(crossguardGeo, trimMat);
+    crossguard.position.set(0, 0.86, 0);
+    swordGroup.add(crossguard);
+
+    // Hilt Grip & Pommel above Crossguard
+    const hiltGrip = new THREE.Mesh(
+      getCachedGeo('cyber_king_hilt', () => new THREE.CylinderGeometry(0.018, 0.022, 0.14, 16)),
+      primaryMat
+    );
+    hiltGrip.position.set(0, 0.94, 0);
+    swordGroup.add(hiltGrip);
+
+    const pommel = new THREE.Mesh(
+      getCachedGeo('cyber_king_pommel', () => new THREE.OctahedronGeometry(0.034, 1)),
+      trimMat
+    );
+    pommel.position.set(0, 1.03, 0);
+    swordGroup.add(pommel);
   }
 }
 
