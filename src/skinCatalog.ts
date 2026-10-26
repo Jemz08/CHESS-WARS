@@ -76,7 +76,7 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
   {
     id: 'classic_staunton',
     name: 'Classic Staunton Tournament',
-    subtitle: 'Lathe-turned grandmaster chessmen with molded collars, horse-head knights & cross crowns',
+    subtitle: 'Fluted spline-lathed grandmaster chessmen with carved bridled warhorses, slotted mitres & arched crowns',
     badge: 'Tournament Set',
     price: 120,
     strikeStyle: 'Grandmaster Kinetic Lunge & Slam',
@@ -86,7 +86,7 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
   {
     id: 'arcane_cyber',
     name: 'Arcane Runic & Cyber-Mech',
-    subtitle: 'Composite sentinel mechs & levitating runic obelisks with orbital energy rings & plasma visors',
+    subtitle: 'Articulated paladin automatons with feathered Valkyrie energy wings, kite shields, runic greatswords & gyro astrolabes',
     badge: 'Cyber-Arcane Set',
     price: 240,
     strikeStyle: 'Overcharged Plasma Lunge & Pulse',
@@ -96,7 +96,7 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
   {
     id: 'dragon_elemental',
     name: 'Dragon & Elemental Guardians',
-    subtitle: 'Horned drake-wing knights, coiled wyvern rooks, elemental spire bishops & dragon-crested monarchs',
+    subtitle: 'Sinuous S-curved dragons with ribbed bat-wing membranes, spiral horns, coiled wyvern towers & fanged jaws',
     badge: 'Mythic Beasts',
     price: 360,
     strikeStyle: 'Ferocious Drake-Claw & Flame Strike',
