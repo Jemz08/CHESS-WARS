@@ -18,8 +18,10 @@
 }
 
 html, body, #root {
-  width: 100vw;
+  width: 100%;
+  max-width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
@@ -29,8 +31,8 @@ html, body, #root {
 #canvas-container {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   z-index: 1;
 }
 
@@ -508,53 +510,81 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   display: none;
 }
 
-/* Mobile Responsive View Optimization */
-@media (max-width: 768px) {
+/* Mobile & Tablet Responsive View Optimization (Portrait & Landscape Phones) */
+@media (max-width: 1080px), (max-height: 560px) {
   #hud-top {
-    top: 12px;
-    left: 12px;
-    right: 12px;
+    top: max(10px, env(safe-area-inset-top, 10px));
+    left: 10px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
     z-index: 30;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: nowrap;
     align-items: center;
     justify-content: space-between;
   }
 
   #hud-left {
-    flex: 1 1 auto;
+    flex: 1 1 0%;
     min-width: 0;
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: 5px;
+    overflow: hidden;
   }
 
   .brand-pill {
-    padding: 7px 11px;
+    padding: 6px 9px;
     flex-shrink: 0;
   }
 
   .brand-title {
-    font-size: 0.76rem;
-    letter-spacing: 0.07em;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
     white-space: nowrap;
   }
 
   .status-pill {
-    padding: 7px 11px;
-    font-size: 0.76rem;
-    gap: 7px;
+    padding: 6px 9px;
+    font-size: 0.74rem;
+    gap: 6px;
     min-width: 0;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
 
   #turn-text {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
   }
 
   .mode-badge {
     display: none;
+  }
+
+  /* On mobile, hide the calm "NO CHECK" badge so the top bar never overflows; show compactly when active */
+  .check-indicator-badge:not(.active) {
+    display: none;
+  }
+
+  .check-indicator-badge.active {
+    padding: 5px 8px;
+    font-size: 0.64rem;
+    letter-spacing: 0.05em;
+    gap: 4px;
+    flex-shrink: 0;
+    max-width: 118px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .gold-wallet-btn {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    gap: 4px;
+    flex-shrink: 0;
   }
 
   /* Controls trigger button in mobile top bar */
@@ -564,10 +594,10 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
     justify-content: center;
     pointer-events: auto;
     flex-shrink: 0;
-    min-height: 38px;
-    padding: 7px 14px;
-    font-size: 0.78rem;
-    font-weight: 600;
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
     border-color: var(--hud-border);
     color: var(--gold-bright);
     white-space: nowrap;
@@ -580,11 +610,11 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
     align-items: center;
     justify-content: center;
     position: fixed;
-    top: 12px;
-    right: 12px;
+    top: max(10px, env(safe-area-inset-top, 10px));
+    right: 10px;
     z-index: 65;
-    min-height: 38px;
-    padding: 7px 14px;
+    min-height: 36px;
+    padding: 6px 12px;
     border-color: var(--hud-border);
     color: var(--gold-bright);
     opacity: 1 !important;
@@ -616,17 +646,20 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
     left: 0;
     right: 0;
     bottom: 0;
+    width: 100%;
+    max-width: 100vw;
     z-index: 29;
-    background: linear-gradient(180deg, rgba(14, 18, 28, 0.96) 0%, rgba(8, 10, 16, 0.98) 100%);
+    background: linear-gradient(180deg, rgba(14, 18, 28, 0.97) 0%, rgba(8, 10, 16, 0.99) 100%);
     backdrop-filter: blur(18px);
     border-top: 1px solid rgba(212, 175, 55, 0.45);
-    border-radius: 22px 22px 0 0;
-    padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+    border-radius: 18px 18px 0 0;
+    padding: 10px 14px calc(16px + env(safe-area-inset-bottom, 0px));
     box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.82);
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 8px;
-    max-height: 82vh;
+    gap: 7px;
+    max-height: calc(100dvh - 54px);
+    overflow-x: hidden;
     overflow-y: auto;
     pointer-events: none;
     transform: translateY(105%);
@@ -646,7 +679,7 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
     grid-column: span 6;
     display: flex;
     justify-content: center;
-    padding: 6px 0 6px;
+    padding: 4px 0 4px;
     cursor: pointer;
     pointer-events: auto;
   }
@@ -663,14 +696,14 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 8px;
+    padding-bottom: 7px;
     margin-bottom: 2px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     pointer-events: auto;
   }
 
   .mobile-sheet-title {
-    font-size: 0.92rem;
+    font-size: 0.86rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -678,13 +711,13 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   }
 
   .mobile-sheet-close {
-    min-height: 38px;
-    padding: 6px 14px;
-    border-radius: 999px;
+    min-height: 34px;
+    padding: 5px 12px;
+    border-radius: 4px;
     border: 1px solid rgba(212, 175, 55, 0.42);
     background: rgba(212, 175, 55, 0.14);
     color: var(--gold-bright);
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     font-weight: 600;
     letter-spacing: 0.03em;
     display: inline-flex;
@@ -707,16 +740,16 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 0.7rem;
+    font-size: 0.66rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted);
-    padding: 4px 2px 2px;
+    padding: 3px 2px 1px;
   }
 
   .mobile-sheet-section-sub {
-    font-size: 0.66rem;
+    font-size: 0.62rem;
     font-weight: 500;
     letter-spacing: 0.02em;
     text-transform: none;
@@ -732,19 +765,31 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
     align-items: center;
     justify-content: center;
     text-align: center;
-    min-height: 44px;
-    padding: 10px 10px;
-    border-radius: 12px;
-    font-size: 0.8rem;
+    min-height: 40px;
+    padding: 8px 6px;
+    border-radius: 6px;
+    font-size: clamp(0.68rem, 2.7vw, 0.78rem);
     width: 100%;
+    min-width: 0;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  /* 3 Game Action buttons in a 3-column row */
-  #btn-side-toggle,
+  /* Arena & Armory buttons in a 2-column row */
+  #btn-arena-hub,
+  #btn-skin-shop {
+    grid-column: span 3;
+  }
+
+  /* Game Action buttons: Side toggle full width, AI Move & New Game 50/50 so text never clips */
+  #btn-side-toggle {
+    grid-column: span 6;
+  }
+
   #btn-ai-move,
   #btn-reset {
-    grid-column: span 2;
+    grid-column: span 3;
   }
 
   /* 4 Camera View buttons in a 2x2 grid */
@@ -755,21 +800,22 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
     grid-column: span 3;
   }
 
-  /* Full-width Hide UI button */
+  /* Voice Toggle & Hide UI side-by-side 50/50 */
+  #btn-voice-toggle,
   #btn-hide-ui {
-    grid-column: span 6;
+    grid-column: span 3;
   }
 
   .mobile-sheet-hint {
     grid-column: span 6;
     display: block;
     margin-top: 2px;
-    padding: 9px 12px;
-    border-radius: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(212, 175, 55, 0.18);
-    font-size: 0.72rem;
-    line-height: 1.45;
+    font-size: 0.68rem;
+    line-height: 1.4;
     color: var(--muted);
     text-align: center;
   }
@@ -781,9 +827,9 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 
   /* Optimize bottom HUD on mobile: hide desktop controls hint bar, center captured tray */
   #hud-bottom {
-    bottom: 12px;
-    left: 12px;
-    right: 12px;
+    bottom: max(10px, env(safe-area-inset-bottom, 10px));
+    left: 10px;
+    right: 10px;
     z-index: 8;
     justify-content: center;
   }
@@ -793,64 +839,62 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   }
 
   .captured-pill {
-    font-size: 0.74rem;
-    padding: 6px 12px;
+    font-size: 0.72rem;
+    padding: 5px 10px;
+    max-width: calc(100vw - 24px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Responsive Checkmate Banner on mobile screens */
   #checkmate-overlay {
-    padding-top: 64px;
+    padding: 56px 10px 12px;
   }
 
   .checkmate-banner {
     min-width: 0;
-    width: calc(100vw - 24px);
-    max-width: 420px;
-    padding: 18px 18px 16px;
+    width: 100%;
+    max-width: calc(100vw - 20px);
+    padding: 16px 14px 14px;
   }
 
   .checkmate-title {
-    font-size: 1.65rem;
-    letter-spacing: 0.16em;
+    font-size: clamp(1.25rem, 5.5vw, 1.65rem);
+    letter-spacing: 0.12em;
   }
 
   .checkmate-subtitle {
-    font-size: 0.8rem;
-    letter-spacing: 0.08em;
+    font-size: clamp(0.72rem, 3vw, 0.82rem);
+    letter-spacing: 0.06em;
+    line-height: 1.35;
   }
 
   .checkmate-actions {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+    width: 100%;
+  }
+
+  .checkmate-btn {
+    width: 100%;
+    padding: 8px 8px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 480px) {
+  /* Hide brand title box and "Gold" unit word on narrow phones so Status + Gold + Menu fit comfortably */
   .brand-pill {
-    padding: 6px 9px;
+    display: none;
   }
 
-  .brand-title {
-    font-size: 0.7rem;
-  }
-
-  .status-pill {
-    padding: 6px 9px;
-    font-size: 0.72rem;
-  }
-
-  .mobile-controls-trigger {
-    padding: 6px 11px;
-    font-size: 0.74rem;
-  }
-
-  #btn-side-toggle {
-    grid-column: span 6;
-  }
-
-  #btn-ai-move,
-  #btn-reset {
-    grid-column: span 3;
+  .gold-wallet-unit {
+    display: none;
   }
 }
 
@@ -898,24 +942,27 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 
 .gold-bounty-toast {
   position: fixed;
-  top: 74px;
+  top: 68px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 35;
+  max-width: calc(100vw - 24px);
   background: linear-gradient(135deg, rgba(28, 22, 10, 0.96), rgba(12, 14, 20, 0.96));
   border: 1.5px solid var(--gold-bright);
-  padding: 9px 20px;
+  padding: 8px 16px;
   border-radius: 999px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.88rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: clamp(0.76rem, 2.8vw, 0.88rem);
   font-weight: 700;
   color: var(--text);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.78), 0 0 24px rgba(212, 175, 55, 0.32);
   pointer-events: none;
   animation: bountySlideIn 0.24s cubic-bezier(0.16, 1, 0.3, 1);
-  white-space: nowrap;
+  text-align: center;
 }
 
 .gold-bounty-amount {
@@ -940,21 +987,22 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 
 .turn-handoff-toast {
   position: fixed;
-  top: 74px;
+  top: 68px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
+  max-width: calc(100vw - 24px);
   background: rgba(12, 16, 24, 0.94);
   border: 1px solid rgba(78, 168, 222, 0.65);
   color: #e6f2ff;
-  padding: 8px 18px;
+  padding: 7px 14px;
   border-radius: 999px;
-  font-size: 0.82rem;
+  font-size: clamp(0.72rem, 2.6vw, 0.82rem);
   font-weight: 600;
   letter-spacing: 0.03em;
   pointer-events: none;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
-  white-space: nowrap;
+  text-align: center;
 }
 
 /* 1-Phone Pass-Device Curtain */
@@ -1917,42 +1965,216 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   cursor: not-allowed;
 }
 
-@media (max-width: 768px) {
-  .sanctum-modal-card {
-    padding: 20px 18px;
+@media (max-width: 1080px), (max-height: 560px) {
+  .sanctum-modal-backdrop {
+    padding: 8px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sanctum-modal-card,
+  .sanctum-modal-card.wide {
+    width: 100%;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 15px 13px 15px;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .sanctum-modal-header {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
+  }
+
+  .sanctum-modal-kicker {
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+  }
+
+  .sanctum-modal-title {
+    font-size: clamp(1.18rem, 5.2vw, 1.48rem);
+    letter-spacing: 0.08em;
+  }
+
+  .sanctum-record-line {
+    font-size: 0.7rem;
+    gap: 5px;
+  }
+
+  .sanctum-tapered-rule {
+    margin: 10px 0;
   }
 
   .armory-header-right {
+    display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
+    gap: 6px;
+    width: 100%;
   }
 
-  .sanctum-loadout-ledger,
-  .difficulty-grid,
-  .online-room-split,
-  .sanctum-tab-bar {
-    grid-template-columns: 1fr;
+  .sanctum-modal-close {
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 7px 10px;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+  }
+
+  /* Keep the 3-slot loadout ledger as a compact 3-column strip on phones */
+  .sanctum-loadout-ledger {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: 12px;
   }
 
   .loadout-ledger-slot {
-    border-right: none;
-    border-bottom: 1px solid rgba(212, 175, 55, 0.16);
+    padding: 7px 6px;
+    min-width: 0;
   }
 
-  .loadout-ledger-slot:last-child {
-    border-bottom: none;
+  .ledger-slot-label {
+    font-size: 0.54rem;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  #btn-arena-hub,
-  #btn-skin-shop {
-    grid-column: span 3;
+  .ledger-slot-value {
+    font-size: 0.7rem;
+  }
+
+  .ledger-slot-action {
+    font-size: 0.58rem;
+  }
+
+  /* Keep the 3 chapter tabs side-by-side in one compact row */
+  .sanctum-tab-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: 12px;
+  }
+
+  .sanctum-tab-btn {
+    padding: 8px 4px;
+    font-size: clamp(0.6rem, 2.5vw, 0.72rem);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tab-numeral {
+    display: none;
+  }
+
+  .sanctum-modal-body {
+    gap: 12px;
+  }
+
+  .sanctum-field-label {
+    font-size: 0.68rem;
+  }
+
+  .sanctum-field-note {
+    font-size: 0.68rem;
+  }
+
+  .difficulty-grid,
+  .online-room-split {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .difficulty-card {
+    padding: 10px 12px;
+    gap: 4px;
+  }
+
+  .difficulty-name {
+    font-size: 0.88rem;
+  }
+
+  .difficulty-desc {
+    font-size: 0.84rem;
+    line-height: 1.32;
+  }
+
+  .difficulty-reward {
+    padding-top: 5px;
+    font-size: 0.66rem;
+  }
+
+  .side-picker-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .side-picker-btn {
+    padding: 9px 9px;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .side-glyph {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+  }
+
+  .side-text-wrap {
+    min-width: 0;
+  }
+
+  .side-title {
+    font-size: 0.76rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .side-sub {
+    font-size: 0.62rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .arena-primary-btn {
+    padding: 11px 14px;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+  }
+
+  .skin-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 9px;
+  }
+
+  .skin-card {
+    padding: 11px;
+    gap: 7px;
+  }
+
+  .skin-card-title {
+    font-size: 0.84rem;
+  }
+
+  .skin-card-sub {
+    font-size: 0.82rem;
+    line-height: 1.3;
+  }
+
+  .skin-action-btn {
+    padding: 8px 8px;
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
   }
 }
 
-
-
-
+@media (max-width: 370px) {
+  .skin-grid {
+    grid-template-columns: 1fr;
+  }
+}

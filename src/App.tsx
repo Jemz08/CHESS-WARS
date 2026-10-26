@@ -295,7 +295,7 @@ export default function App() {
       }
     };
     const handleResize = () => {
-      if (window.innerWidth > 768) {
+      if (window.innerWidth > 1080 && window.innerHeight > 560) {
         setMobileSheetOpen(false);
       }
     };
