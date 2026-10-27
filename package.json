@@ -12,8 +12,8 @@
     "prelint": "[ -d node_modules/.bin ] || bun install || npm install",
     "lint": "tsc --noEmit",
     "preview": "vite preview",
-    "apk:init": "npm install @capacitor/core @capacitor/cli @capacitor/android && vite build && npx cap add android",
-    "apk:sync": "vite build && npx cap sync android",
+    "apk:init": "node scripts/apk-sync.mjs",
+    "apk:sync": "node scripts/apk-sync.mjs",
     "apk:open": "npx cap open android"
   },
   "dependencies": {
