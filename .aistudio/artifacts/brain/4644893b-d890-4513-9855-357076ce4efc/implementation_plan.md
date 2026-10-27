@@ -1,50 +1,42 @@
-# Implementation Plan — Majestic 3D World Sceneries & Armory Realm Unlocks
+# Implementation Plan: Medieval Steel Clashing, Slashing & Visceral Kill SFX
 
-## 1. Overview & Goals
-Expand the 3D world beyond the indoor Gothic Cathedral by introducing a new **World Sceneries (Realms)** category in the **Armory & Reliquary**, unlockable with Gold. Players can switch between the classic indoor **Gothic Cathedral Sanctum** and three open-air / cosmic 3D world realms surrounding the chessboard altar, complete with custom GLSL sky dome shaders, multi-part 3D architectural landmarks, orbiting bodies, atmospheric lighting, and dynamic particle weather.
-
----
-
-## 2. World Scenery Catalog & Economy (`src/skinCatalog.ts`)
-Add a `WorldScenery` catalog (`WORLD_SCENERIES`) and persist ownership and active selection in `EconomyState` (`ownedSceneries`, `activeScenery`):
-
-1. **Gothic Cathedral Sanctum (`gothic_cathedral` — Default / 0 Gold)**
-   - **Theme**: Enclosed moonlit Gothic abbey nave with stained glass lancet windows, vaulted stone pillars, and roaring hearth braziers.
-2. **Celestial Astral Observatory (`celestial_observatory` — 200 Gold)**
-   - **Sky & Atmosphere**: Deep-space procedural GLSL nebula sky dome with swirling violet/cyan cosmic clouds, twinkling starfield, and aurora ribbons.
-   - **3D Landmarks & Orbiting Spectacle**: A grand open-air marble & brass astral platform featuring giant rotating armillary astrolabe rings encircling the arena, a ringed gas-giant planet and crescent moons on the horizon, and 8 levitating crystalline star-monoliths with engraved glowing runes.
-   - **Particle Weather**: Drifting golden stardust motes and ascending astral mana wisps.
-3. **Dragon Peak Sky Citadel (`dragon_sky_citadel` — 280 Gold)**
-   - **Sky & Atmosphere**: High-altitude sunset-and-celestial-gold sky shader above a billowing procedural sea of glowing clouds at the mountain base.
-   - **3D Landmarks & Orbiting Spectacle**: An ancient cliffside sovereign citadel courtyard with carved dragon-prow spires, broken Gothic sky-arches, distant floating mountain peaks with cascading mist waterfalls, and soaring dragon silhouettes gliding on high thermal orbits around the peak.
-   - **Particle Weather**: Wind-swept golden sun-motes and drifting cloud mist.
-4. **Volcanic Titan Forge (`volcanic_titan_forge` — 350 Gold)**
-   - **Sky & Atmosphere**: Smoldering obsidian caldera sky dome with ash-storm clouds, crimson horizon glow, and a procedural molten magma sea below the platform.
-   - **3D Landmarks & Orbiting Spectacle**: A colossal chained basalt forge platform suspended over an active volcanic crater by massive iron chains anchored to jagged obsidian monoliths, flanked by giant Titan anvil pillars and glowing lava conduits.
-   - **Particle Weather**: Rising incandescent ember sparks and swirling volcanic ash particles.
+## Overview
+Upgrade the combat audio engine in `src/soundAndVfxEngine.js` and its combat choreography integration in `src/wizardChessEngine.js` so captures and piece executions sound like authentic medieval steel-on-steel swordplay, razor-sharp blade slashes, and heavy stone/armor destruction rather than synthetic oscillator tones.
 
 ---
 
-## 3. Procedural 3D World Scenery Builder (`src/worldSceneries.js` & `src/wizardChessEngine.js`)
-Create a dedicated 3D scenery module (`src/worldSceneries.js`) integrated into `wizardChessEngine.js`:
-- **Seamless Indoor vs. Open-World Switching (`applyWorldScenery`)**:
-  - When `gothic_cathedral` is active, show the cathedral architectural shell (`cathedralRoot` walls, columns, vaulted roof) and use indoor room bounds (`CATHEDRAL_BOUNDS`) and pillar collisions.
-  - When an outdoor/cosmic scenery (`celestial_observatory`, `dragon_sky_citadel`, or `volcanic_titan_forge`) is active, hide the enclosing cathedral walls/roof/nave columns while keeping the central altar/board pedestal and twin braziers, expand camera orbit freedom so players can admire the 360° vista, and activate the selected 3D realm group.
-- **Custom GLSL Sky Dome & Horizon Shaders**:
-  - Full-sphere `THREE.ShaderMaterial` sky dome (`BackSide`) with realm-specific procedural nebulae, cloud strata, stars, and volcanic glow driven by `uTime`.
-  - Lower horizon plane/ring shader for the sea of clouds (Sky Citadel), cosmic void vortex (Astral Observatory), or bubbling magma caldera (Titan Forge).
-- **Multi-Part 3D Landmarks & Animated Orbiting Elements**:
-  - Construct composite `THREE.Group` landmarks (armillary rings, floating monoliths, dragon-prow citadel spires, chained titan pylons, ringed planet, gliding sky-dragons) that animate smoothly in the main `THREE.Clock` loop.
-- **Dynamic Particle Weather System**:
-  - GPU-animated `THREE.Points` weather emitter (stardust, cloud mist, or rising volcanic embers) tailored to the active realm.
-- **Adaptive Scene Lighting**:
-  - Automatically tune hemisphere, directional sun/moon, and rim lights plus fog color/density to match each realm while keeping chess pieces crisp and readable.
+## 1. Acoustic & Physical Modeling Synthesis Engine (`src/soundAndVfxEngine.js`)
+Replace basic sine/sawtooth frequency sweeps with a dedicated **Physical Foley & Metallic Modal Synthesis** pipeline:
+
+- **Convolution Reverb & Acoustic Space**:
+  - Generate a custom stereo impulse response buffer simulating a stone chamber / battlefield acoustic tail so metallic rings and heavy impacts decay naturally in 3D space.
+- **Wave-Shaper Saturation & Transient Crispness**:
+  - Route steel clashes, blade slashes, and stone crunches through a non-linear distortion/clipper curve with a master compressor to produce raw, punchy physical impact transients instead of clean electronic waves.
+- **Inharmonic Steel Modal Resonator (`_playSteelClash` & `_playBladeDraw`)**:
+  - Model real forged steel using clustered inharmonic overtone ratios (`1.0, 1.47, 2.09, 2.86, 3.71, 4.58, 5.92`) excited by ultra-short high-Q filtered noise strikes and ring modulation:
+    - **Blade Draw ("Shiiing")**: High-Q resonant bandpass scrape sliding across high metallic partials (`2400 Hz -> 5200 Hz`) as the weapon leaves its scabbard.
+    - **Steel-on-Steel Parry Clash**: Micro-transient anvil/edge click (`0.004s`) + dual detuned metallic modal banks + high-frequency spark sizzle (`4500 Hz - 9500 Hz`).
+- **Directional Blade Slash & Cleave (`_playBladeSlash` & `_playHeavyCleave`)**:
+  - Layer a sharp leather/air whip transient with a resonant comb/bandpass-filtered noise sweep (`1800 Hz -> 280 Hz` rapid Doppler contour) for realistic sword cutting through the air, followed by a wet/heavy armor-and-stone cleave impact (`_playArmorBreach` & `_playStoneCrunch`).
 
 ---
 
-## 4. Armory UI & HUD Integration (`src/App.tsx` & `src/styles.css`)
-- **4th Tab in Armory & Reliquary (`World Sceneries`)**:
-  - Add a **World Sceneries** tab alongside *3D Piece Sets*, *Piece Finishes*, and *3D Board Arenas* in the Armory modal.
-  - Display each scenery's preview swatches, atmosphere badge, animated spectacle description, Gold price, and **Unlock / Equip** button.
-- **Lobby & Top HUD Realm Indicator / Quick Switcher**:
-  - Show the active World Scenery in the Lobby loadout summary and allow cycling owned World Sceneries directly from the HUD or Armory.
+## 2. Multi-Stage Duel Sequence on Capture
+Synchronize the capture choreography (`playCapturePreImpact` and `wizardChessEngine.js` capture sequence) into a **4-stage medieval duel**:
+
+1. **Stage 1 — Blade Draw (0ms)**: Crisp metallic scabbard scrape ("shiiing") and leather grip tautness as the attacking piece winds up.
+2. **Stage 2 — Air Slash (90ms)**: High-velocity directional sword whip cutting through the air as the attacker lunges forward.
+3. **Stage 3 — Steel Parry Clash (175ms)**: Ringing steel-on-steel weapon collision (with 1–2 rapid parry exchanges for heavier pieces) before breaking through the defender's guard.
+4. **Stage 4 — Final Cleave & Piece-Specific Destruction (Impact)**: Brutal weapon cleave into armor and carved stone, immediately triggering the victim piece's signature kill foley.
+
+---
+
+## 3. Piece-Specific Medieval Kill SFX (`playPieceKillSound`)
+Redesign all 6 piece destruction sound profiles around physical steel, armor, and stone foley:
+
+- **Pawn (`CLEAVED`)**: Swift broadsword slash through iron mail, shield splinter, and crisp stone rubble scatter.
+- **Knight (`UNHORSED`)**: Heavy polearm/lance steel clash, double sword parry ring, warhorse armor plate crash, and cascading cobblestone collapse.
+- **Bishop (`SHATTERED`)**: Razor blade slice severing stone vestments, crystalline/stained-glass fracture burst, and echoing cathedral masonry crumble.
+- **Rook (`DEMOLISHED`)**: Colossal warhammer/siege impact against fortified plate, deep structural stone cracking, and multi-wave fortress boulder avalanche.
+- **Queen (`ANNIHILATED`)**: Flurry of three rapid steel-on-steel sword clashes, high-velocity executioner cleave, royal armor shatter, and massive resonant shockwave rumble.
+- **King (`REGICIDE`)**: Dramatic executioner greatsword draw, two heavy steel parry clashes, decisive regicide cleave, hollow metallic crown clattering and spinning across the stone floor, and monument collapse.

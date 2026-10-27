@@ -117,7 +117,7 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
   {
     id: 'dragon_elemental',
     name: 'Dragon & Elemental Guardians',
-    subtitle: 'Sinuous S-curved dragons with ribbed bat-wing membranes, spiral horns, coiled wyvern towers & fanged jaws',
+    subtitle: 'Sinuous S-curved dragons with roaring dragonfire crowns, fanged flame-breath jets, ribbed bat-wings & hellfire braziers',
     badge: 'Mythic Beasts',
     price: 360,
     strikeStyle: 'Ferocious Drake-Claw & Flame Strike',
@@ -568,6 +568,144 @@ export function loadEconomyState(): EconomyState {
   }
 }
 
+export interface RankTierId {
+  id: 'bronze' | 'silver' | 'gold' | 'platinum' | 'obsidian';
+}
+
+export interface RankTier {
+  id: 'bronze' | 'silver' | 'gold' | 'platinum' | 'obsidian';
+  numeral: string;
+  name: string;
+  title: string;
+  minWins: number;
+  maxWins: number | null;
+  borderEffectName: string;
+  borderDescription: string;
+  primaryHex: string;
+  secondaryHex: string;
+  glowHex: string;
+  crestGlyph: string;
+}
+
+export const RANK_TIERS: RankTier[] = [
+  {
+    id: 'bronze',
+    numeral: 'I',
+    name: 'Bronze',
+    title: 'Bronze Initiate',
+    minWins: 0,
+    maxWins: 2,
+    borderEffectName: 'Hammered Bronze Bevel',
+    borderDescription: 'Weathered forged bronze plating with riveted cathedral corners and warm brazier ember glint.',
+    primaryHex: '#cd7f32',
+    secondaryHex: '#8b4513',
+    glowHex: 'rgba(205, 127, 50, 0.55)',
+    crestGlyph: '♙'
+  },
+  {
+    id: 'silver',
+    numeral: 'II',
+    name: 'Silver',
+    title: 'Silver Warden',
+    minWins: 3,
+    maxWins: 6,
+    borderEffectName: 'Moonlit Runic Steel',
+    borderDescription: 'Polished astral silver bevels with sweeping cold-steel specular sheen and warded corner sigils.',
+    primaryHex: '#e2e8f0',
+    secondaryHex: '#94a3b8',
+    glowHex: 'rgba(226, 232, 240, 0.65)',
+    crestGlyph: '♘'
+  },
+  {
+    id: 'gold',
+    numeral: 'III',
+    name: 'Gold',
+    title: 'Gold Archon',
+    minWins: 7,
+    maxWins: 12,
+    borderEffectName: 'Imperial Auric Filigree',
+    borderDescription: 'Radiant sunforged gold double-border with rotating solar halo and crowned cathedral spires.',
+    primaryHex: '#f5d76e',
+    secondaryHex: '#b8891e',
+    glowHex: 'rgba(245, 215, 110, 0.78)',
+    crestGlyph: '♖'
+  },
+  {
+    id: 'platinum',
+    numeral: 'IV',
+    name: 'Astral',
+    title: 'Astral Sovereign',
+    minWins: 13,
+    maxWins: 20,
+    borderEffectName: 'Crystalline Starlight Corona',
+    borderDescription: 'Prismatic aether-cyan crystal frame with pulsing arcane conduits and floating starlight motes.',
+    primaryHex: '#67e8f9',
+    secondaryHex: '#0284c7',
+    glowHex: 'rgba(103, 232, 249, 0.82)',
+    crestGlyph: '♕'
+  },
+  {
+    id: 'obsidian',
+    numeral: 'V',
+    name: 'Obsidian',
+    title: 'Obsidian Grandmaster',
+    minWins: 21,
+    maxWins: null,
+    borderEffectName: 'Volcanic Void-Glass & Hellfire',
+    borderDescription: 'Jagged black volcanic obsidian shard border infused with living crimson-violet abyssal rift flames.',
+    primaryHex: '#f43f5e',
+    secondaryHex: '#881337',
+    glowHex: 'rgba(244, 63, 94, 0.88)',
+    crestGlyph: '♔'
+  }
+];
+
+export interface PlayerRankProgress {
+  currentTier: RankTier;
+  nextTier: RankTier | null;
+  winsInTier: number;
+  winsNeededForNext: number;
+  winsRemaining: number;
+  progressPercent: number;
+}
+
+export function getPlayerRankProgress(wins: number): PlayerRankProgress {
+  const safeWins = Math.max(0, Math.floor(wins || 0));
+  let currentIndex = 0;
+  for (let i = 0; i < RANK_TIERS.length; i++) {
+    if (safeWins >= RANK_TIERS[i].minWins) {
+      currentIndex = i;
+    }
+  }
+  const currentTier = RANK_TIERS[currentIndex];
+  const nextTier = currentIndex + 1 < RANK_TIERS.length ? RANK_TIERS[currentIndex + 1] : null;
+
+  if (!nextTier) {
+    return {
+      currentTier,
+      nextTier: null,
+      winsInTier: safeWins - currentTier.minWins,
+      winsNeededForNext: 1,
+      winsRemaining: 0,
+      progressPercent: 100
+    };
+  }
+
+  const span = Math.max(1, nextTier.minWins - currentTier.minWins);
+  const winsInTier = Math.max(0, safeWins - currentTier.minWins);
+  const winsRemaining = Math.max(0, nextTier.minWins - safeWins);
+  const progressPercent = Math.min(100, Math.max(0, Math.round((winsInTier / span) * 100)));
+
+  return {
+    currentTier,
+    nextTier,
+    winsInTier,
+    winsNeededForNext: span,
+    winsRemaining,
+    progressPercent
+  };
+}
+
 export function saveEconomyState(state: EconomyState): void {
   try {
     localStorage.setItem(ECONOMY_STORAGE_KEY, JSON.stringify(state));
@@ -575,3 +713,4 @@ export function saveEconomyState(state: EconomyState): void {
     // ignore storage quota errors
   }
 }
+

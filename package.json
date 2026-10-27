@@ -11,7 +11,10 @@
     "build": "vite build",
     "prelint": "[ -d node_modules/.bin ] || bun install || npm install",
     "lint": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "apk:init": "npm install @capacitor/core @capacitor/cli @capacitor/android && vite build && npx cap add android",
+    "apk:sync": "vite build && npx cap sync android",
+    "apk:open": "npx cap open android"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

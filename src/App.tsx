@@ -7,9 +7,12 @@ import {
   WORLD_SCENERIES,
   PIECE_GOLD_BOUNTY,
   MATCH_WIN_BOUNTY,
+  RANK_TIERS,
+  getPlayerRankProgress,
   loadEconomyState,
   saveEconomyState,
-  type EconomyState
+  type EconomyState,
+  type RankTier
 } from './skinCatalog';
 
 interface WizardChessAPI {
@@ -30,6 +33,10 @@ interface WizardChessAPI {
   setVoiceAnnouncerEnabled?: (enabled: boolean) => boolean;
   setSfxEnabled?: (enabled: boolean) => boolean;
   getSfxEnabled?: () => boolean;
+  playLobbyClickSfx?: (variant?: 'default' | 'tab' | 'card' | 'equip' | 'unlock' | 'buy' | 'start' | 'close') => void;
+  setLobbyMusicActive?: (active: boolean) => void;
+  setLobbyMusicEnabled?: (enabled: boolean) => boolean;
+  getLobbyMusicEnabled?: () => boolean;
   announceSanctumEvent?: (eventType: string, payload?: Record<string, unknown>) => void;
   getState?: () => {
     gameMode: 'single' | 'pass' | 'multi';
@@ -64,6 +71,7 @@ export default function App() {
   );
   const [arenaTab, setArenaTab] = useState<'bot' | 'online' | 'pass'>('bot');
   const [armoryTab, setArmoryTab] = useState<'types' | 'boards' | 'sceneries' | 'pieces'>('types');
+  const [previewRankTierId, setPreviewRankTierId] = useState<RankTier['id'] | null>(null);
 
   // Engine & Mode State
   const [gameMode, setGameMode] = useState<'single' | 'pass' | 'multi'>('single');
@@ -91,6 +99,14 @@ export default function App() {
       return true;
     }
   });
+  const [lobbyMusicEnabled, setLobbyMusicEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('wizard_chess_music_enabled');
+      return saved === null ? true : saved !== 'false';
+    } catch {
+      return true;
+    }
+  });
 
   // Online PvP State
   const [onlinePreferredSide, setOnlinePreferredSide] = useState<'w' | 'b'>('w');
@@ -107,10 +123,14 @@ export default function App() {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [onlineStatusText, setOnlineStatusText] = useState('');
 
-  // Economy & Skin State
+  // Economy, Rank Tier & Skin State
   const [economy, setEconomy] = useState<EconomyState>(() => loadEconomyState());
   const [bountyToast, setBountyToast] = useState<{ id: number; amount: number; label: string } | null>(null);
   const playerRating = 1000 + economy.stats.wins * 35 + economy.stats.captures * 3;
+  const rankProgress = getPlayerRankProgress(economy.stats.wins);
+  const displayedRankTier: RankTier =
+    (previewRankTierId && RANK_TIERS.find((r) => r.id === previewRankTierId)) ||
+    rankProgress.currentTier;
   const equippedArchetypeObj =
     PIECE_ARCHETYPES.find((a) => a.id === economy.activePieceType) || PIECE_ARCHETYPES[0];
   const equippedPieceSkinObj =
@@ -142,6 +162,56 @@ export default function App() {
     window.addEventListener('wizardchess:ready', applyEquippedSkins);
     return () => window.removeEventListener('wizardchess:ready', applyEquippedSkins);
   }, [economy.activePieceType, economy.activePieceSkin, economy.activeBoardSkin, economy.activeScenery]);
+
+  // Sync Lobby Music active state whenever the Lobby/Armory dialog or match state changes
+  useEffect(() => {
+    const isLobbyOpen = activeDialog !== 'none' || !hasStartedGame;
+    const syncLobbyMusic = () => {
+      getEngine()?.setLobbyMusicActive?.(isLobbyOpen);
+    };
+    syncLobbyMusic();
+    window.addEventListener('wizardchess:ready', syncLobbyMusic);
+    return () => window.removeEventListener('wizardchess:ready', syncLobbyMusic);
+  }, [activeDialog, hasStartedGame]);
+
+  // Delegated Mixkit UI Click SFX for all Lobby, Armory, and HUD controls
+  useEffect(() => {
+    const handleGlobalUiClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const interactive = target.closest(
+        'button, [role="tab"], .pass-toggle-row, .loadout-ledger-slot, .difficulty-card, .side-picker-btn'
+      ) as HTMLElement | null;
+      if (!interactive) return;
+      if ((interactive as HTMLButtonElement).disabled) return;
+
+      // Skip skin-action-btn because handleSelectOrBuy* triggers dedicated 'unlock' or 'equip' Mixkit SFX
+      if (interactive.classList.contains('skin-action-btn')) return;
+
+      const eng = getEngine();
+      if (!eng?.playLobbyClickSfx) return;
+
+      if (interactive.classList.contains('arena-primary-btn')) {
+        eng.playLobbyClickSfx('start');
+      } else if (interactive.classList.contains('sanctum-tab-btn') || interactive.getAttribute('role') === 'tab') {
+        eng.playLobbyClickSfx('tab');
+      } else if (
+        interactive.classList.contains('difficulty-card') ||
+        interactive.classList.contains('side-picker-btn') ||
+        interactive.classList.contains('loadout-ledger-slot') ||
+        interactive.classList.contains('matchmaking-pref-btn')
+      ) {
+        eng.playLobbyClickSfx('card');
+      } else if (interactive.classList.contains('sanctum-modal-close') && !interactive.classList.contains('gold-trim')) {
+        eng.playLobbyClickSfx('close');
+      } else {
+        eng.playLobbyClickSfx('default');
+      }
+    };
+
+    document.addEventListener('click', handleGlobalUiClick, true);
+    return () => document.removeEventListener('click', handleGlobalUiClick, true);
+  }, []);
 
   // Listen to engine events for Gold bounties, Matchmaking, and 1-Phone Turn Switching
   useEffect(() => {
@@ -253,6 +323,13 @@ export default function App() {
       }
     };
 
+    const handleMusicChange = (ev: Event) => {
+      const d = (ev as CustomEvent).detail;
+      if (d && typeof d.lobbyMusicEnabled === 'boolean') {
+        setLobbyMusicEnabled(d.lobbyMusicEnabled);
+      }
+    };
+
     const resolveLoadoutLabel = (loadout: Record<string, unknown> | null | undefined) => {
       if (!loadout) return '';
       const archId = typeof loadout.pieceType === 'string' ? loadout.pieceType : '';
@@ -344,6 +421,7 @@ export default function App() {
     window.addEventListener('wizardchess:uichange', handleUiChange);
     window.addEventListener('wizardchess:voicechange', handleVoiceChange);
     window.addEventListener('wizardchess:sfxchange', handleSfxChange);
+    window.addEventListener('wizardchess:musicchange', handleMusicChange);
     window.addEventListener('wizardchess:matchfound', handleMatchFound);
     window.addEventListener('wizardchess:matchmakingtick', handleMatchmakingTick);
     window.addEventListener('wizardchess:matchmakingtimeout', handleMatchmakingTimeout);
@@ -357,6 +435,7 @@ export default function App() {
       window.removeEventListener('wizardchess:uichange', handleUiChange);
       window.removeEventListener('wizardchess:voicechange', handleVoiceChange);
       window.removeEventListener('wizardchess:sfxchange', handleSfxChange);
+      window.removeEventListener('wizardchess:musicchange', handleMusicChange);
       window.removeEventListener('wizardchess:matchfound', handleMatchFound);
       window.removeEventListener('wizardchess:matchmakingtick', handleMatchmakingTick);
       window.removeEventListener('wizardchess:matchmakingtimeout', handleMatchmakingTimeout);
@@ -430,6 +509,13 @@ export default function App() {
     if (eng?.setSfxEnabled) {
       eng.setSfxEnabled(next);
     }
+  };
+
+  const handleToggleLobbyMusic = () => {
+    const next = !lobbyMusicEnabled;
+    setLobbyMusicEnabled(next);
+    const eng = getEngine();
+    eng?.setLobbyMusicEnabled?.(next);
   };
 
   // --- Arena Mode Actions ---
@@ -522,6 +608,7 @@ export default function App() {
       const next: EconomyState = { ...economy, activePieceType: arch.id };
       setEconomy(next);
       saveEconomyState(next);
+      getEngine()?.playLobbyClickSfx?.('equip');
       getEngine()?.applyPieceArchetype?.(arch);
       return;
     }
@@ -536,6 +623,7 @@ export default function App() {
     };
     setEconomy(next);
     saveEconomyState(next);
+    getEngine()?.playLobbyClickSfx?.('unlock');
     getEngine()?.applyPieceArchetype?.(arch);
   };
 
@@ -548,6 +636,7 @@ export default function App() {
       const next: EconomyState = { ...economy, activePieceSkin: skin.id };
       setEconomy(next);
       saveEconomyState(next);
+      getEngine()?.playLobbyClickSfx?.('equip');
       getEngine()?.applyPieceSkin?.(skin);
       return;
     }
@@ -562,6 +651,7 @@ export default function App() {
     };
     setEconomy(next);
     saveEconomyState(next);
+    getEngine()?.playLobbyClickSfx?.('unlock');
     getEngine()?.applyPieceSkin?.(skin);
   };
 
@@ -574,6 +664,7 @@ export default function App() {
       const next: EconomyState = { ...economy, activeBoardSkin: skin.id };
       setEconomy(next);
       saveEconomyState(next);
+      getEngine()?.playLobbyClickSfx?.('equip');
       getEngine()?.applyBoardSkin?.(skin);
       return;
     }
@@ -588,6 +679,7 @@ export default function App() {
     };
     setEconomy(next);
     saveEconomyState(next);
+    getEngine()?.playLobbyClickSfx?.('unlock');
     getEngine()?.applyBoardSkin?.(skin);
   };
 
@@ -600,6 +692,7 @@ export default function App() {
       const next: EconomyState = { ...economy, activeScenery: scenery.id };
       setEconomy(next);
       saveEconomyState(next);
+      getEngine()?.playLobbyClickSfx?.('equip');
       getEngine()?.applyWorldScenery?.(scenery, { flyToVista });
       return;
     }
@@ -614,12 +707,14 @@ export default function App() {
     };
     setEconomy(next);
     saveEconomyState(next);
+    getEngine()?.playLobbyClickSfx?.('unlock');
     getEngine()?.applyWorldScenery?.(scenery, { flyToVista });
   };
 
   const handlePreviewWorldScenery = (sceneryId: string) => {
     const scenery = WORLD_SCENERIES.find((w) => w.id === sceneryId);
     if (!scenery) return;
+    getEngine()?.playLobbyClickSfx?.('equip');
     getEngine()?.applyWorldScenery?.(scenery, { flyToVista: true });
   };
 
@@ -915,6 +1010,18 @@ export default function App() {
             <span className="gold-wallet-amount">{economy.gold}</span>
             <span className="gold-wallet-unit">Gold</span>
           </button>
+
+          <button
+            type="button"
+            className={`hud-rank-pill rank-pill-${rankProgress.currentTier.id}`}
+            onClick={() => setActiveDialog('arena')}
+            title={`Current Rank: ${rankProgress.currentTier.title} (${economy.stats.wins} Wins) — Click to inspect Rank Tier in Lobby`}
+          >
+            <span className="hud-rank-glyph" aria-hidden="true">
+              {rankProgress.currentTier.crestGlyph}
+            </span>
+            <span className="hud-rank-label">{rankProgress.currentTier.name}</span>
+          </button>
         </div>
 
         <button
@@ -1070,7 +1177,7 @@ export default function App() {
             type="button"
             className={`hud-btn ${sfxEnabled ? 'active' : ''}`}
             id="btn-sfx-toggle"
-            title="Toggle Combat & Piece Kill Sound Effects (SFX)"
+            title="Toggle Combat, Lobby Click & Piece Kill Sound Effects (SFX)"
             onClick={handleToggleSfx}
           >
             {sfxEnabled ? 'SFX: ON' : 'SFX: OFF'}
@@ -1078,12 +1185,22 @@ export default function App() {
 
           <button
             type="button"
+            className={`hud-btn ${lobbyMusicEnabled ? 'active' : ''}`}
+            id="btn-music-toggle"
+            title="Toggle Sanctum Lobby Background Music"
+            onClick={handleToggleLobbyMusic}
+          >
+            {lobbyMusicEnabled ? 'Music: ON' : 'Music: OFF'}
+          </button>
+
+          <button
+            type="button"
             className={`hud-btn ${voiceEnabled ? 'active' : ''}`}
             id="btn-voice-toggle"
-            title="Toggle Gothic Sanctum Voice & Horn Announcer"
+            title="Toggle Check & Checkmate Victory Fanfare Announcement"
             onClick={handleToggleVoiceAnnouncer}
           >
-            {voiceEnabled ? 'Voice: ON' : 'Voice: OFF'}
+            {voiceEnabled ? 'Fanfare: ON' : 'Fanfare: OFF'}
           </button>
 
           <button
@@ -1144,6 +1261,14 @@ export default function App() {
               <div className="armory-header-right">
                 <button
                   type="button"
+                  className="sanctum-modal-close"
+                  title="Toggle Lobby Background Music"
+                  onClick={handleToggleLobbyMusic}
+                >
+                  {lobbyMusicEnabled ? '♫ Music: ON' : '♫ Music: OFF'}
+                </button>
+                <button
+                  type="button"
                   className="sanctum-modal-close gold-trim"
                   onClick={() => setActiveDialog('armory')}
                 >
@@ -1162,6 +1287,195 @@ export default function App() {
             </div>
 
             <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+
+            {/* Commander Portrait & Rank Tier Progression Banner */}
+            <div
+              className={`sanctum-rank-banner rank-banner-${displayedRankTier.id}`}
+              aria-label="Player Rank Tier and Portrait"
+            >
+              {/* User Lobby Portrait with Unique Rank Tier Border Effect */}
+              <div className="rank-portrait-column">
+                <div
+                  className={`rank-portrait-shell rank-border-${displayedRankTier.id}`}
+                  title={`${displayedRankTier.title} — ${displayedRankTier.borderEffectName}`}
+                >
+                  <div className="rank-border-aura" aria-hidden="true"></div>
+                  <div className="rank-border-ring" aria-hidden="true"></div>
+                  <span className="rank-corner-ornament tl" aria-hidden="true"></span>
+                  <span className="rank-corner-ornament tr" aria-hidden="true"></span>
+                  <span className="rank-corner-ornament bl" aria-hidden="true"></span>
+                  <span className="rank-corner-ornament br" aria-hidden="true"></span>
+
+                  <div className="rank-portrait-inner">
+                    <svg
+                      viewBox="0 0 88 88"
+                      className="rank-commander-svg"
+                      aria-hidden="true"
+                    >
+                      <defs>
+                        <radialGradient id="commanderBgGrad" cx="50%" cy="35%" r="65%">
+                          <stop offset="0%" stopColor={displayedRankTier.primaryHex} stopOpacity="0.32" />
+                          <stop offset="60%" stopColor="#121622" stopOpacity="0.95" />
+                          <stop offset="100%" stopColor="#06080d" stopOpacity="1" />
+                        </radialGradient>
+                        <linearGradient id="commanderArmorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.92" />
+                          <stop offset="45%" stopColor={displayedRankTier.primaryHex} stopOpacity="0.95" />
+                          <stop offset="100%" stopColor={displayedRankTier.secondaryHex} stopOpacity="0.98" />
+                        </linearGradient>
+                      </defs>
+                      <rect width="88" height="88" rx="6" fill="url(#commanderBgGrad)" />
+                      {/* Cathedral Rose Halo */}
+                      <circle
+                        cx="44"
+                        cy="38"
+                        r="26"
+                        fill="none"
+                        stroke={displayedRankTier.primaryHex}
+                        strokeOpacity="0.34"
+                        strokeWidth="1.2"
+                        strokeDasharray="3 2"
+                      />
+                      {/* Sculpted Grandmaster Sovereign Bust & Crown */}
+                      <path
+                        d="M18 82 C19 64, 29 56, 44 56 C59 56, 69 64, 70 82 Z"
+                        fill="url(#commanderArmorGrad)"
+                        stroke={displayedRankTier.primaryHex}
+                        strokeWidth="1.4"
+                      />
+                      {/* Pauldron & Collar Filigree */}
+                      <path
+                        d="M25 66 L44 75 L63 66"
+                        fill="none"
+                        stroke="#0a0d14"
+                        strokeWidth="2.2"
+                      />
+                      {/* Armored Helm / Visor */}
+                      <path
+                        d="M32 34 C32 23, 56 23, 56 34 L54 48 C54 53, 34 53, 34 48 Z"
+                        fill="url(#commanderArmorGrad)"
+                        stroke="#0a0d14"
+                        strokeWidth="1.5"
+                      />
+                      {/* Sovereign Crown Spires */}
+                      <path
+                        d="M30 28 L33 17 L39 24 L44 13 L49 24 L55 17 L58 28 Z"
+                        fill={displayedRankTier.primaryHex}
+                        stroke="#0a0d14"
+                        strokeWidth="1.1"
+                      />
+                      {/* Glowing Visor Eyes */}
+                      <path
+                        d="M36 37 L42 39 L36 41 Z M52 37 L46 39 L52 41 Z"
+                        fill="#ffffff"
+                      />
+                    </svg>
+                    <div className="rank-portrait-shimmer" aria-hidden="true"></div>
+                  </div>
+
+                  <div className="rank-crest-seal" aria-hidden="true">
+                    <span>{displayedRankTier.crestGlyph}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rank Tier Details, Progress Bar & Interactive Tier Inspector */}
+              <div className="rank-details-column">
+                <div className="rank-title-row">
+                  <div className="rank-title-group">
+                    <span
+                      className="rank-tier-kicker"
+                      style={{ color: displayedRankTier.primaryHex }}
+                    >
+                      Rank {displayedRankTier.numeral} · {displayedRankTier.name} Tier
+                      {previewRankTierId && previewRankTierId !== rankProgress.currentTier.id
+                        ? ' (Border Preview)'
+                        : ' (Earned Rank)'}
+                    </span>
+                    <div className="rank-tier-heading">
+                      <span className="rank-tier-main-title">{displayedRankTier.title}</span>
+                      <span className="rank-border-tag">
+                        ✦ {displayedRankTier.borderEffectName}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rank-win-counter">
+                    <span className="rank-win-num">{economy.stats.wins}</span>
+                    <span className="rank-win-label">
+                      {economy.stats.wins === 1 ? 'Victory' : 'Victories'} · {playerRating} ELO
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress Bar toward Next Rank Tier */}
+                <div className="rank-progress-wrap">
+                  <div className="rank-progress-labels">
+                    <span className="rank-border-desc">{displayedRankTier.borderDescription}</span>
+                    <span className="rank-next-target">
+                      {rankProgress.nextTier
+                        ? `${rankProgress.winsRemaining} more ${
+                            rankProgress.winsRemaining === 1 ? 'win' : 'wins'
+                          } to ${rankProgress.nextTier.name} (${rankProgress.nextTier.minWins}W)`
+                        : 'Max Rank Tier Achieved (21+ Wins)'}
+                    </span>
+                  </div>
+                  <div className="rank-progress-track" aria-hidden="true">
+                    <div
+                      className="rank-progress-fill"
+                      style={{
+                        width: `${rankProgress.progressPercent}%`,
+                        background: `linear-gradient(90deg, ${displayedRankTier.secondaryHex}, ${displayedRankTier.primaryHex})`
+                      }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Interactive Tier Ladder: Click any tier to preview its Portrait Border Effect */}
+                <div className="rank-ladder-row">
+                  <div className="rank-ladder-pills" role="group" aria-label="Rank Tier Border Preview">
+                    {RANK_TIERS.map((tier) => {
+                      const isEarned = rankProgress.currentTier.id === tier.id;
+                      const isUnlocked = economy.stats.wins >= tier.minWins;
+                      const isSelected = displayedRankTier.id === tier.id;
+                      return (
+                        <button
+                          key={tier.id}
+                          type="button"
+                          className={`rank-tier-chip chip-${tier.id} ${isSelected ? 'selected' : ''} ${
+                            isEarned ? 'earned' : ''
+                          }`}
+                          onClick={() =>
+                            setPreviewRankTierId(tier.id === rankProgress.currentTier.id ? null : tier.id)
+                          }
+                          title={`Preview ${tier.title} portrait border (${
+                            tier.maxWins !== null
+                              ? `${tier.minWins}–${tier.maxWins} Wins`
+                              : `${tier.minWins}+ Wins`
+                          })`}
+                        >
+                          <span className="chip-glyph" aria-hidden="true">{tier.crestGlyph}</span>
+                          <span className="chip-name">{tier.name}</span>
+                          <span className="chip-req">
+                            {isEarned ? 'ACTIVE' : isUnlocked ? 'UNLOCKED' : `${tier.minWins}W`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {previewRankTierId && previewRankTierId !== rankProgress.currentTier.id && (
+                    <button
+                      type="button"
+                      className="rank-reset-preview-btn"
+                      onClick={() => setPreviewRankTierId(null)}
+                    >
+                      Show Earned ({rankProgress.currentTier.name})
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
             {/* Engraved 3-Slot Sanctum Loadout Ledger */}
             <div className="sanctum-loadout-ledger" aria-label="Equipped Sanctum Loadout">

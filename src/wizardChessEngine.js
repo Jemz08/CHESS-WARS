@@ -1420,6 +1420,7 @@ export function initWizardChess() {
           const pip = document.querySelector(`.loader-node-pip[data-step="${i}"]`);
           if (pip) pip.classList.add('active');
         }
+        sfxVfxManager.playLoadingStepSfx?.(loadedCount, totalItems);
       }
 
       // Instantiate custom GLSL shaders for the 3 sculpted brazier flame layers & charred ember logs
@@ -1663,6 +1664,8 @@ export function initWizardChess() {
       }
 
       document.getElementById('loading-overlay')?.classList.add('hidden');
+      sfxVfxManager.playLoadingCompleteSfx?.();
+      sfxVfxManager.setLobbyMusicActive?.(true);
     }
 
     // =========================================================================
@@ -1991,114 +1994,29 @@ export function initWizardChess() {
       if (savedVoice !== null) voiceEnabled = savedVoice !== 'false';
     } catch (e) {}
 
-    let sanctumAudioCtx = null;
-    function getSanctumAudioCtx() {
-      if (typeof window === 'undefined') return null;
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return null;
-      if (!sanctumAudioCtx) {
-        try {
-          sanctumAudioCtx = new AudioCtx();
-        } catch (e) {
-          return null;
-        }
-      }
-      if (sanctumAudioCtx && sanctumAudioCtx.state === 'suspended') {
-        sanctumAudioCtx.resume().catch(() => {});
-      }
-      return sanctumAudioCtx;
-    }
-
     function playSanctumChordFX(kind = 'check_win') {
-      if (!voiceEnabled) return;
-      const ctx = getSanctumAudioCtx();
-      if (!ctx) return;
+      if (!voiceEnabled && !sfxVfxManager.getSfxEnabled?.()) return;
       try {
-        const now = ctx.currentTime;
-        const master = ctx.createGain();
-        master.gain.setValueAtTime(0.24, now);
-        master.gain.exponentialRampToValueAtTime(0.001, now + 2.4);
-        master.connect(ctx.destination);
-
-        // Deep Cathedral Brass & Sub-Bass Gong Harmonics
-        const freqs =
-          kind === 'check_win'
-            ? [110, 164.81, 220, 277.18, 329.63] // A Major / Heroic Triumphal Brass Chord
-            : [98, 146.83, 196, 233.08]; // G Minor Warning Horn
-
-        freqs.forEach((f, idx) => {
-          const osc = ctx.createOscillator();
-          const g = ctx.createGain();
-          osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
-          osc.frequency.setValueAtTime(f * 0.98, now);
-          osc.frequency.exponentialRampToValueAtTime(f, now + 0.12);
-
-          // Low-pass filter for warm cathedral resonance
-          const filter = ctx.createBiquadFilter();
-          filter.type = 'lowpass';
-          filter.frequency.setValueAtTime(880 + idx * 240, now);
-          filter.frequency.exponentialRampToValueAtTime(320, now + 2.2);
-
-          g.gain.setValueAtTime(0.001, now);
-          g.gain.linearRampToValueAtTime(0.28 / freqs.length, now + 0.06 + idx * 0.03);
-          g.gain.exponentialRampToValueAtTime(0.0008, now + 2.3);
-
-          osc.connect(filter);
-          filter.connect(g);
-          g.connect(master);
-          osc.start(now + idx * 0.02);
-          osc.stop(now + 2.35);
-        });
+        sfxVfxManager.playSanctumHornSfx?.(kind, voiceEnabled);
       } catch (e) {}
     }
 
-    function announceSanctumEvent(eventType, payload = {}) {
-      if (!voiceEnabled || typeof window === 'undefined') return;
+    function announceSanctumEvent(eventType, _payload = {}) {
+      if ((!voiceEnabled && !sfxVfxManager.getSfxEnabled?.()) || typeof window === 'undefined') return;
       if (navigator.webdriver) return;
+
+      // Cancel any browser speech synthesis so the Checked / Victory announcement uses pure Mixkit Victory Fanfare SFX
+      if ('speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch (e) {}
+      }
 
       if (eventType === 'check_win') {
         playSanctumChordFX('check_win');
-      } else if (eventType === 'check_alert') {
+      } else if (eventType === 'check_alert' || eventType === 'custom') {
         playSanctumChordFX('check_alert');
       }
-
-      if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
-        return;
-      }
-
-      try {
-        window.speechSynthesis.cancel();
-        let text = '';
-        if (eventType === 'check_win') {
-          const winner = payload.winner || 'White';
-          const defeated = payload.defeated || 'Black';
-          text = `Check! The ${defeated} King falls! ${winner} triumphs in the Sanctum!`;
-        } else if (eventType === 'check_alert') {
-          const checkedSide = payload.checkedSide || 'The King';
-          text = `Check! ${checkedSide} King is under attack!`;
-        } else if (payload.text) {
-          text = String(payload.text);
-        }
-        if (!text) return;
-
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.pitch = 0.74; // Deep, resonant Gothic arbiter tone
-        utter.rate = 0.90;
-        utter.volume = 0.95;
-
-        const voices = window.speechSynthesis.getVoices?.() || [];
-        const preferred =
-          voices.find(
-            (v) =>
-              /en/i.test(v.lang) &&
-              /(daniel|arthur|george|oliver|google uk english male|male|natural)/i.test(v.name)
-          ) ||
-          voices.find((v) => /en-GB|en-US/i.test(v.lang)) ||
-          voices[0];
-        if (preferred) utter.voice = preferred;
-
-        window.speechSynthesis.speak(utter);
-      } catch (e) {}
     }
 
     function setVoiceAnnouncerEnabled(enabled) {
@@ -2106,12 +2024,13 @@ export function initWizardChess() {
       try {
         localStorage.setItem('wizard_chess_voice_enabled', String(voiceEnabled));
       } catch (e) {}
-      if (!voiceEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         try {
           window.speechSynthesis.cancel();
         } catch (e) {}
-      } else if (voiceEnabled) {
-        announceSanctumEvent('custom', { text: 'Sanctum Arbiter Voice Activated.' });
+      }
+      if (voiceEnabled) {
+        playSanctumChordFX('check_alert');
       }
       window.dispatchEvent(
         new CustomEvent('wizardchess:voicechange', { detail: { voiceEnabled } })
@@ -5834,6 +5753,10 @@ export function initWizardChess() {
       setVoiceAnnouncerEnabled,
       setSfxEnabled: (enabled) => sfxVfxManager.setSfxEnabled(enabled),
       getSfxEnabled: () => sfxVfxManager.getSfxEnabled(),
+      playLobbyClickSfx: (variant = 'default') => sfxVfxManager.playLobbyClickSfx?.(variant),
+      setLobbyMusicActive: (active) => sfxVfxManager.setLobbyMusicActive?.(active),
+      setLobbyMusicEnabled: (enabled) => sfxVfxManager.setLobbyMusicEnabled?.(enabled),
+      getLobbyMusicEnabled: () => sfxVfxManager.getLobbyMusicEnabled?.() ?? true,
       triggerPieceKillVfxPreview: (victimType = 'queen', r = 3, c = 3) => {
         const wPos = boardToWorld(r, c);
         spawnStoneShatter(wPos, 'b', victimType, 'queen', 0, -1);
@@ -6129,13 +6052,11 @@ export function initWizardChess() {
       }
 
       // Advance procedural animations on non-Gothic 3D piece archetypes (Staunton, Arcane Cyber-Mech, Dragon Elemental)
-      if (currentPieceArchetype !== 'gothic_warriors') {
-        for (let r = 0; r < 8; r++) {
-          for (let c = 0; c < 8; c++) {
-            const p = boardState[r][c];
-            if (p && p.proceduralAnim && !p.proceduralAnim.paused) {
-              updateProceduralPieceAnimation(p, dt, elapsedTotal);
-            }
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = boardState[r][c];
+          if (p && p.proceduralAnim && !p.proceduralAnim.paused) {
+            updateProceduralPieceAnimation(p, dt, elapsedTotal);
           }
         }
       }

@@ -138,8 +138,13 @@ export function buildProceduralPieceGroup(archetypeId, pieceType, color, mats) {
 
   root.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      if (child.userData.isDragonFire) {
+        child.castShadow = false;
+        child.receiveShadow = false;
+      } else {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
     }
   });
 
@@ -1673,8 +1678,415 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
 }
 
 // ============================================================================
-// 3. MYTHIC DRAGON & ELEMENTAL (Organic Sinuous Dragons, Wings, Horns & Talons)
+// 3. MYTHIC DRAGON & ELEMENTAL (Roaring 3D Dragonfire Plumes, Breath Jets, Wings & Horns)
 // ============================================================================
+const dragonFireUniformsList = [];
+let cachedDragonFireMats = null;
+
+function getDragonFireMaterials() {
+  if (cachedDragonFireMats) return cachedDragonFireMats;
+
+  const createFireShader = (cfg) => {
+    const uniforms = {
+      uTime: { value: 0 },
+      uSeed: { value: cfg.seed },
+      uStrength: { value: cfg.strength },
+      uOpacity: { value: cfg.opacity },
+      uBaseColor: { value: new THREE.Color(cfg.baseHex) },
+      uMidColor: { value: new THREE.Color(cfg.midHex) },
+      uTipColor: { value: new THREE.Color(cfg.tipHex) }
+    };
+    dragonFireUniformsList.push(uniforms);
+
+    return new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: `
+        uniform float uTime;
+        uniform float uSeed;
+        varying vec3 vLocalPos;
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNormal;
+        varying float vHeightNorm;
+
+        void main() {
+          vec3 pos = position;
+          // Normalize height assuming flame geometry is built from y = 0.0 to y = ~0.26
+          float h = clamp(pos.y / 0.24, 0.0, 1.0);
+          vHeightNorm = h;
+
+          float sway = pow(h, 1.15);
+          float phase = uSeed + (pos.x * 18.0 + pos.z * 16.0);
+
+          // Multi-frequency upward-convecting draconic flame wave (pinned at base h = 0)
+          float waveX = sin(pos.y * 18.0 - uTime * 8.2 + phase) * 0.022
+                      + cos(pos.y * 29.0 - uTime * 12.4 + phase * 1.3) * 0.012;
+          float waveZ = cos(pos.y * 17.0 - uTime * 7.8 + phase * 1.1) * 0.022
+                      + sin(pos.y * 27.0 - uTime * 11.6 + phase * 0.9) * 0.012;
+
+          // Swirling thermal vortex twist around Y axis
+          float twist = sin(uTime * 5.4 + pos.y * 14.0 + uSeed) * 0.38 * sway;
+          float cA = cos(twist);
+          float sA = sin(twist);
+          vec2 rotXZ = vec2(pos.x * cA - pos.z * sA, pos.x * sA + pos.z * cA);
+
+          float radialPulse = 1.0 + sin(uTime * 6.8 - h * 4.5 + phase) * 0.16 * sway;
+          pos.x = rotXZ.x * radialPulse + waveX * sway;
+          pos.z = rotXZ.y * radialPulse + waveZ * sway;
+
+          // Active vertical flame-tongue licking
+          float lick = 1.0 + (
+            sin(uTime * 7.4 + phase * 1.2) * 0.24 +
+            cos(uTime * 11.2 - phase * 0.8) * 0.14
+          ) * smoothstep(0.05, 0.90, h);
+          pos.y *= lick;
+
+          vLocalPos = pos;
+          vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+          vWorldPos = worldPos.xyz;
+          vWorldNormal = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uSeed;
+        uniform float uStrength;
+        uniform float uOpacity;
+        uniform vec3 uBaseColor;
+        uniform vec3 uMidColor;
+        uniform vec3 uTipColor;
+        varying vec3 vLocalPos;
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNormal;
+        varying float vHeightNorm;
+
+        float hash3(vec3 p) {
+          p = fract(p * vec3(443.897, 441.423, 437.195));
+          p += dot(p, p.yzx + 19.19);
+          return fract((p.x + p.y) * p.z);
+        }
+
+        float noise3(vec3 p) {
+          vec3 i = floor(p);
+          vec3 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(
+              mix(hash3(i + vec3(0.0, 0.0, 0.0)), hash3(i + vec3(1.0, 0.0, 0.0)), f.x),
+              mix(hash3(i + vec3(0.0, 1.0, 0.0)), hash3(i + vec3(1.0, 1.0, 0.0)), f.x),
+              f.y
+            ),
+            mix(
+              mix(hash3(i + vec3(0.0, 0.0, 1.0)), hash3(i + vec3(1.0, 0.0, 1.0)), f.x),
+              mix(hash3(i + vec3(0.0, 1.0, 1.0)), hash3(i + vec3(1.0, 1.0, 1.0)), f.x),
+              f.y
+            ),
+            f.z
+          );
+        }
+
+        void main() {
+          float h = clamp(vHeightNorm, 0.0, 1.0);
+          vec3 V = normalize(cameraPosition - vWorldPos);
+          vec3 N = normalize(vWorldNormal);
+          float facing = clamp(abs(dot(N, V)), 0.0, 1.0);
+          float edgeSoft = pow(facing, 0.85);
+
+          // Fast upward-convecting 3D dragonfire turbulence
+          float n1 = noise3(vec3(vLocalPos.x * 22.0, vLocalPos.y * 18.0 - uTime * 8.5, vLocalPos.z * 22.0 + uSeed));
+          float n2 = noise3(vec3(vLocalPos.x * 42.0 + 3.1, vLocalPos.y * 34.0 - uTime * 13.5, vLocalPos.z * 42.0 - uSeed));
+          float turb = mix(n1, n2, 0.45);
+
+          float erodedH = clamp(h + (turb - 0.46) * 0.42 * smoothstep(0.06, 0.88, h), 0.0, 1.0);
+          float heat = clamp(erodedH + (1.0 - facing) * 0.30 + (turb - 0.5) * 0.22, 0.0, 1.0);
+
+          vec3 col = mix(uBaseColor, uMidColor, smoothstep(0.0, 0.46, heat));
+          col = mix(col, uTipColor, smoothstep(0.46, 0.92, heat));
+
+          float tipFade = (1.0 - smoothstep(0.68, 0.99, erodedH));
+          float flicker = 0.78 + 0.44 * turb;
+          float alpha = clamp(tipFade * edgeSoft * uOpacity * flicker, 0.0, 1.0);
+          if (alpha < 0.01) discard;
+
+          gl_FragColor = vec4(col * uStrength, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+  };
+
+  cachedDragonFireMats = {
+    coreMat: createFireShader({
+      seed: 1.7,
+      strength: 2.35,
+      opacity: 0.95,
+      baseHex: '#fff8d6',
+      midHex: '#ffbe0b',
+      tipHex: '#ff5400'
+    }),
+    outerMat: createFireShader({
+      seed: 4.9,
+      strength: 1.95,
+      opacity: 0.88,
+      baseHex: '#ffd166',
+      midHex: '#ff4800',
+      tipHex: '#b50018'
+    }),
+    emberSparkMat: new THREE.MeshBasicMaterial({
+      color: 0xffd166,
+      transparent: true,
+      opacity: 0.92,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  };
+
+  return cachedDragonFireMats;
+}
+
+/**
+ * Helper to flag all meshes inside a dragonfire group so they never cast or receive opaque shadows.
+ */
+function markAsDragonFire(obj) {
+  obj.traverse((ch) => {
+    if (ch.isMesh) {
+      ch.userData.isDragonFire = true;
+    }
+  });
+  return obj;
+}
+
+/**
+ * Builds a multi-layered, roaring 3D Dragon-Fire Plume & Crown of Licking Flame Tongues
+ * (replaces all floating circles, rings, and torus knots on the Mythic Beast set).
+ */
+function buildDragonFirePlumeGroup(animParts, options = {}) {
+  const {
+    scale = 1.0,
+    tongueCount = 8,
+    spreadRadius = 0.075,
+    plumeHeight = 0.25,
+    fanMode = false
+  } = options;
+
+  const { coreMat, outerMat, emberSparkMat } = getDragonFireMaterials();
+  const fireGroup = new THREE.Group();
+  fireGroup.scale.setScalar(scale);
+
+  // 1. Sculpted Inner White-Hot / Solar-Gold Flame Core Plume (fluted teardrop spire anchored at y=0)
+  const coreConeGeo = getCachedGeo('dragon_fire_core_plume_geo', () => {
+    const g = buildSculptedLathe(
+      [
+        [0.0, 0.0],
+        [0.052, 0.015],
+        [0.068, 0.055],
+        [0.054, 0.115],
+        [0.032, 0.175],
+        [0.012, 0.225],
+        [0.0, 0.255]
+      ],
+      {
+        sampleCount: 36,
+        radialSegments: 28,
+        fluteCount: 7,
+        fluteDepth: 0.008,
+        fluteYMin: 0.02,
+        fluteYMax: 0.24
+      }
+    );
+    return g;
+  });
+  const coreMesh = new THREE.Mesh(coreConeGeo, coreMat);
+  fireGroup.add(coreMesh);
+
+  // 2. Crossed Volumetric Flame Blades (so the fire has dense roaring volume from every viewing angle)
+  const flameSheetGeo = getCachedGeo('dragon_fire_sheet_geo', () => {
+    const s = new THREE.Shape();
+    s.moveTo(0, 0.0);
+    s.bezierCurveTo(0.068, 0.03, 0.088, 0.10, 0.042, 0.17);
+    s.bezierCurveTo(0.062, 0.19, 0.028, 0.23, 0.0, 0.265);
+    s.bezierCurveTo(-0.028, 0.23, -0.062, 0.19, -0.042, 0.17);
+    s.bezierCurveTo(-0.088, 0.10, -0.068, 0.03, 0, 0.0);
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 0.008,
+      bevelEnabled: true,
+      bevelSegments: 2,
+      steps: 1,
+      bevelSize: 0.004,
+      bevelThickness: 0.004
+    });
+    g.translate(0, 0, -0.004);
+    return g;
+  });
+
+  for (let p = 0; p < 3; p++) {
+    const sheet = new THREE.Mesh(flameSheetGeo, p === 0 ? coreMat : outerMat);
+    sheet.rotation.y = (p / 3) * Math.PI;
+    sheet.scale.set(1.05, plumeHeight / 0.25, 1.0);
+    fireGroup.add(sheet);
+  }
+
+  // 3. Ring / Diadem of Sculpted S-Curved Licking Dragon-Flame Tongues
+  const outerTongueGeo = getCachedGeo('dragon_fire_licking_tongue_outer', () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(0, 0.0, 0.0),
+        new THREE.Vector3(0.024, 0.065, 0.0),
+        new THREE.Vector3(-0.012, 0.145, 0.008),
+        new THREE.Vector3(0.018, 0.215, -0.006),
+        new THREE.Vector3(0.0, 0.265, 0.0)
+      ],
+      0.036,
+      0.003,
+      24,
+      12
+    )
+  );
+
+  const innerTongueGeo = getCachedGeo('dragon_fire_licking_tongue_inner', () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(0, 0.0, 0.0),
+        new THREE.Vector3(-0.016, 0.055, 0.0),
+        new THREE.Vector3(0.014, 0.125, 0.0),
+        new THREE.Vector3(0.0, 0.195, 0.0)
+      ],
+      0.028,
+      0.002,
+      20,
+      10
+    )
+  );
+
+  const tongues = [];
+  for (let i = 0; i < tongueCount; i++) {
+    const u = tongueCount > 1 ? i / (fanMode ? tongueCount - 1 : tongueCount) : 0;
+    const ang = fanMode ? (u - 0.5) * Math.PI * 1.15 : u * Math.PI * 2;
+    const isMajor = i % 2 === 0;
+
+    const tonguePivot = new THREE.Group();
+    const rad = spreadRadius * (isMajor ? 1.0 : 0.72);
+    if (fanMode) {
+      tonguePivot.position.set(Math.sin(ang) * rad * 1.35, Math.cos(ang * 0.7) * 0.02, -Math.cos(ang) * rad * 0.35);
+      tonguePivot.rotation.z = -ang * 0.55;
+      tonguePivot.rotation.x = -0.14;
+    } else {
+      tonguePivot.position.set(Math.cos(ang) * rad, 0.0, Math.sin(ang) * rad);
+      tonguePivot.rotation.y = -ang;
+      tonguePivot.rotation.z = -0.22 - (i % 3) * 0.08;
+    }
+
+    const tMesh = new THREE.Mesh(isMajor ? outerTongueGeo : innerTongueGeo, isMajor ? outerMat : coreMat);
+    const baseSY = (isMajor ? 1.05 : 0.84) * (plumeHeight / 0.25);
+    tMesh.scale.set(1.0, baseSY, 1.0);
+    tonguePivot.add(tMesh);
+    fireGroup.add(tonguePivot);
+
+    tongues.push({
+      mesh: tMesh,
+      pivot: tonguePivot,
+      baseSY,
+      baseRotZ: tonguePivot.rotation.z,
+      phase: i * 1.37 + (fanMode ? 2.1 : 0.4)
+    });
+  }
+
+  // 4. Rising Draconic Ember Sparks spiraling up through the flames
+  const sparkGeo = getCachedGeo('dragon_fire_ember_spark', () => {
+    const g = new THREE.OctahedronGeometry(0.016, 0);
+    g.scale(0.65, 1.85, 0.65);
+    return g;
+  });
+  const sparks = [];
+  for (let s = 0; s < 6; s++) {
+    const sp = new THREE.Mesh(sparkGeo, s % 2 === 0 ? coreMat : emberSparkMat);
+    fireGroup.add(sp);
+    sparks.push({
+      mesh: sp,
+      angleOffset: (s / 6) * Math.PI * 2,
+      phaseOffset: s / 6,
+      radius: spreadRadius * 0.85,
+      maxHeight: plumeHeight * 1.25,
+      speed: 1.15 + (s % 3) * 0.25
+    });
+  }
+
+  markAsDragonFire(fireGroup);
+  animParts.push({
+    mesh: fireGroup,
+    kind: 'dragonFire',
+    coreMesh,
+    tongues,
+    sparks
+  });
+
+  return fireGroup;
+}
+
+/**
+ * Builds a fierce Dragon-Breath Flame Jet licking forward out of the dragon's parted fanged jaws
+ * (replaces the old static sphere orb inside buildDragonHeadGroup).
+ */
+function buildDragonJawBreathFire(animParts) {
+  const { coreMat, outerMat } = getDragonFireMaterials();
+  const breathGroup = new THREE.Group();
+  // Positioned in the throat/parted jaws (+Z is forward out of the snout)
+  breathGroup.position.set(0, -0.008, 0.085);
+
+  const jetTongueGeo = getCachedGeo('dragon_jaw_breath_tongue', () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(0, 0.0, 0.0),
+        new THREE.Vector3(0, 0.006, 0.075),
+        new THREE.Vector3(0, 0.028, 0.155),
+        new THREE.Vector3(0, 0.065, 0.225)
+      ],
+      0.032,
+      0.003,
+      20,
+      12
+    )
+  );
+
+  const tongues = [];
+  const configs = [
+    { rotY: 0.0, rotZ: 0.0, scale: 1.05, mat: coreMat },
+    { rotY: 0.22, rotZ: -0.25, scale: 0.88, mat: outerMat },
+    { rotY: -0.22, rotZ: 0.25, scale: 0.88, mat: outerMat },
+    { rotY: 0.08, rotZ: 0.45, scale: 0.76, mat: coreMat },
+    { rotY: -0.08, rotZ: -0.45, scale: 0.76, mat: outerMat }
+  ];
+
+  configs.forEach((cfg, idx) => {
+    const pivot = new THREE.Group();
+    pivot.rotation.y = cfg.rotY;
+    pivot.rotation.z = cfg.rotZ;
+    const m = new THREE.Mesh(jetTongueGeo, cfg.mat);
+    m.scale.setScalar(cfg.scale);
+    pivot.add(m);
+    breathGroup.add(pivot);
+    tongues.push({
+      mesh: m,
+      pivot,
+      baseScale: cfg.scale,
+      baseRotY: cfg.rotY,
+      phase: idx * 1.45
+    });
+  });
+
+  markAsDragonFire(breathGroup);
+  animParts.push({
+    mesh: breathGroup,
+    kind: 'dragonBreathJet',
+    tongues
+  });
+
+  return breathGroup;
+}
+
 function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, animParts) {
   const heightMap = {
     pawn: 0.95,
@@ -1685,6 +2097,7 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
     king: 1.58
   };
   const h = heightMap[type] || 1.15;
+  const { coreMat, outerMat } = getDragonFireMaterials();
 
   // 1. Sculpted Volcanic Crag & Coiled Dragon-Scale Pedestal + 4 Curved Talons
   const cragGeo = getCachedGeo('dragon_crag_pedestal', () =>
@@ -1729,27 +2142,23 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
     rig.add(claw);
   }
 
-  // 2. Sinuous S-Curved Organic Dragon Neck / Torso with Ventral Scutes & Dorsal Spines
+  // 2. Sinuous S-Curved Organic Dragon Neck / Torso with Flush Ventral Scutes, Dorsal Spines & Dorsal Flame Wisps
+  const neckCtrlPoints = [
+    new THREE.Vector3(0, 0.15, 0.0),
+    new THREE.Vector3(0, 0.30 * h, -0.05),
+    new THREE.Vector3(0, 0.48 * h, 0.04),
+    new THREE.Vector3(0, 0.66 * h, -0.02)
+  ];
+  const neckCurve = new THREE.CatmullRomCurve3(neckCtrlPoints);
   const neckBodyGeo = getCachedGeo(`dragon_sinuous_body_${type}`, () =>
-    buildTaperedCurveGeo(
-      [
-        new THREE.Vector3(0, 0.15, 0.0),
-        new THREE.Vector3(0, 0.30 * h, -0.05),
-        new THREE.Vector3(0, 0.48 * h, 0.04),
-        new THREE.Vector3(0, 0.66 * h, -0.02)
-      ],
-      0.22,
-      0.135,
-      40,
-      28
-    )
+    buildTaperedCurveGeo(neckCtrlPoints, 0.22, 0.135, 40, 28)
   );
   rig.add(new THREE.Mesh(neckBodyGeo, primaryMat));
 
-  // Overlapping Golden Ventral Scute Plates on the chest (+Z) & Curved Dorsal Spines (-Z)
-  const scuteGeo = getCachedGeo('dragon_scute_plate', () => {
-    const g = new THREE.SphereGeometry(0.09, 20, 14);
-    g.scale(1.35, 0.42, 0.65);
+  // Overlapping Golden Ventral Scute Plates on the chest (+Z) & Curved Dorsal Spines + Spine-Fire Wisps (-Z)
+  const scuteGeo = getCachedGeo('dragon_scute_plate_v2', () => {
+    const g = new THREE.SphereGeometry(0.082, 20, 14);
+    g.scale(1.30, 0.42, 0.58);
     return g;
   });
   const spineHornGeo = getCachedGeo('dragon_dorsal_spine', () =>
@@ -1765,22 +2174,43 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
       12
     )
   );
+  const dorsalFlameWispGeo = getCachedGeo('dragon_dorsal_flame_wisp', () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0.06, -0.05),
+        new THREE.Vector3(0, 0.13, -0.08)
+      ],
+      0.024,
+      0.002,
+      14,
+      10
+    )
+  );
+
   for (let i = 0; i < 6; i++) {
-    const u = i / 5;
-    const py = (0.22 + u * 0.40) * h;
-    const pz = Math.sin(u * Math.PI * 1.5) * 0.03;
+    const u = (i + 0.5) / 6;
+    const centerPt = neckCurve.getPointAt(u);
+    const localR = 0.22 * (1 - u) + 0.135 * u + Math.sin(u * Math.PI) * (0.22 * 0.12);
 
     const scute = new THREE.Mesh(scuteGeo, trimMat);
-    scute.position.set(0, py, pz + 0.13 - u * 0.03);
-    scute.rotation.x = 0.25;
+    scute.position.set(0, centerPt.y, centerPt.z + localR * 0.78);
+    scute.rotation.x = 0.22;
     rig.add(scute);
 
-    const spine = new THREE.Mesh(spineHornGeo, i % 2 === 0 ? trimMat : bladeMat);
-    spine.position.set(0, py, pz - 0.12 + u * 0.02);
+    const spine = new THREE.Mesh(spineHornGeo, trimMat);
+    spine.position.set(0, centerPt.y, centerPt.z - localR * 0.76);
     rig.add(spine);
+
+    if (i % 2 === 1) {
+      const wisp = new THREE.Mesh(dorsalFlameWispGeo, i === 3 ? coreMat : outerMat);
+      wisp.position.set(0, centerPt.y + 0.02, centerPt.z - localR * 0.82);
+      wisp.userData.isDragonFire = true;
+      rig.add(wisp);
+    }
   }
 
-  // Helper: Ribbed Bat-Membrane Dragon Wings (extruded scalloped wing membrane + curved bone struts)
+  // Helper: Ribbed Bat-Membrane Dragon Wings (extruded scalloped wing membrane + curved bone struts + wingtip flame)
   const addSculptedDragonWings = (yPos, spanScale = 1.0) => {
     const wingGroup = new THREE.Group();
     wingGroup.position.set(0, yPos, -0.06);
@@ -1838,7 +2268,7 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
     animParts.push({ mesh: wingGroup, kind: 'wingPulse', baseY: yPos });
   };
 
-  // Helper: Sculpted Fanged Dragon Head with Swept Spiral Horns & Glowing Breath Core
+  // Helper: Sculpted Fanged Dragon Head with Swept Spiral Horns, Fangs & Roaring Jaw Dragon-Breath Fire
   const buildDragonHeadGroup = (headScale = 1.0, hornCount = 2) => {
     const head = new THREE.Group();
     head.scale.setScalar(headScale);
@@ -1881,13 +2311,22 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
     );
     head.add(new THREE.Mesh(jawGeo, primaryMat));
 
-    // Glowing Elemental Breath Core inside the parted jaws
-    const breathOrb = new THREE.Mesh(
-      getCachedGeo('dragon_breath_orb', () => new THREE.SphereGeometry(0.042, 18, 18)),
-      bladeMat
-    );
-    breathOrb.position.set(0, 0.0, 0.14);
-    head.add(breathOrb);
+    // Sculpted Dragon Fangs lining the upper and lower jaws
+    const fangGeo = getCachedGeo('dragon_jaw_fang', () => new THREE.ConeGeometry(0.012, 0.042, 8));
+    for (const s of [-1, 1]) {
+      const upperFang = new THREE.Mesh(fangGeo, trimMat);
+      upperFang.position.set(s * 0.042, 0.005, 0.21);
+      upperFang.rotation.x = Math.PI;
+      head.add(upperFang);
+
+      const lowerFang = new THREE.Mesh(fangGeo, trimMat);
+      lowerFang.position.set(s * 0.034, -0.028, 0.19);
+      head.add(lowerFang);
+    }
+
+    // Living Dragon-Breath Fire Jet erupting from the parted jaws (replaces the old floating orb)
+    const jawFire = buildDragonJawBreathFire(animParts);
+    head.add(jawFire);
 
     // Swept Spiral Dragon Great-Horns
     for (const s of [-1, 1]) {
@@ -1907,18 +2346,24 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
       );
       head.add(new THREE.Mesh(hornGeo, trimMat));
 
+      // Slit-Crested Glowing Dragon Eyes
       const eye = new THREE.Mesh(
-        getCachedGeo('dragon_eye', () => new THREE.SphereGeometry(0.022, 14, 14)),
-        bladeMat
+        getCachedGeo('dragon_eye_slit', () => {
+          const g = new THREE.OctahedronGeometry(0.022, 1);
+          g.scale(0.65, 0.85, 1.35);
+          return g;
+        }),
+        coreMat
       );
+      eye.userData.isDragonFire = true;
       eye.position.set(s * 0.082, 0.08, 0.08);
       head.add(eye);
     }
 
     if (hornCount > 2) {
       for (let c = 0; c < hornCount - 2; c++) {
-        const ang = ((c - (hornCount - 3) / 2) * 0.38);
-        const crestHorn = new THREE.Mesh(spineHornGeo, bladeMat);
+        const ang = (c - (hornCount - 3) / 2) * 0.38;
+        const crestHorn = new THREE.Mesh(spineHornGeo, trimMat);
         crestHorn.scale.setScalar(1.35);
         crestHorn.position.set(Math.sin(ang) * 0.09, 0.13, -0.06);
         crestHorn.rotation.z = -ang;
@@ -1932,14 +2377,23 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
   const topY = 0.65 * h;
 
   if (type === 'pawn') {
-    // Hatchling Drake Whelp with Sinuous Neck, Swept Horns & Folded Pinions
+    // Hatchling Drake Whelp: Sinuous Neck, Folded Pinions, Jaw Breath Fire & Blazing Skull-Crest Flame Plume
     addSculptedDragonWings(0.46 * h, 0.62);
     const head = buildDragonHeadGroup(0.82, 2);
     head.position.set(0, topY + 0.04, 0.02);
     rig.add(head);
     animParts.push({ mesh: head, kind: 'headNod' });
+
+    const crestFire = buildDragonFirePlumeGroup(animParts, {
+      scale: 0.62,
+      tongueCount: 6,
+      spreadRadius: 0.045,
+      plumeHeight: 0.22
+    });
+    crestFire.position.set(0, 0.12, -0.04);
+    head.add(crestFire);
   } else if (type === 'rook') {
-    // Wyvern-Wrapped Bastion Tower with Coiled Helical Dragon Body & Flame Brazier
+    // Wyvern-Wrapped Bastion Keep: Coiled Helical Dragon Body, Clawed Cauldron & Roaring Hellfire Brazier Plume
     const coilGeo = getCachedGeo('dragon_rook_coil', () => {
       const pts = [];
       for (let i = 0; i <= 28; i++) {
@@ -1977,22 +2431,44 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
     crownTurret.position.y = topY - 0.02;
     rig.add(crownTurret);
 
-    const flameKnot = new THREE.Mesh(
-      getCachedGeo('dragon_rook_flame', () => new THREE.TorusKnotGeometry(0.085, 0.024, 56, 14, 3, 2)),
-      bladeMat
-    );
-    flameKnot.position.y = topY + 0.28;
-    rig.add(flameKnot);
-    animParts.push({ mesh: flameKnot, kind: 'spinFloat', baseY: flameKnot.position.y, speed: 3.0 });
+    // 4 Dragon Talons gripping the upper bastion rim around the fire cauldron
+    for (let c = 0; c < 4; c++) {
+      const tClaw = new THREE.Mesh(clawGeo, trimMat);
+      tClaw.scale.setScalar(0.68);
+      tClaw.position.y = topY + 0.14;
+      tClaw.rotation.y = (c / 4) * Math.PI * 2;
+      rig.add(tClaw);
+    }
+
+    // Roaring Multi-Tongue Dragonfire Brazier Plume erupting from the bastion bowl (replaces the old torus knot)
+    const brazierFire = buildDragonFirePlumeGroup(animParts, {
+      scale: 1.18,
+      tongueCount: 10,
+      spreadRadius: 0.082,
+      plumeHeight: 0.28
+    });
+    brazierFire.position.set(0, topY + 0.15, 0);
+    rig.add(brazierFire);
   } else if (type === 'knight') {
-    // Winged Storm-Drake Charger with Unfurled Ribbed Wings & Fierce Horned Dragon Head
+    // Winged Storm-Drake Charger: Unfurled Ribbed Wings, Horned Dragon Head & Blazing Hellfire Crest Mane
     addSculptedDragonWings(topY - 0.10, 0.98);
     const head = buildDragonHeadGroup(1.02, 3);
     head.position.set(0, topY + 0.05, 0.04);
     rig.add(head);
     animParts.push({ mesh: head, kind: 'headNod' });
+
+    const maneFire = buildDragonFirePlumeGroup(animParts, {
+      scale: 0.82,
+      tongueCount: 7,
+      spreadRadius: 0.055,
+      plumeHeight: 0.25,
+      fanMode: true
+    });
+    maneFire.position.set(0, 0.13, -0.05);
+    maneFire.rotation.y = Math.PI * 0.5;
+    head.add(maneFire);
   } else if (type === 'bishop') {
-    // Elder Dragon-Priest with Twin-Serpent Caduceus Arch & Elemental Vortex Crystal
+    // Elder Dragon-Priest: Twin Coiled Wyvern Arches channeling a Spiraling Pillar of Living Dragonfire
     const archSerpentGeo = getCachedGeo('dragon_bishop_serpent', () =>
       buildTaperedCurveGeo(
         [
@@ -2018,32 +2494,44 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
     head.position.set(0, topY + 0.02, 0.02);
     rig.add(head);
 
-    const vortex = new THREE.Mesh(
-      getCachedGeo('dragon_bishop_vortex', () => new THREE.TorusKnotGeometry(0.072, 0.018, 56, 14, 2, 5)),
-      bladeMat
+    // Seated Ritual Pyre Chalice between the Twin Serpent Heads + Tall Roaring Dragonfire Pillar (replaces vortex knot)
+    const chaliceCup = new THREE.Mesh(
+      getCachedGeo('dragon_bishop_pyre_cup', () => new THREE.CylinderGeometry(0.085, 0.035, 0.06, 16)),
+      trimMat
     );
-    vortex.position.y = topY + 0.42;
-    rig.add(vortex);
-    animParts.push({ mesh: vortex, kind: 'spinFloat', baseY: vortex.position.y, speed: 2.7 });
+    chaliceCup.position.set(0, topY + 0.34, 0);
+    rig.add(chaliceCup);
+
+    const ritualFire = buildDragonFirePlumeGroup(animParts, {
+      scale: 0.96,
+      tongueCount: 9,
+      spreadRadius: 0.058,
+      plumeHeight: 0.27
+    });
+    ritualFire.position.set(0, topY + 0.35, 0);
+    rig.add(ritualFire);
   } else if (type === 'queen') {
-    // Dragon Empress of the Five Flights: 4 Swept Wings + 5-Horned Crown + Elemental Heart
+    // Dragon Empress of the Five Flights: 4 Swept Wings + 5-Horned Head + Blazing 9-Tongue Dragonfire Diadem Crown
     addSculptedDragonWings(topY - 0.08, 1.12);
     addSculptedDragonWings(0.42 * h, 0.78);
 
     const head = buildDragonHeadGroup(1.05, 5);
     head.position.set(0, topY + 0.06, 0.03);
     rig.add(head);
+    animParts.push({ mesh: head, kind: 'headNod' });
 
-    const crownHalo = new THREE.Mesh(
-      getCachedGeo('dragon_queen_halo', () => new THREE.TorusGeometry(0.19, 0.014, 16, 44)),
-      bladeMat
-    );
-    crownHalo.rotation.x = Math.PI * 0.42;
-    crownHalo.position.set(0, topY + 0.34, -0.04);
-    rig.add(crownHalo);
-    animParts.push({ mesh: crownHalo, kind: 'orbitRing', baseY: crownHalo.position.y, speed: 2.2 });
+    // Replaces the old floating Torus circle ('dragon_queen_halo') with an erupting Fan Diadem of Living Dragonfire!
+    const queenFireCrown = buildDragonFirePlumeGroup(animParts, {
+      scale: 1.08,
+      tongueCount: 9,
+      spreadRadius: 0.095,
+      plumeHeight: 0.27,
+      fanMode: true
+    });
+    queenFireCrown.position.set(0, 0.13, -0.04);
+    head.add(queenFireCrown);
   } else if (type === 'king') {
-    // Ancient Elder Dragon Sovereign: Grand Wings, Crowned Dragon Head & Dragon-Claw Greatsword
+    // Ancient Elder Dragon Sovereign: Grand 4-Wing Span, Seated Jagged Dragon Crown, Sovereign Inferno & Flaming Greatsword
     addSculptedDragonWings(topY - 0.04, 1.26);
     addSculptedDragonWings(0.45 * h, 0.88);
 
@@ -2052,30 +2540,45 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
     rig.add(head);
     animParts.push({ mesh: head, kind: 'headNod' });
 
-    // Sovereign Crown Circlet & Dragon-Flame Greatsword Finial
+    // Seated Jagged Dragon-Scale Sovereign Crown directly on the Elder Dragon's Brow
     const sovereignCrown = new THREE.Mesh(
-      getCachedGeo('dragon_king_crown', () =>
+      getCachedGeo('dragon_king_crown_v2', () =>
         buildSculptedLathe(
           [
             [0.0, 0.0],
-            [0.14, 0.0],
-            [0.18, 0.12],
-            [0.12, 0.12],
-            [0.0, 0.08]
+            [0.115, 0.0],
+            [0.145, 0.10],
+            [0.095, 0.10],
+            [0.0, 0.06]
           ],
           {
             sampleCount: 28,
             radialSegments: 40,
             scallopCount: 8,
-            scallopAmp: 0.045,
-            scallopYMin: 0.06
+            scallopAmp: 0.042,
+            scallopYMin: 0.04
           }
         )
       ),
       trimMat
     );
-    sovereignCrown.position.set(0, topY + 0.24, -0.02);
-    rig.add(sovereignCrown);
+    sovereignCrown.position.set(0, 0.125, -0.02);
+    head.add(sovereignCrown);
+
+    // Colossal Sovereign Dragonfire Inferno Plume erupting from within the King's Crown
+    const kingInfernoCrown = buildDragonFirePlumeGroup(animParts, {
+      scale: 1.15,
+      tongueCount: 10,
+      spreadRadius: 0.075,
+      plumeHeight: 0.29
+    });
+    kingInfernoCrown.position.set(0, 0.15, -0.02);
+    head.add(kingInfernoCrown);
+
+    // Sculpted Dragon-Claw Greatsword planted in front (+Z), wreathed in living Dragonfire tongues
+    const swordGroup = new THREE.Group();
+    swordGroup.position.set(0, 0.52 * h, 0.22);
+    rig.add(swordGroup);
 
     const flameBladeGeo = getCachedGeo('dragon_flame_blade', () => {
       const s = new THREE.Shape();
@@ -2093,9 +2596,17 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
         bevelThickness: 0.006
       });
     });
-    const dragonSword = new THREE.Mesh(flameBladeGeo, bladeMat);
-    dragonSword.position.set(0, 0.52 * h, 0.22);
-    rig.add(dragonSword);
+    const dragonSword = new THREE.Mesh(flameBladeGeo, trimMat);
+    swordGroup.add(dragonSword);
+
+    const swordFire = buildDragonFirePlumeGroup(animParts, {
+      scale: 0.85,
+      tongueCount: 6,
+      spreadRadius: 0.035,
+      plumeHeight: 0.32
+    });
+    swordFire.position.set(0, -0.16, 0);
+    swordGroup.add(swordFire);
   }
 }
 
@@ -2111,9 +2622,51 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
   state.clipTime += dt;
   const phaseSeed = (piece.r * 5 + piece.c * 3) * 0.45;
 
-  // Animate sub-parts (hovering crystals, gyro rings, dragon wings, horse/dragon heads)
+  // Update shared GLSL Dragonfire shader time uniform
+  for (let i = 0; i < dragonFireUniformsList.length; i++) {
+    dragonFireUniformsList[i].uTime.value = elapsedTotal;
+  }
+
+  // Animate sub-parts (roaring dragon fire plumes, jaw breath jets, dragon wings, horse/dragon heads)
   for (const part of state.animParts) {
-    if (part.kind === 'spinFloat') {
+    if (part.kind === 'dragonFire') {
+      if (part.coreMesh) {
+        const corePulse = 1.0 + Math.sin(elapsedTotal * 8.5 + phaseSeed) * 0.14;
+        part.coreMesh.scale.set(corePulse, 1.0 + Math.cos(elapsedTotal * 10.2 + phaseSeed) * 0.18, corePulse);
+        part.coreMesh.rotation.y = elapsedTotal * 2.4 + phaseSeed;
+      }
+      if (part.tongues) {
+        for (let i = 0; i < part.tongues.length; i++) {
+          const t = part.tongues[i];
+          const p = elapsedTotal * 7.8 + t.phase + phaseSeed;
+          const stretchY = t.baseSY * (1.0 + Math.sin(p) * 0.24 + Math.cos(p * 1.45) * 0.12);
+          const widthPulse = 1.0 + Math.cos(p * 0.9) * 0.15;
+          t.mesh.scale.set(widthPulse, stretchY, widthPulse);
+          t.pivot.rotation.z = t.baseRotZ + Math.sin(p * 0.85) * 0.14;
+        }
+      }
+      if (part.sparks) {
+        for (let i = 0; i < part.sparks.length; i++) {
+          const sp = part.sparks[i];
+          const progress = (elapsedTotal * sp.speed + sp.phaseOffset + phaseSeed * 0.2) % 1.0;
+          const angle = sp.angleOffset + elapsedTotal * 3.8 + progress * 2.5;
+          const rad = sp.radius * (1.0 - progress * 0.55);
+          sp.mesh.position.set(Math.cos(angle) * rad, progress * sp.maxHeight, Math.sin(angle) * rad);
+          const sparkScale = Math.sin(progress * Math.PI) * 1.15;
+          sp.mesh.scale.setScalar(Math.max(0.01, sparkScale));
+        }
+      }
+    } else if (part.kind === 'dragonBreathJet') {
+      if (part.tongues) {
+        for (let i = 0; i < part.tongues.length; i++) {
+          const t = part.tongues[i];
+          const p = elapsedTotal * 9.5 + t.phase + phaseSeed;
+          const surge = t.baseScale * (0.88 + Math.sin(p) * 0.28 + Math.cos(p * 1.6) * 0.14);
+          t.mesh.scale.set(t.baseScale, t.baseScale, surge);
+          t.pivot.rotation.y = t.baseRotY + Math.sin(p * 0.75) * 0.09;
+        }
+      }
+    } else if (part.kind === 'spinFloat') {
       part.mesh.rotation.y += dt * (part.speed || 2.0);
       part.mesh.position.y = part.baseY + Math.sin(elapsedTotal * 3.2 + phaseSeed) * 0.03;
     } else if (part.kind === 'orbitRing') {
