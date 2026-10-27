@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to replace synthetic oscillator SFX with authentic physical-modeled medieval steel clashes, multi-stage duel swordplay (blade draw, air slash, steel parry clash, and final cleave), and visceral piece-specific stone/armor destruction sounds.",
-  "updatedAt":  "2026-10-27T00:30:26.836750775Z",
+  "summary":  "Implementation plan for fixing 3D preview centering, isolating scenery preview from the live game, and adding a dedicated Live 3D Preview button for every item in the Armory.",
+  "updatedAt":  "2026-10-27T05:43:10.640323803Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

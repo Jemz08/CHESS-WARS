@@ -61,6 +61,9 @@ export function initWizardChess() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.24;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    if (renderer.debug) {
+      renderer.debug.checkShaderErrors = false;
+    }
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -5753,13 +5756,67 @@ export function initWizardChess() {
       setVoiceAnnouncerEnabled,
       setSfxEnabled: (enabled) => sfxVfxManager.setSfxEnabled(enabled),
       getSfxEnabled: () => sfxVfxManager.getSfxEnabled(),
+      setSfxVolume: (vol) => sfxVfxManager.setSfxVolume?.(vol),
+      getSfxVolume: () => sfxVfxManager.getSfxVolume?.() ?? 1.0,
       playLobbyClickSfx: (variant = 'default') => sfxVfxManager.playLobbyClickSfx?.(variant),
       setLobbyMusicActive: (active) => sfxVfxManager.setLobbyMusicActive?.(active),
       setLobbyMusicEnabled: (enabled) => sfxVfxManager.setLobbyMusicEnabled?.(enabled),
       getLobbyMusicEnabled: () => sfxVfxManager.getLobbyMusicEnabled?.() ?? true,
+      setLobbyMusicVolume: (vol) => sfxVfxManager.setLobbyMusicVolume?.(vol),
+      getLobbyMusicVolume: () => sfxVfxManager.getLobbyMusicVolume?.() ?? 1.0,
       triggerPieceKillVfxPreview: (victimType = 'queen', r = 3, c = 3) => {
         const wPos = boardToWorld(r, c);
         spawnStoneShatter(wPos, 'b', victimType, 'queen', 0, -1);
+      },
+      getShowcasePiece: (archetypeId = 'gothic_warriors', color = 'w', pieceType = 'king', customMats = null) => {
+        const sideTrimMat = customMats?.goldTrimMat || (color === 'w' ? whiteTrimMat : blackTrimMat);
+        const sideBladeMat = customMats?.forgedSteelMat || (color === 'w' ? whiteBladeMat : blackBladeMat);
+        const primaryMat = customMats?.primaryMat || (color === 'w' ? whitePieceMat : blackPieceMat);
+
+        if (archetypeId !== 'gothic_warriors') {
+          const built = buildProceduralPieceGroup(archetypeId, pieceType, color, {
+            whitePieceMat: primaryMat,
+            blackPieceMat: primaryMat,
+            goldTrimMat: sideTrimMat,
+            forgedSteelMat: sideBladeMat
+          });
+          return built.root;
+        }
+
+        // Gothic Warriors from native cloned GLTF template
+        const tpl = pieceTemplates[`${pieceType}_${color}`] || pieceTemplates[`king_${color}`];
+        if (tpl && tpl.scene) {
+          const root = SkeletonUtils.clone(tpl.scene);
+          root.traverse((child) => {
+            const nm = child.name || '';
+            if (nm.includes('Icosphere') || nm.includes('glTF_not_exported')) {
+              child.visible = false;
+              return;
+            }
+            if (child.isMesh) {
+              const mName = child.material?.name || '';
+              if (mName.includes('Gold') || mName.includes('Trim') || mName.includes('Bronze') || mName.includes('Glow')) {
+                child.material = sideTrimMat;
+              } else if (mName.includes('Steel')) {
+                child.material = sideBladeMat;
+              } else {
+                child.material = primaryMat;
+              }
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          return root;
+        }
+
+        // Fallback procedural model if gltf not ready
+        const fallback = buildProceduralPieceGroup('classic_staunton', pieceType, color, {
+          whitePieceMat: primaryMat,
+          blackPieceMat: primaryMat,
+          goldTrimMat: sideTrimMat,
+          forgedSteelMat: sideBladeMat
+        });
+        return fallback.root;
       },
       announceSanctumEvent,
       holdCameraKey: (code, down = true) => {

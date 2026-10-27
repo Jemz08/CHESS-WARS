@@ -1,0 +1,163 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account, economy state, inventory, and combat ratings",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth user ID",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name",
+          "maxLength": 64
+        },
+        "email": {
+          "type": "string",
+          "description": "User Google email address",
+          "maxLength": 128
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User Google avatar image URL",
+          "maxLength": 512
+        },
+        "gold": {
+          "type": "number",
+          "description": "Gold coins in player treasury"
+        },
+        "ownedPieceTypes": {
+          "type": "array",
+          "description": "List of unlocked piece sets"
+        },
+        "activePieceType": {
+          "type": "string",
+          "description": "Currently equipped piece set",
+          "maxLength": 64
+        },
+        "ownedPieceSkins": {
+          "type": "array",
+          "description": "List of unlocked piece material finishes"
+        },
+        "activePieceSkin": {
+          "type": "string",
+          "description": "Currently equipped piece finish",
+          "maxLength": 64
+        },
+        "ownedBoardSkins": {
+          "type": "array",
+          "description": "List of unlocked board styles"
+        },
+        "activeBoardSkin": {
+          "type": "string",
+          "description": "Currently equipped board style",
+          "maxLength": 64
+        },
+        "ownedSceneries": {
+          "type": "array",
+          "description": "List of unlocked world sceneries"
+        },
+        "activeScenery": {
+          "type": "string",
+          "description": "Currently equipped world scenery",
+          "maxLength": 64
+        },
+        "wins": {
+          "type": "number",
+          "description": "Total chess match victories"
+        },
+        "captures": {
+          "type": "number",
+          "description": "Total enemy pieces destroyed"
+        },
+        "totalGoldEarned": {
+          "type": "number",
+          "description": "Lifetime gold coins earned"
+        },
+        "rating": {
+          "type": "number",
+          "description": "Player ELO skill rating"
+        },
+        "rankTier": {
+          "type": "string",
+          "description": "Player rank tier identifier",
+          "maxLength": 32
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of last sync"
+        }
+      },
+      "required": ["userId", "gold", "activePieceType", "wins"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public leaderboard record displaying rank tier and match stats",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth user ID",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of player",
+          "maxLength": 64
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar URL",
+          "maxLength": 512
+        },
+        "wins": {
+          "type": "number",
+          "description": "Total victories"
+        },
+        "captures": {
+          "type": "number",
+          "description": "Total piece captures"
+        },
+        "rating": {
+          "type": "number",
+          "description": "ELO rating"
+        },
+        "rankTier": {
+          "type": "string",
+          "description": "Tier id: bronze, silver, gold, platinum, or obsidian",
+          "maxLength": 32
+        },
+        "rankNumeral": {
+          "type": "string",
+          "description": "Roman numeral for tier",
+          "maxLength": 8
+        },
+        "activePieceType": {
+          "type": "string",
+          "description": "Equipped piece set name or id",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last activity timestamp"
+        }
+      },
+      "required": ["userId", "displayName", "wins", "rating", "rankTier"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile, inventory, and stats"
+    },
+    "/leaderboard/{userId}": {
+      "schema": { "$ref": "#/entities/LeaderboardEntry" },
+      "description": "Public player ranking data for the live leaderboard feed"
+    }
+  }
+}

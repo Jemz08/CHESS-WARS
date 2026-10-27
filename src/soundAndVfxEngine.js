@@ -187,14 +187,23 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     return audioCtx;
   }
 
+  let userSfxVolumeMultiplier = 1.0;
+  try {
+    const savedSfxVol = localStorage.getItem('wizard_chess_sfx_volume');
+    if (savedSfxVol !== null) userSfxVolumeMultiplier = Math.max(0, Math.min(1, parseFloat(savedSfxVol)));
+  } catch (e) {}
+
   // Master Dynamics Bus so layered Mixkit sword slashes, clashes, and stone shatters punch cleanly without clipping
   function getMasterBus(ctx) {
     if (masterBusNode && masterBusNode.ctx === ctx) {
+      if (masterBusNode.input) {
+        masterBusNode.input.gain.value = 1.05 * userSfxVolumeMultiplier;
+      }
       return masterBusNode.input;
     }
     try {
       const input = ctx.createGain();
-      input.gain.value = 1.05;
+      input.gain.value = 1.05 * userSfxVolumeMultiplier;
 
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -10;
@@ -762,12 +771,18 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     if (savedMusic !== null) lobbyMusicEnabled = savedMusic !== 'false';
   } catch (e) {}
 
+  let userMusicVolumeMultiplier = 1.0;
+  try {
+    const savedMusicVol = localStorage.getItem('wizard_chess_music_volume');
+    if (savedMusicVol !== null) userMusicVolumeMultiplier = Math.max(0, Math.min(1, parseFloat(savedMusicVol)));
+  } catch (e) {}
+
   let isLobbyMusicActiveState = true; // True while user is in Lobby / Armory modal or before match starts
   let lobbyPrimaryAudio = null;
   let lobbyDrumsAudio = null;
   let lobbyMusicFadeTimer = null;
-  const LOBBY_PRIMARY_TARGET_VOL = 0.34;
-  const LOBBY_DRUMS_TARGET_VOL = 0.14;
+  const getPrimaryTargetVol = () => 0.34 * userMusicVolumeMultiplier;
+  const getDrumsTargetVol = () => 0.14 * userMusicVolumeMultiplier;
 
   function ensureLobbyAudioElements() {
     if (typeof window === 'undefined' || navigator.webdriver) return false;
@@ -817,18 +832,27 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       lobbyMusicFadeTimer = setInterval(() => {
         if (!lobbyPrimaryAudio) return;
         let done = true;
-        if (lobbyPrimaryAudio.volume < LOBBY_PRIMARY_TARGET_VOL - 0.01) {
-          lobbyPrimaryAudio.volume = Math.min(LOBBY_PRIMARY_TARGET_VOL, lobbyPrimaryAudio.volume + 0.025);
+        const targetPrimary = getPrimaryTargetVol();
+        const targetDrums = getDrumsTargetVol();
+
+        if (lobbyPrimaryAudio.volume < targetPrimary - 0.01) {
+          lobbyPrimaryAudio.volume = Math.min(targetPrimary, lobbyPrimaryAudio.volume + 0.025);
+          done = false;
+        } else if (lobbyPrimaryAudio.volume > targetPrimary + 0.01) {
+          lobbyPrimaryAudio.volume = Math.max(targetPrimary, lobbyPrimaryAudio.volume - 0.025);
           done = false;
         } else {
-          lobbyPrimaryAudio.volume = LOBBY_PRIMARY_TARGET_VOL;
+          lobbyPrimaryAudio.volume = targetPrimary;
         }
         if (lobbyDrumsAudio) {
-          if (lobbyDrumsAudio.volume < LOBBY_DRUMS_TARGET_VOL - 0.008) {
-            lobbyDrumsAudio.volume = Math.min(LOBBY_DRUMS_TARGET_VOL, lobbyDrumsAudio.volume + 0.012);
+          if (lobbyDrumsAudio.volume < targetDrums - 0.008) {
+            lobbyDrumsAudio.volume = Math.min(targetDrums, lobbyDrumsAudio.volume + 0.012);
+            done = false;
+          } else if (lobbyDrumsAudio.volume > targetDrums + 0.008) {
+            lobbyDrumsAudio.volume = Math.max(targetDrums, lobbyDrumsAudio.volume - 0.012);
             done = false;
           } else {
-            lobbyDrumsAudio.volume = LOBBY_DRUMS_TARGET_VOL;
+            lobbyDrumsAudio.volume = targetDrums;
           }
         }
         if (done && lobbyMusicFadeTimer) {
@@ -2087,11 +2111,40 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     return sfxEnabled;
   }
 
+  function setSfxVolume(vol) {
+    userSfxVolumeMultiplier = Math.max(0, Math.min(1, Number(vol) || 0));
+    try {
+      localStorage.setItem('wizard_chess_sfx_volume', String(userSfxVolumeMultiplier));
+    } catch (e) {}
+    if (masterBusNode?.input) {
+      masterBusNode.input.gain.value = 1.05 * userSfxVolumeMultiplier;
+    }
+    return userSfxVolumeMultiplier;
+  }
+
+  function setLobbyMusicVolume(vol) {
+    userMusicVolumeMultiplier = Math.max(0, Math.min(1, Number(vol) || 0));
+    try {
+      localStorage.setItem('wizard_chess_music_volume', String(userMusicVolumeMultiplier));
+    } catch (e) {}
+    if (lobbyPrimaryAudio && sfxEnabled && lobbyMusicEnabled && isLobbyMusicActiveState) {
+      lobbyPrimaryAudio.volume = getPrimaryTargetVol();
+    }
+    if (lobbyDrumsAudio && sfxEnabled && lobbyMusicEnabled && isLobbyMusicActiveState) {
+      lobbyDrumsAudio.volume = getDrumsTargetVol();
+    }
+    return userMusicVolumeMultiplier;
+  }
+
   return {
     getSfxEnabled: () => sfxEnabled,
     setSfxEnabled,
+    getSfxVolume: () => userSfxVolumeMultiplier,
+    setSfxVolume,
     getLobbyMusicEnabled: () => lobbyMusicEnabled,
     setLobbyMusicEnabled,
+    getLobbyMusicVolume: () => userMusicVolumeMultiplier,
+    setLobbyMusicVolume,
     setLobbyMusicActive,
     playSelectSfx,
     playMoveStartSfx,

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { User } from 'firebase/auth';
 import { initWizardChess } from './wizardChessEngine.js';
 import {
   PIECE_ARCHETYPES,
@@ -12,8 +13,33 @@ import {
   loadEconomyState,
   saveEconomyState,
   type EconomyState,
-  type RankTier
+  type RankTier,
+  type PieceArchetype,
+  type PieceSkin,
+  type BoardSkin,
+  type WorldScenery
 } from './skinCatalog';
+import {
+  loginWithGoogle,
+  logoutUser,
+  subscribeToAuth,
+  saveUserDataToCloud,
+  loadUserDataFromCloud,
+  subscribeToLeaderboard,
+  type LeaderboardPlayer
+} from './firebase';
+import SkinShowcaseCanvas from './SkinShowcaseCanvas';
+import {
+  PlaySwordsVectorIcon,
+  SkinsCrownVectorIcon,
+  GoogleShieldVectorIcon,
+  CloudCheckVectorIcon,
+  TrophyChaliceVectorIcon,
+  SettingsGearVectorIcon,
+  Eye3DPreviewVectorIcon,
+  GoldCoinVectorIcon,
+  CommanderSigilVectorIcon
+} from './GameVectorIcons';
 
 interface WizardChessAPI {
   toggleUI?: (force?: boolean) => void;
@@ -33,10 +59,14 @@ interface WizardChessAPI {
   setVoiceAnnouncerEnabled?: (enabled: boolean) => boolean;
   setSfxEnabled?: (enabled: boolean) => boolean;
   getSfxEnabled?: () => boolean;
+  setSfxVolume?: (vol: number) => number;
+  getSfxVolume?: () => number;
   playLobbyClickSfx?: (variant?: 'default' | 'tab' | 'card' | 'equip' | 'unlock' | 'buy' | 'start' | 'close') => void;
   setLobbyMusicActive?: (active: boolean) => void;
   setLobbyMusicEnabled?: (enabled: boolean) => boolean;
   getLobbyMusicEnabled?: () => boolean;
+  setLobbyMusicVolume?: (vol: number) => number;
+  getLobbyMusicVolume?: () => number;
   announceSanctumEvent?: (eventType: string, payload?: Record<string, unknown>) => void;
   getState?: () => {
     gameMode: 'single' | 'pass' | 'multi';
@@ -56,85 +86,394 @@ function getEngine(): WizardChessAPI | undefined {
   return (window as unknown as { wizardChess?: WizardChessAPI }).wizardChess;
 }
 
+// Built-in initial Grandmaster Sanctum Masters across all 5 Rank Tiers
+const INITIAL_SANCTUM_LEADERBOARD: LeaderboardPlayer[] = [
+  {
+    id: 'lb-1',
+    userId: 'bot-malakor',
+    displayName: 'Grandmaster Malakor',
+    wins: 28,
+    captures: 240,
+    rating: 2180,
+    rankTier: 'obsidian',
+    rankNumeral: 'V',
+    activePieceType: 'Dragon & Elemental Guardians'
+  },
+  {
+    id: 'lb-2',
+    userId: 'bot-valerius',
+    displayName: 'Archon Valerius',
+    wins: 24,
+    captures: 195,
+    rating: 1985,
+    rankTier: 'obsidian',
+    rankNumeral: 'V',
+    activePieceType: 'Arcane Runic & Cyber-Mech'
+  },
+  {
+    id: 'lb-3',
+    userId: 'bot-aurelia',
+    displayName: 'Sovereign Aurelia',
+    wins: 19,
+    captures: 160,
+    rating: 1780,
+    rankTier: 'platinum',
+    rankNumeral: 'IV',
+    activePieceType: 'Gothic Sanctum Warriors'
+  },
+  {
+    id: 'lb-4',
+    userId: 'bot-kaiden',
+    displayName: 'High Templar Kaiden',
+    wins: 15,
+    captures: 124,
+    rating: 1640,
+    rankTier: 'platinum',
+    rankNumeral: 'IV',
+    activePieceType: 'Classic Staunton Tournament'
+  },
+  {
+    id: 'lb-5',
+    userId: 'bot-gareth',
+    displayName: 'Paladin Gareth',
+    wins: 11,
+    captures: 98,
+    rating: 1485,
+    rankTier: 'gold',
+    rankNumeral: 'III',
+    activePieceType: 'Arcane Runic & Cyber-Mech'
+  },
+  {
+    id: 'lb-6',
+    userId: 'bot-selyse',
+    displayName: 'Warden Selyse',
+    wins: 8,
+    captures: 72,
+    rating: 1360,
+    rankTier: 'gold',
+    rankNumeral: 'III',
+    activePieceType: 'Gothic Sanctum Warriors'
+  },
+  {
+    id: 'lb-7',
+    userId: 'bot-brand',
+    displayName: 'Sentinel Brand',
+    wins: 6,
+    captures: 54,
+    rating: 1260,
+    rankTier: 'silver',
+    rankNumeral: 'II',
+    activePieceType: 'Classic Staunton Tournament'
+  },
+  {
+    id: 'lb-8',
+    userId: 'bot-roderic',
+    displayName: 'Knight Roderic',
+    wins: 4,
+    captures: 38,
+    rating: 1180,
+    rankTier: 'silver',
+    rankNumeral: 'II',
+    activePieceType: 'Gothic Sanctum Warriors'
+  },
+  {
+    id: 'lb-9',
+    userId: 'bot-kira',
+    displayName: 'Acolyte Kira',
+    wins: 2,
+    captures: 22,
+    rating: 1090,
+    rankTier: 'bronze',
+    rankNumeral: 'I',
+    activePieceType: 'Gothic Sanctum Warriors'
+  },
+  {
+    id: 'lb-10',
+    userId: 'bot-dorian',
+    displayName: 'Novice Dorian',
+    wins: 1,
+    captures: 12,
+    rating: 1045,
+    rankTier: 'bronze',
+    rankNumeral: 'I',
+    activePieceType: 'Classic Staunton Tournament'
+  }
+];
+
 export default function App() {
   const initializedRef = useRef(false);
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
-  const [uiHidden, setUiHidden] = useState(false);
-
-  const [hasStartedGame, setHasStartedGame] = useState<boolean>(() =>
-    Boolean(new URLSearchParams(window.location.search).get('room'))
-  );
-
-  // Modals: 'none' | 'arena' | 'armory' — Open Game Lobby ('arena') first on boot!
-  const [activeDialog, setActiveDialog] = useState<'none' | 'arena' | 'armory'>(() =>
-    new URLSearchParams(window.location.search).get('room') ? 'none' : 'arena'
-  );
+  const [economy, setEconomy] = useState<EconomyState>(() => loadEconomyState());
+  const [activeDialog, setActiveDialog] = useState<
+    'none' | 'gateway' | 'play' | 'armory' | 'leaderboard' | 'settings' | 'arena'
+  >('gateway');
+  const [armoryTab, setArmoryTab] = useState<'types' | 'sceneries' | 'boards' | 'pieces'>('types');
   const [arenaTab, setArenaTab] = useState<'bot' | 'online' | 'pass'>('bot');
-  const [armoryTab, setArmoryTab] = useState<'types' | 'boards' | 'sceneries' | 'pieces'>('types');
-  const [previewRankTierId, setPreviewRankTierId] = useState<RankTier['id'] | null>(null);
+  const [leaderboardTab, setLeaderboardTab] = useState<'all' | 'obsidian' | 'platinum' | 'gold' | 'silver' | 'bronze'>('all');
+  const [showcaseArchetypeId, setShowcaseArchetypeId] = useState<string>(() => loadEconomyState().activePieceType);
+  const [showcasePieceSkinId, setShowcasePieceSkinId] = useState<string>(() => loadEconomyState().activePieceSkin);
+  const [showcaseBoardSkinId, setShowcaseBoardSkinId] = useState<string>(() => loadEconomyState().activeBoardSkin);
+  const [showcaseSceneryId, setShowcaseSceneryId] = useState<string>(() => loadEconomyState().activeScenery);
 
-  // Engine & Mode State
+  // Cloud & Firebase Auth state
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  const [cloudSyncMessage, setCloudSyncMessage] = useState<string>('');
+  const [leaderboardPlayers, setLeaderboardPlayers] = useState<LeaderboardPlayer[]>(INITIAL_SANCTUM_LEADERBOARD);
+
+  // Sound and Volume Settings
+  const [musicVolume, setMusicVolume] = useState<number>(() => {
+    const saved = localStorage.getItem('wizardchess_music_volume');
+    return saved !== null ? Number(saved) : 60;
+  });
+  const [sfxVolume, setSfxVolumeState] = useState<number>(() => {
+    const saved = localStorage.getItem('wizardchess_sfx_volume');
+    return saved !== null ? Number(saved) : 80;
+  });
+  const [customCommanderAvatar, setCustomCommanderAvatar] = useState<string>(() => {
+    return localStorage.getItem('wizardchess_commander_avatar') || '♔';
+  });
+
+  // Rank Preview State
+  const [previewRankTierId, setPreviewRankTierId] = useState<string | null>(null);
+
+  // UI / HUD State
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [sfxEnabled, setSfxEnabled] = useState(true);
+  const [lobbyMusicEnabled, setLobbyMusicEnabled] = useState(true);
+  const [uiHidden, setUiHidden] = useState(false);
+  const [hasStartedGame, setHasStartedGame] = useState(false);
+
+  // Game Engine State Mirror
   const [gameMode, setGameMode] = useState<'single' | 'pass' | 'multi'>('single');
   const [botDifficulty, setBotDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [botSide, setBotSide] = useState<'w' | 'b'>('w');
+  const [inCheck, setInCheck] = useState(false);
+  const [checkedColor, setCheckedColor] = useState<'w' | 'b' | null>(null);
+
+  // Pass-and-play local 2P state
   const [passAutoFlip, setPassAutoFlip] = useState(true);
   const [passPrivacyCurtain, setPassPrivacyCurtain] = useState(false);
   const [pendingTurnHandoff, setPendingTurnHandoff] = useState<string | null>(null);
   const [turnSwitchToast, setTurnSwitchToast] = useState<string | null>(null);
-  const [inCheck, setInCheck] = useState(false);
-  const [checkedColor, setCheckedColor] = useState<'w' | 'b' | null>(null);
-  const [voiceEnabled, setVoiceEnabled] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('wizard_chess_voice_enabled');
-      return saved === null ? true : saved !== 'false';
-    } catch {
-      return true;
-    }
-  });
-  const [sfxEnabled, setSfxEnabled] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('wizard_chess_sfx_enabled');
-      return saved === null ? true : saved !== 'false';
-    } catch {
-      return true;
-    }
-  });
-  const [lobbyMusicEnabled, setLobbyMusicEnabled] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('wizard_chess_music_enabled');
-      return saved === null ? true : saved !== 'false';
-    } catch {
-      return true;
-    }
-  });
 
-  // Online PvP State
-  const [onlinePreferredSide, setOnlinePreferredSide] = useState<'w' | 'b'>('w');
-  const [matchmakingPreferredColor, setMatchmakingPreferredColor] = useState<'any' | 'w' | 'b'>('any');
+  // Online Matchmaking State
   const [onlineQueueStatus, setOnlineQueueStatus] = useState<'idle' | 'searching' | 'matched'>('idle');
-  const [matchmakingRemainingSec, setMatchmakingRemainingSec] = useState<number>(30);
-  const [matchmakingRatingWindow, setMatchmakingRatingWindow] = useState<number>(150);
-  const [matchmakingQueueCount, setMatchmakingQueueCount] = useState<number>(1);
-  const [matchmakingTimedOut, setMatchmakingTimedOut] = useState<boolean>(false);
+  const [matchmakingRemainingSec, setMatchmakingRemainingSec] = useState(30);
+  const [matchmakingRatingWindow, setMatchmakingRatingWindow] = useState(150);
+  const [matchmakingQueueCount, setMatchmakingQueueCount] = useState(1);
+  const [matchmakingTimedOut, setMatchmakingTimedOut] = useState(false);
+  const [matchmakingPreferredColor, setMatchmakingPreferredColor] = useState<'w' | 'b' | 'any'>('any');
+  const [onlinePreferredSide, setOnlinePreferredSide] = useState<'w' | 'b'>('w');
   const [activeRoomCode, setActiveRoomCode] = useState<string | null>(null);
   const [bothPlayersConnected, setBothPlayersConnected] = useState(false);
-  const [onlineWhiteArmyName, setOnlineWhiteArmyName] = useState<string>('');
-  const [onlineBlackArmyName, setOnlineBlackArmyName] = useState<string>('');
+  const [onlineStatusText, setOnlineStatusText] = useState<string | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState('');
-  const [onlineStatusText, setOnlineStatusText] = useState('');
+  const [onlineWhiteArmyName, setOnlineWhiteArmyName] = useState('Gothic Sanctum Warriors');
+  const [onlineBlackArmyName, setOnlineBlackArmyName] = useState('Gothic Sanctum Warriors');
 
-  // Economy, Rank Tier & Skin State
-  const [economy, setEconomy] = useState<EconomyState>(() => loadEconomyState());
+  // Bounties Toast
   const [bountyToast, setBountyToast] = useState<{ id: number; amount: number; label: string } | null>(null);
-  const playerRating = 1000 + economy.stats.wins * 35 + economy.stats.captures * 3;
+
+  // Rank Progress Calculation
   const rankProgress = getPlayerRankProgress(economy.stats.wins);
-  const displayedRankTier: RankTier =
-    (previewRankTierId && RANK_TIERS.find((r) => r.id === previewRankTierId)) ||
-    rankProgress.currentTier;
+  const displayedRankTier = previewRankTierId
+    ? RANK_TIERS.find((t) => t.id === previewRankTierId) || rankProgress.currentTier
+    : rankProgress.currentTier;
+  const playerRating = 1000 + economy.stats.wins * 45;
+
   const equippedArchetypeObj =
     PIECE_ARCHETYPES.find((a) => a.id === economy.activePieceType) || PIECE_ARCHETYPES[0];
   const equippedPieceSkinObj =
     PIECE_SKINS.find((s) => s.id === economy.activePieceSkin) || PIECE_SKINS[0];
+  const equippedBoardSkinObj =
+    BOARD_SKINS.find((b) => b.id === economy.activeBoardSkin) || BOARD_SKINS[0];
+  const equippedSceneryObj =
+    WORLD_SCENERIES.find((w) => w.id === economy.activeScenery) || WORLD_SCENERIES[0];
+
+  const showcaseArchetypeObj =
+    PIECE_ARCHETYPES.find((a) => a.id === showcaseArchetypeId) || equippedArchetypeObj;
+  const showcasePieceSkinObj =
+    PIECE_SKINS.find((s) => s.id === showcasePieceSkinId) || equippedPieceSkinObj;
+  const showcaseBoardSkinObj =
+    BOARD_SKINS.find((b) => b.id === showcaseBoardSkinId) || equippedBoardSkinObj;
+  const showcaseSceneryObj =
+    WORLD_SCENERIES.find((w) => w.id === showcaseSceneryId) || equippedSceneryObj;
+
+  function requestAppFullscreenPortrait() {
+    try {
+      const docEl = document.documentElement as any;
+      if (!document.fullscreenElement) {
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen();
+        }
+      }
+    } catch (e) {}
+
+    try {
+      if (window.screen && (window.screen as any).orientation && (window.screen as any).orientation.lock) {
+        (window.screen as any).orientation.lock('portrait-primary').catch(() => {
+          (window.screen as any).orientation.lock('portrait').catch(() => {});
+        });
+      }
+    } catch (e) {}
+  }
+
+  const handleMusicVolumeChange = (newVol: number) => {
+    setMusicVolume(newVol);
+    localStorage.setItem('wizardchess_music_volume', String(newVol));
+    getEngine()?.setLobbyMusicVolume?.(newVol / 100);
+  };
+
+  const handleSfxVolumeChange = (newVol: number) => {
+    setSfxVolumeState(newVol);
+    localStorage.setItem('wizardchess_sfx_volume', String(newVol));
+    getEngine()?.setSfxVolume?.(newVol / 100);
+  };
+
+  const handleSelectAvatar = (glyph: string) => {
+    setCustomCommanderAvatar(glyph);
+    localStorage.setItem('wizardchess_commander_avatar', glyph);
+    getEngine()?.playLobbyClickSfx?.('card');
+  };
+
+  // Subscribe to Firebase Auth and Firestore Cloud Sync
+  useEffect(() => {
+    const unsubAuth = subscribeToAuth(async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        setCloudSyncStatus('syncing');
+        setCloudSyncMessage(`Connected: ${user.displayName || user.email}`);
+        try {
+          const cloudData = await loadUserDataFromCloud(user.uid);
+          if (cloudData) {
+            setEconomy((prev) => {
+              const merged: EconomyState = {
+                gold: Math.max(prev.gold, cloudData.gold || 0),
+                ownedPieceTypes: Array.from(
+                  new Set([...prev.ownedPieceTypes, ...(cloudData.ownedPieceTypes || [])])
+                ),
+                activePieceType: cloudData.activePieceType || prev.activePieceType,
+                ownedPieceSkins: Array.from(
+                  new Set([...prev.ownedPieceSkins, ...(cloudData.ownedPieceSkins || [])])
+                ),
+                activePieceSkin: cloudData.activePieceSkin || prev.activePieceSkin,
+                ownedBoardSkins: Array.from(
+                  new Set([...prev.ownedBoardSkins, ...(cloudData.ownedBoardSkins || [])])
+                ),
+                activeBoardSkin: cloudData.activeBoardSkin || prev.activeBoardSkin,
+                ownedSceneries: Array.from(
+                  new Set([...prev.ownedSceneries, ...(cloudData.ownedSceneries || [])])
+                ),
+                activeScenery: cloudData.activeScenery || prev.activeScenery,
+                stats: {
+                  wins: Math.max(prev.stats.wins, cloudData.wins || 0),
+                  captures: Math.max(prev.stats.captures, cloudData.captures || 0),
+                  totalGoldEarned: Math.max(prev.stats.totalGoldEarned, cloudData.totalGoldEarned || 0)
+                }
+              };
+              saveEconomyState(merged);
+              return merged;
+            });
+            setCloudSyncStatus('synced');
+            setCloudSyncMessage('Cloud save restored & synced.');
+          } else {
+            // First time cloud user: upload local progress to Firestore
+            await saveUserDataToCloud(
+              user,
+              economy,
+              playerRating,
+              rankProgress.currentTier.id,
+              rankProgress.currentTier.numeral
+            );
+            setCloudSyncStatus('synced');
+            setCloudSyncMessage('Local progress backed up to Cloud.');
+          }
+        } catch (err) {
+          console.warn('Cloud sync error:', err);
+          setCloudSyncStatus('error');
+          setCloudSyncMessage('Could not sync cloud data.');
+        }
+      } else {
+        setCloudSyncStatus('idle');
+        setCloudSyncMessage('');
+      }
+    });
+
+    const unsubLb = subscribeToLeaderboard((liveList) => {
+      if (liveList && liveList.length > 0) {
+        setLeaderboardPlayers(liveList);
+      }
+    });
+
+    return () => {
+      unsubAuth();
+      unsubLb();
+    };
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      getEngine()?.playLobbyClickSfx?.('unlock');
+      setCloudSyncStatus('syncing');
+      setCloudSyncMessage('Connecting to Google...');
+      const user = await loginWithGoogle();
+      if (user) {
+        setCurrentUser(user);
+        await saveUserDataToCloud(
+          user,
+          economy,
+          playerRating,
+          rankProgress.currentTier.id,
+          rankProgress.currentTier.numeral
+        );
+        setCloudSyncStatus('synced');
+        setCloudSyncMessage(`Signed in as ${user.displayName || user.email}`);
+      }
+    } catch (err) {
+      console.warn('Google sign-in error:', err);
+      setCloudSyncStatus('error');
+      setCloudSyncMessage('Google sign-in cancelled or failed.');
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    try {
+      getEngine()?.playLobbyClickSfx?.('close');
+      await logoutUser();
+      setCurrentUser(null);
+      setCloudSyncStatus('idle');
+      setCloudSyncMessage('Signed out.');
+    } catch (err) {
+      console.warn('Sign out error:', err);
+    }
+  };
+
+  const handleManualCloudSync = async () => {
+    if (!currentUser) {
+      handleGoogleLogin();
+      return;
+    }
+    setCloudSyncStatus('syncing');
+    setCloudSyncMessage('Uploading latest match spoils & inventory...');
+    try {
+      await saveUserDataToCloud(
+        currentUser,
+        economy,
+        playerRating,
+        rankProgress.currentTier.id,
+        rankProgress.currentTier.numeral
+      );
+      setCloudSyncStatus('synced');
+      setCloudSyncMessage('All progress backed up to Google Cloud!');
+      getEngine()?.playLobbyClickSfx?.('unlock');
+    } catch {
+      setCloudSyncStatus('error');
+      setCloudSyncMessage('Cloud sync failed.');
+    }
+  };
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -520,6 +859,7 @@ export default function App() {
 
   // --- Arena Mode Actions ---
   const handleStartBotGame = () => {
+    requestAppFullscreenPortrait();
     const eng = getEngine();
     eng?.startBotMatch?.(botDifficulty, botSide);
     setHasStartedGame(true);
@@ -529,6 +869,7 @@ export default function App() {
   };
 
   const handleStartPassGame = () => {
+    requestAppFullscreenPortrait();
     const eng = getEngine();
     eng?.startPassAndPlayMatch?.(passAutoFlip);
     setHasStartedGame(true);
@@ -538,6 +879,7 @@ export default function App() {
   };
 
   const handleQuickMatchmaking = async () => {
+    requestAppFullscreenPortrait();
     const eng = getEngine();
     setMatchmakingTimedOut(false);
     setMatchmakingRemainingSec(30);
@@ -599,9 +941,27 @@ export default function App() {
   };
 
   // --- Skin Armory Actions ---
+  const handleInspectInShowcase = (
+    category: 'types' | 'pieces' | 'boards' | 'sceneries',
+    itemId: string
+  ) => {
+    setArmoryTab(category);
+    if (category === 'types') setShowcaseArchetypeId(itemId);
+    else if (category === 'pieces') setShowcasePieceSkinId(itemId);
+    else if (category === 'boards') setShowcaseBoardSkinId(itemId);
+    else if (category === 'sceneries') setShowcaseSceneryId(itemId);
+
+    getEngine()?.playLobbyClickSfx?.('equip');
+    const showcaseEl = document.getElementById('skin-showcase-section');
+    if (showcaseEl) {
+      showcaseEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
+
   const handleSelectOrBuyPieceType = (typeId: string) => {
     const arch = PIECE_ARCHETYPES.find((a) => a.id === typeId);
     if (!arch) return;
+    setShowcaseArchetypeId(arch.id);
 
     const isOwned = economy.ownedPieceTypes.includes(arch.id);
     if (isOwned) {
@@ -630,6 +990,7 @@ export default function App() {
   const handleSelectOrBuyPieceSkin = (skinId: string) => {
     const skin = PIECE_SKINS.find((s) => s.id === skinId);
     if (!skin) return;
+    setShowcasePieceSkinId(skin.id);
 
     const isOwned = economy.ownedPieceSkins.includes(skin.id);
     if (isOwned) {
@@ -658,6 +1019,7 @@ export default function App() {
   const handleSelectOrBuyBoardSkin = (skinId: string) => {
     const skin = BOARD_SKINS.find((s) => s.id === skinId);
     if (!skin) return;
+    setShowcaseBoardSkinId(skin.id);
 
     const isOwned = economy.ownedBoardSkins.includes(skin.id);
     if (isOwned) {
@@ -686,6 +1048,7 @@ export default function App() {
   const handleSelectOrBuyWorldScenery = (sceneryId: string, flyToVista = true) => {
     const scenery = WORLD_SCENERIES.find((w) => w.id === sceneryId);
     if (!scenery) return;
+    setShowcaseSceneryId(scenery.id);
 
     const isOwned = economy.ownedSceneries.includes(scenery.id);
     if (isOwned) {
@@ -709,13 +1072,6 @@ export default function App() {
     saveEconomyState(next);
     getEngine()?.playLobbyClickSfx?.('unlock');
     getEngine()?.applyWorldScenery?.(scenery, { flyToVista });
-  };
-
-  const handlePreviewWorldScenery = (sceneryId: string) => {
-    const scenery = WORLD_SCENERIES.find((w) => w.id === sceneryId);
-    if (!scenery) return;
-    getEngine()?.playLobbyClickSfx?.('equip');
-    getEngine()?.applyWorldScenery?.(scenery, { flyToVista: true });
   };
 
   return (
@@ -987,7 +1343,9 @@ export default function App() {
                 : 'No King currently in Check'
             }
           >
-            <span className="check-indicator-icon" aria-hidden="true">⚔</span>
+            <span className="check-indicator-icon" aria-hidden="true">
+              <PlaySwordsVectorIcon size={15} />
+            </span>
             <span className="check-indicator-label">
               {inCheck
                 ? `CHECK • ${checkedColor === 'b' ? 'BLACK KING' : 'WHITE KING'}`
@@ -1001,12 +1359,14 @@ export default function App() {
             id="gold-wallet-badge"
             onClick={() =>
               setActiveDialog((prev) =>
-                prev === 'armory' ? (hasStartedGame ? 'none' : 'arena') : 'armory'
+                prev === 'armory' ? (hasStartedGame ? 'none' : 'gateway') : 'armory'
               )
             }
-            title="Gold Coins earned from shattering pieces and winning matches — Click to open Skin Armory"
+            title="Gold Coins earned from shattering pieces and winning matches — Click to open Skin Reliquary"
           >
-            <span className="gold-coin-glyph">◈</span>
+            <span className="gold-coin-glyph" aria-hidden="true">
+              <GoldCoinVectorIcon size={16} />
+            </span>
             <span className="gold-wallet-amount">{economy.gold}</span>
             <span className="gold-wallet-unit">Gold</span>
           </button>
@@ -1014,13 +1374,27 @@ export default function App() {
           <button
             type="button"
             className={`hud-rank-pill rank-pill-${rankProgress.currentTier.id}`}
-            onClick={() => setActiveDialog('arena')}
-            title={`Current Rank: ${rankProgress.currentTier.title} (${economy.stats.wins} Wins) — Click to inspect Rank Tier in Lobby`}
+            onClick={() => setActiveDialog('gateway')}
+            title={`Current Rank: ${rankProgress.currentTier.title} (${economy.stats.wins} Wins) — Click to open Sanctum Lobby`}
           >
             <span className="hud-rank-glyph" aria-hidden="true">
-              {rankProgress.currentTier.crestGlyph}
+              <CommanderSigilVectorIcon sigil={rankProgress.currentTier.crestGlyph} size={15} />
             </span>
             <span className="hud-rank-label">{rankProgress.currentTier.name}</span>
+          </button>
+
+          <button
+            type="button"
+            className="hud-btn hud-settings-btn"
+            id="btn-hud-settings-top"
+            onClick={() => {
+              getEngine()?.playLobbyClickSfx?.('tab');
+              setActiveDialog('settings');
+            }}
+            title="Sanctum Audio & Profile Settings"
+          >
+            <SettingsGearVectorIcon size={14} />
+            <span>Settings</span>
           </button>
         </div>
 
@@ -1075,36 +1449,49 @@ export default function App() {
             </button>
           </div>
 
-          <div className="mobile-sheet-section-label">Arena &amp; Armory</div>
+          <div className="mobile-sheet-section-label">Arena, Armory &amp; Settings</div>
 
           <button
             type="button"
-            className={`hud-btn primary ${activeDialog === 'arena' ? 'active' : ''}`}
+            className={`hud-btn primary ${activeDialog === 'gateway' || activeDialog === 'play' ? 'active' : ''}`}
             id="btn-arena-hub"
-            title="Choose Play vs Bot (Easy/Medium/Hard), Online PvP Matchmaking, or 1-Phone P1 vs P2"
+            title="Open Sanctum Gateway: Play, Skins, Google Login, Live Leaderboards, and Settings"
             onClick={() => {
               setMobileSheetOpen(false);
               setActiveDialog((prev) =>
-                prev === 'arena' ? (hasStartedGame ? 'none' : 'arena') : 'arena'
+                prev === 'gateway' ? (hasStartedGame ? 'none' : 'gateway') : 'gateway'
               );
             }}
           >
-            Game Modes
+            Sanctum Lobby
           </button>
 
           <button
             type="button"
             className={`hud-btn ${activeDialog === 'armory' ? 'active' : ''}`}
             id="btn-skin-shop"
-            title="Unlock and equip 3D Piece Skins and Board Themes with Gold"
+            title="Unlock and equip 3D Piece Sets and Board Themes with Gold"
             onClick={() => {
               setMobileSheetOpen(false);
               setActiveDialog((prev) =>
-                prev === 'armory' ? (hasStartedGame ? 'none' : 'arena') : 'armory'
+                prev === 'armory' ? (hasStartedGame ? 'none' : 'gateway') : 'armory'
               );
             }}
           >
-            Skin Shop ({economy.gold}G)
+            Skins ({economy.gold}G)
+          </button>
+
+          <button
+            type="button"
+            className={`hud-btn ${activeDialog === 'settings' ? 'active' : ''}`}
+            id="btn-sheet-settings"
+            title="Adjust volume, sound effects, rank profile, and cloud saves"
+            onClick={() => {
+              setMobileSheetOpen(false);
+              setActiveDialog('settings');
+            }}
+          >
+            <SettingsGearVectorIcon size={14} /> Settings
           </button>
 
           <div className="hud-divider" aria-hidden="true"></div>
@@ -1219,9 +1606,285 @@ export default function App() {
       </div>
 
       {/* ===================================================================== */}
-      {/* SANCTUM GAME LOBBY (Vs Bot / Online PvP / 1-Phone P1 vs P2)           */}
+      {/* 1. GATEWAY MAIN LOBBY (PLAY, SKINS, LOGIN, LEADERBOARDS, SETTINGS)    */}
       {/* ===================================================================== */}
-      {activeDialog === 'arena' && (
+      {activeDialog === 'gateway' && (
+        <div
+          className="sanctum-modal-backdrop"
+          onClick={() => {
+            if (hasStartedGame) setActiveDialog('none');
+          }}
+        >
+          <div
+            className="sanctum-modal-card gateway-modal-card"
+            id="gateway-hub-drawer"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gateway-modal-title"
+          >
+            <div className="sanctum-corner tl" aria-hidden="true"></div>
+            <div className="sanctum-corner tr" aria-hidden="true"></div>
+            <div className="sanctum-corner bl" aria-hidden="true"></div>
+            <div className="sanctum-corner br" aria-hidden="true"></div>
+
+            <div className="sanctum-modal-header gateway-header">
+              <div className="sanctum-header-titles">
+                <div className="sanctum-modal-kicker">✦ THE OBSIDIAN ALTAR ✦</div>
+                <h2 className="sanctum-modal-title" id="gateway-modal-title">
+                  Wizard Chess
+                </h2>
+                <div className="sanctum-record-line">
+                  <span>Treasury: <strong>{economy.gold} Gold</strong></span>
+                  <span aria-hidden="true">·</span>
+                  <span>Rating: <strong>{playerRating} ELO</strong></span>
+                  <span aria-hidden="true">·</span>
+                  <span>Rank: <strong style={{ color: displayedRankTier.primaryHex }}>{displayedRankTier.name} ({displayedRankTier.title})</strong></span>
+                </div>
+              </div>
+
+              <div className="gateway-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="sanctum-modal-close"
+                  id="btn-gateway-settings-header"
+                  onClick={() => {
+                    getEngine()?.playLobbyClickSfx?.('tab');
+                    setActiveDialog('settings');
+                  }}
+                  title="Open Sanctum Settings: Audio, Volume & Profile"
+                >
+                  <SettingsGearVectorIcon size={14} /> Settings
+                </button>
+                {hasStartedGame && (
+                  <button
+                    type="button"
+                    className="sanctum-modal-close gold-trim"
+                    onClick={() => {
+                      requestAppFullscreenPortrait();
+                      setActiveDialog('none');
+                    }}
+                  >
+                    <PlaySwordsVectorIcon size={15} /> Resume Match
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+
+            <div className="sanctum-modal-body gateway-scroll-body">
+            {/* Commander Portrait & Rank Tier Progression Banner */}
+            <div
+              className={`sanctum-rank-banner rank-banner-${displayedRankTier.id}`}
+              aria-label="Player Rank Tier and Portrait"
+            >
+              <div className="rank-portrait-column">
+                <div
+                  className={`rank-portrait-shell rank-border-${displayedRankTier.id}`}
+                  title={`${displayedRankTier.title} — ${displayedRankTier.borderEffectName}`}
+                >
+                  <div className="rank-border-aura" aria-hidden="true"></div>
+                  <div className="rank-border-ring" aria-hidden="true"></div>
+                  <span className="rank-corner-ornament tl" aria-hidden="true"></span>
+                  <span className="rank-corner-ornament tr" aria-hidden="true"></span>
+                  <span className="rank-corner-ornament bl" aria-hidden="true"></span>
+                  <span className="rank-corner-ornament br" aria-hidden="true"></span>
+
+                  <div className="rank-portrait-inner">
+                    {currentUser?.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt={currentUser.displayName || 'Commander'}
+                        className="rank-commander-img"
+                      />
+                    ) : (
+                      <div className="rank-commander-glyph-avatar">
+                        <CommanderSigilVectorIcon sigil={customCommanderAvatar} size={44} />
+                      </div>
+                    )}
+                    <div className="rank-portrait-shimmer" aria-hidden="true"></div>
+                  </div>
+
+                  <div className="rank-crest-seal" aria-hidden="true">
+                    <CommanderSigilVectorIcon sigil={displayedRankTier.crestGlyph} size={14} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rank-details-column">
+                <div className="rank-title-row">
+                  <div className="rank-title-group">
+                    <span
+                      className="rank-tier-kicker"
+                      style={{ color: displayedRankTier.primaryHex }}
+                    >
+                      Rank {displayedRankTier.numeral} · {displayedRankTier.name} Tier
+                      {currentUser ? ` · ${currentUser.displayName || currentUser.email}` : ' · Local Commander'}
+                    </span>
+                    <div className="rank-tier-heading">
+                      <span className="rank-tier-main-title">{displayedRankTier.title}</span>
+                      <span className="rank-border-tag">
+                        ✦ {displayedRankTier.borderEffectName}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rank-win-counter">
+                    <span className="rank-win-num">{economy.stats.wins}</span>
+                    <span className="rank-win-label">
+                      {economy.stats.wins === 1 ? 'Victory' : 'Victories'} · {playerRating} ELO
+                    </span>
+                  </div>
+                </div>
+
+                <div className="rank-progress-wrap">
+                  <div className="rank-progress-labels">
+                    <span className="rank-border-desc">{displayedRankTier.borderDescription}</span>
+                    <span className="rank-next-target">
+                      {rankProgress.nextTier
+                        ? `${rankProgress.winsRemaining} more ${
+                            rankProgress.winsRemaining === 1 ? 'win' : 'wins'
+                          } to ${rankProgress.nextTier.name} (${rankProgress.nextTier.minWins}W)`
+                        : 'Max Rank Tier Achieved (21+ Wins)'}
+                    </span>
+                  </div>
+                  <div className="rank-progress-track" aria-hidden="true">
+                    <div
+                      className="rank-progress-fill"
+                      style={{
+                        width: `${rankProgress.progressPercent}%`,
+                        background: `linear-gradient(90deg, ${displayedRankTier.secondaryHex}, ${displayedRankTier.primaryHex})`
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 5 Prominent Action Portal Cards */}
+            <div className="gateway-actions-grid" role="group" aria-label="Sanctum Main Hub Actions">
+              {/* 1. PLAY */}
+              <button
+                type="button"
+                className="gateway-action-card play-card"
+                onClick={() => {
+                  requestAppFullscreenPortrait();
+                  getEngine()?.playLobbyClickSfx?.('tab');
+                  setActiveDialog('play');
+                }}
+              >
+                <div className="gateway-card-glow" aria-hidden="true"></div>
+                <div className="gateway-card-icon" aria-hidden="true">
+                  <PlaySwordsVectorIcon size={32} />
+                </div>
+                <div className="gateway-card-content">
+                  <span className="gateway-card-title">PLAY</span>
+                  <span className="gateway-card-sub">Play vs Bots · Online PvP · 2P Game</span>
+                </div>
+                <span className="gateway-card-chevron" aria-hidden="true">›</span>
+              </button>
+
+              {/* 2. SKINS */}
+              <button
+                type="button"
+                className="gateway-action-card skins-card"
+                onClick={() => {
+                  getEngine()?.playLobbyClickSfx?.('tab');
+                  setActiveDialog('armory');
+                }}
+              >
+                <div className="gateway-card-glow" aria-hidden="true"></div>
+                <div className="gateway-card-icon" aria-hidden="true">
+                  <SkinsCrownVectorIcon size={30} />
+                </div>
+                <div className="gateway-card-content">
+                  <span className="gateway-card-title">SKINS</span>
+                  <span className="gateway-card-sub">Piece Sets · Sceneries · Boards · Finishes</span>
+                </div>
+                <span className="gateway-card-chevron" aria-hidden="true">›</span>
+              </button>
+
+              {/* 3. LOGIN (GOOGLE) */}
+              <button
+                type="button"
+                className={`gateway-action-card login-card ${currentUser ? 'signed-in' : ''}`}
+                onClick={() => {
+                  if (currentUser) {
+                    setActiveDialog('settings');
+                  } else {
+                    handleGoogleLogin();
+                  }
+                }}
+              >
+                <div className="gateway-card-glow" aria-hidden="true"></div>
+                <div className="gateway-card-icon" aria-hidden="true">
+                  {currentUser ? <CloudCheckVectorIcon size={28} /> : <GoogleShieldVectorIcon size={28} />}
+                </div>
+                <div className="gateway-card-content">
+                  <span className="gateway-card-title">
+                    {currentUser ? 'GOOGLE SYNCED' : 'LOGIN (GOOGLE)'}
+                  </span>
+                  <span className="gateway-card-sub">
+                    {currentUser
+                      ? `${currentUser.displayName || currentUser.email} · Cloud Active`
+                      : 'Save & Sync Player Progress to Cloud'}
+                  </span>
+                </div>
+                <span className="gateway-card-chevron" aria-hidden="true">
+                  {currentUser ? <SettingsGearVectorIcon size={18} /> : '›'}
+                </span>
+              </button>
+
+              {/* 4. LIVE LEADERBOARDS */}
+              <button
+                type="button"
+                className="gateway-action-card leaderboards-card"
+                onClick={() => {
+                  getEngine()?.playLobbyClickSfx?.('tab');
+                  setActiveDialog('leaderboard');
+                }}
+              >
+                <div className="gateway-card-glow" aria-hidden="true"></div>
+                <div className="gateway-card-icon" aria-hidden="true">
+                  <TrophyChaliceVectorIcon size={30} />
+                </div>
+                <div className="gateway-card-content">
+                  <span className="gateway-card-title">LIVE LEADERBOARDS</span>
+                  <span className="gateway-card-sub">Tier Feed · Bronze to Obsidian Rankings</span>
+                </div>
+                <span className="gateway-card-chevron" aria-hidden="true">›</span>
+              </button>
+
+              {/* 5. SETTINGS */}
+              <button
+                type="button"
+                className="gateway-action-card settings-card"
+                onClick={() => {
+                  getEngine()?.playLobbyClickSfx?.('tab');
+                  setActiveDialog('settings');
+                }}
+              >
+                <div className="gateway-card-glow" aria-hidden="true"></div>
+                <div className="gateway-card-icon" aria-hidden="true">
+                  <SettingsGearVectorIcon size={28} />
+                </div>
+                <div className="gateway-card-content">
+                  <span className="gateway-card-title">SETTINGS</span>
+                  <span className="gateway-card-sub">Music &amp; SFX Volume · Rank Profile · Mute</span>
+                </div>
+                <span className="gateway-card-chevron" aria-hidden="true">›</span>
+              </button>
+            </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* 2. PLAY MATCH SELECTION MODAL (ONLINE, PLAY W BOTS, 2P GAME)          */}
+      {/* ===================================================================== */}
+      {(activeDialog === 'play' || activeDialog === 'arena') && (
         <div
           className="sanctum-modal-backdrop"
           onClick={() => {
@@ -1258,31 +1921,25 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="armory-header-right">
+              <div className="armory-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button
                   type="button"
                   className="sanctum-modal-close"
-                  title="Toggle Lobby Background Music"
-                  onClick={handleToggleLobbyMusic}
+                  onClick={() => {
+                    getEngine()?.playLobbyClickSfx?.('tab');
+                    setActiveDialog('settings');
+                  }}
+                  title="Sanctum Audio & Profile Settings"
                 >
-                  {lobbyMusicEnabled ? '♫ Music: ON' : '♫ Music: OFF'}
+                  <SettingsGearVectorIcon size={14} /> Settings
                 </button>
                 <button
                   type="button"
                   className="sanctum-modal-close gold-trim"
-                  onClick={() => setActiveDialog('armory')}
+                  onClick={() => setActiveDialog('gateway')}
                 >
-                  Reliquary &amp; Skins
+                  ← Back to Lobby
                 </button>
-                {hasStartedGame && (
-                  <button
-                    type="button"
-                    className="sanctum-modal-close"
-                    onClick={() => setActiveDialog('none')}
-                  >
-                    Return to Board
-                  </button>
-                )}
               </div>
             </div>
 
@@ -1544,20 +2201,20 @@ export default function App() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={arenaTab === 'bot'}
-                className={`sanctum-tab-btn ${arenaTab === 'bot' ? 'active' : ''}`}
-                onClick={() => setArenaTab('bot')}
-              >
-                <span className="tab-numeral">I.</span> Play vs Bot
-              </button>
-              <button
-                type="button"
-                role="tab"
                 aria-selected={arenaTab === 'online'}
                 className={`sanctum-tab-btn ${arenaTab === 'online' ? 'active' : ''}`}
                 onClick={() => setArenaTab('online')}
               >
-                <span className="tab-numeral">II.</span> Online Match
+                <span className="tab-numeral">I.</span> ONLINE
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={arenaTab === 'bot'}
+                className={`sanctum-tab-btn ${arenaTab === 'bot' ? 'active' : ''}`}
+                onClick={() => setArenaTab('bot')}
+              >
+                <span className="tab-numeral">II.</span> PLAY W BOTS
               </button>
               <button
                 type="button"
@@ -1566,7 +2223,7 @@ export default function App() {
                 className={`sanctum-tab-btn ${arenaTab === 'pass' ? 'active' : ''}`}
                 onClick={() => setArenaTab('pass')}
               >
-                <span className="tab-numeral">III.</span> Pass &amp; Play (1 Phone)
+                <span className="tab-numeral">III.</span> 2P GAME
               </button>
             </div>
 
@@ -2025,15 +2682,44 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  className="sanctum-modal-close"
-                  onClick={() => setActiveDialog(hasStartedGame ? 'none' : 'arena')}
+                  className="sanctum-modal-close gold-trim"
+                  onClick={() => setActiveDialog('gateway')}
                 >
-                  {hasStartedGame ? 'Return to Board' : 'Back to Lobby'}
+                  ← Back to Lobby
                 </button>
               </div>
             </div>
 
             <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+
+            {/* DEDICATED 3D INSPECTION SHOWCASE WINDOW */}
+            <div className="skin-showcase-section" id="skin-showcase-section">
+              <div className="showcase-header-bar">
+                <div className="showcase-header-left">
+                  <span className="showcase-kicker">✦ 3D LIVE INSPECTION PEDESTAL ✦</span>
+                  <span className="showcase-title">
+                    {armoryTab === 'types'
+                      ? showcaseArchetypeObj.name
+                      : armoryTab === 'sceneries'
+                        ? showcaseSceneryObj.name
+                        : armoryTab === 'boards'
+                          ? showcaseBoardSkinObj.name
+                          : showcasePieceSkinObj.name}
+                  </span>
+                </div>
+                <span className="showcase-instruction">
+                  Drag to Orbit 360° · Scroll to Zoom
+                </span>
+              </div>
+
+              <SkinShowcaseCanvas
+                activeTab={armoryTab}
+                archetype={showcaseArchetypeObj}
+                pieceSkin={showcasePieceSkinObj}
+                boardSkin={showcaseBoardSkinObj}
+                scenery={showcaseSceneryObj}
+              />
+            </div>
 
             <div className="sanctum-tab-bar" role="tablist">
               <button
@@ -2043,7 +2729,7 @@ export default function App() {
                 className={`sanctum-tab-btn ${armoryTab === 'types' ? 'active' : ''}`}
                 onClick={() => setArmoryTab('types')}
               >
-                <span className="tab-numeral">I.</span> Sculptures ({economy.ownedPieceTypes.length}/{PIECE_ARCHETYPES.length})
+                <span className="tab-numeral">I.</span> PIECE SETS ({economy.ownedPieceTypes.length}/{PIECE_ARCHETYPES.length})
               </button>
               <button
                 type="button"
@@ -2079,12 +2765,14 @@ export default function App() {
                 {PIECE_ARCHETYPES.map((arch) => {
                   const isOwned = economy.ownedPieceTypes.includes(arch.id);
                   const isEquipped = economy.activePieceType === arch.id;
+                  const isInspecting = showcaseArchetypeId === arch.id;
                   const canAfford = economy.gold >= arch.price;
 
                   return (
                     <div
                       key={arch.id}
-                      className={`skin-card ${isEquipped ? 'equipped' : ''}`}
+                      className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
+                      onClick={() => handleInspectInShowcase('types', arch.id)}
                     >
                       <div className="skin-swatch-row">
                         <span
@@ -2106,22 +2794,38 @@ export default function App() {
                         <span>Shatter: <strong>{arch.shatterStyle}</strong></span>
                       </div>
 
-                      <button
-                        type="button"
-                        className={`skin-action-btn ${
-                          isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
-                        }`}
-                        disabled={!isOwned && !canAfford}
-                        onClick={() => handleSelectOrBuyPieceType(arch.id)}
-                      >
-                        {isEquipped
-                          ? 'Equipped'
-                          : isOwned
-                          ? 'Equip Sculpture Set'
-                          : canAfford
-                          ? `Unlock · ${arch.price} Gold`
-                          : `Requires ${arch.price} Gold`}
-                      </button>
+                      <div className="skin-card-actions">
+                        <button
+                          type="button"
+                          className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInspectInShowcase('types', arch.id);
+                          }}
+                        >
+                          <Eye3DPreviewVectorIcon size={15} />
+                          <span>{isInspecting ? 'Showing in 3D' : 'Live 3D Preview'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`skin-action-btn ${
+                            isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                          }`}
+                          disabled={!isOwned && !canAfford}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectOrBuyPieceType(arch.id);
+                          }}
+                        >
+                          {isEquipped
+                            ? 'Equipped'
+                            : isOwned
+                            ? 'Equip Piece Set'
+                            : canAfford
+                            ? `Unlock · ${arch.price} Gold`
+                            : `Requires ${arch.price} Gold`}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -2133,12 +2837,14 @@ export default function App() {
                 {PIECE_SKINS.map((skin) => {
                   const isOwned = economy.ownedPieceSkins.includes(skin.id);
                   const isEquipped = economy.activePieceSkin === skin.id;
+                  const isInspecting = showcasePieceSkinId === skin.id;
                   const canAfford = economy.gold >= skin.price;
 
                   return (
                     <div
                       key={skin.id}
-                      className={`skin-card ${isEquipped ? 'equipped' : ''}`}
+                      className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
+                      onClick={() => handleInspectInShowcase('pieces', skin.id)}
                     >
                       <div className="skin-swatch-row">
                         <div className="skin-swatch-pair">
@@ -2167,22 +2873,38 @@ export default function App() {
                       <div className="skin-card-title">{skin.name}</div>
                       <p className="skin-card-sub">{skin.subtitle}</p>
 
-                      <button
-                        type="button"
-                        className={`skin-action-btn ${
-                          isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
-                        }`}
-                        disabled={!isOwned && !canAfford}
-                        onClick={() => handleSelectOrBuyPieceSkin(skin.id)}
-                      >
-                        {isEquipped
-                          ? 'Equipped'
-                          : isOwned
-                          ? 'Equip Finish'
-                          : canAfford
-                          ? `Unlock · ${skin.price} Gold`
-                          : `Requires ${skin.price} Gold`}
-                      </button>
+                      <div className="skin-card-actions">
+                        <button
+                          type="button"
+                          className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInspectInShowcase('pieces', skin.id);
+                          }}
+                        >
+                          <Eye3DPreviewVectorIcon size={15} />
+                          <span>{isInspecting ? 'Showing in 3D' : 'Live 3D Preview'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`skin-action-btn ${
+                            isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                          }`}
+                          disabled={!isOwned && !canAfford}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectOrBuyPieceSkin(skin.id);
+                          }}
+                        >
+                          {isEquipped
+                            ? 'Equipped'
+                            : isOwned
+                            ? 'Equip Finish'
+                            : canAfford
+                            ? `Unlock · ${skin.price} Gold`
+                            : `Requires ${skin.price} Gold`}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -2194,12 +2916,14 @@ export default function App() {
                 {BOARD_SKINS.map((bSkin) => {
                   const isOwned = economy.ownedBoardSkins.includes(bSkin.id);
                   const isEquipped = economy.activeBoardSkin === bSkin.id;
+                  const isInspecting = showcaseBoardSkinId === bSkin.id;
                   const canAfford = economy.gold >= bSkin.price;
 
                   return (
                     <div
                       key={bSkin.id}
-                      className={`skin-card ${isEquipped ? 'equipped' : ''}`}
+                      className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
+                      onClick={() => handleInspectInShowcase('boards', bSkin.id)}
                     >
                       <div className="skin-swatch-row">
                         <div
@@ -2222,22 +2946,38 @@ export default function App() {
                         <span>Sanctum Chamber: <strong>{bSkin.environmentLabel}</strong></span>
                       </div>
 
-                      <button
-                        type="button"
-                        className={`skin-action-btn ${
-                          isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
-                        }`}
-                        disabled={!isOwned && !canAfford}
-                        onClick={() => handleSelectOrBuyBoardSkin(bSkin.id)}
-                      >
-                        {isEquipped
-                          ? 'Equipped'
-                          : isOwned
-                          ? 'Equip Board & Chamber'
-                          : canAfford
-                          ? `Unlock · ${bSkin.price} Gold`
-                          : `Requires ${bSkin.price} Gold`}
-                      </button>
+                      <div className="skin-card-actions">
+                        <button
+                          type="button"
+                          className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInspectInShowcase('boards', bSkin.id);
+                          }}
+                        >
+                          <Eye3DPreviewVectorIcon size={15} />
+                          <span>{isInspecting ? 'Showing in 3D' : 'Live 3D Preview'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`skin-action-btn ${
+                            isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                          }`}
+                          disabled={!isOwned && !canAfford}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectOrBuyBoardSkin(bSkin.id);
+                          }}
+                        >
+                          {isEquipped
+                            ? 'Equipped'
+                            : isOwned
+                            ? 'Equip Board & Chamber'
+                            : canAfford
+                            ? `Unlock · ${bSkin.price} Gold`
+                            : `Requires ${bSkin.price} Gold`}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -2249,12 +2989,14 @@ export default function App() {
                 {WORLD_SCENERIES.map((scenery) => {
                   const isOwned = economy.ownedSceneries.includes(scenery.id);
                   const isEquipped = economy.activeScenery === scenery.id;
+                  const isInspecting = showcaseSceneryId === scenery.id;
                   const canAfford = economy.gold >= scenery.price;
 
                   return (
                     <div
                       key={scenery.id}
-                      className={`skin-card scenery-card ${isEquipped ? 'equipped' : ''}`}
+                      className={`skin-card scenery-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
+                      onClick={() => handleInspectInShowcase('sceneries', scenery.id)}
                     >
                       <div
                         className="scenery-sky-banner"
@@ -2283,14 +3025,28 @@ export default function App() {
                         <span>Atmosphere: <strong>{scenery.weatherLabel}</strong></span>
                       </div>
 
-                      <div className="scenery-card-actions">
+                      <div className="skin-card-actions">
+                        <button
+                          type="button"
+                          className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInspectInShowcase('sceneries', scenery.id);
+                          }}
+                        >
+                          <Eye3DPreviewVectorIcon size={15} />
+                          <span>{isInspecting ? 'Showing in 3D' : 'Live 3D Preview'}</span>
+                        </button>
                         <button
                           type="button"
                           className={`skin-action-btn ${
                             isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
                           }`}
                           disabled={!isOwned && !canAfford}
-                          onClick={() => handleSelectOrBuyWorldScenery(scenery.id, true)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectOrBuyWorldScenery(scenery.id, true);
+                          }}
                         >
                           {isEquipped
                             ? 'Equipped Realm'
@@ -2300,20 +3056,460 @@ export default function App() {
                             ? `Unlock · ${scenery.price} Gold`
                             : `Requires ${scenery.price} Gold`}
                         </button>
-                        <button
-                          type="button"
-                          className="sanctum-modal-close scenery-preview-btn"
-                          title="Fly camera out to preview this 3D World Scenery live around the board"
-                          onClick={() => handlePreviewWorldScenery(scenery.id)}
-                        >
-                          Preview 3D
-                        </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* 4. LIVE LEADERBOARDS MODAL (TIER-BY-TIER FEED BRONZE TO OBSIDIAN)     */}
+      {/* ===================================================================== */}
+      {activeDialog === 'leaderboard' && (
+        <div
+          className="sanctum-modal-backdrop"
+          onClick={() => setActiveDialog('gateway')}
+        >
+          <div
+            className="sanctum-modal-card wide leaderboard-modal"
+            id="leaderboard-drawer"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="leaderboard-modal-title"
+          >
+            <div className="sanctum-corner tl" aria-hidden="true"></div>
+            <div className="sanctum-corner tr" aria-hidden="true"></div>
+            <div className="sanctum-corner bl" aria-hidden="true"></div>
+            <div className="sanctum-corner br" aria-hidden="true"></div>
+
+            <div className="sanctum-modal-header">
+              <div className="sanctum-header-titles">
+                <div className="sanctum-modal-kicker">✦ SANCTUM GRANDMASTERS ✦</div>
+                <h2 className="sanctum-modal-title" id="leaderboard-modal-title">
+                  Live Leaderboards
+                </h2>
+                <div className="sanctum-record-line">
+                  <span>Your Standing: <strong>{rankProgress.currentTier.name} Tier</strong></span>
+                  <span aria-hidden="true">·</span>
+                  <span>Rating: <strong>{playerRating} ELO</strong></span>
+                  <span aria-hidden="true">·</span>
+                  <span>Victories: <strong>{economy.stats.wins}</strong></span>
+                </div>
+              </div>
+
+              <div className="armory-header-right">
+                <span className="live-feed-badge">
+                  <span className="live-feed-dot" aria-hidden="true"></span>
+                  LIVE FEED
+                </span>
+                <button
+                  type="button"
+                  className="sanctum-modal-close gold-trim"
+                  onClick={() => setActiveDialog('gateway')}
+                >
+                  ← Back to Lobby
+                </button>
+              </div>
+            </div>
+
+            <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+
+            {/* Filter Tabs: ALL, OBSIDIAN, ASTRAL, GOLD, SILVER, BRONZE */}
+            <div className="leaderboard-filter-bar" role="group" aria-label="Filter by Rank Tier">
+              <button
+                type="button"
+                className={`lb-filter-chip ${leaderboardTab === 'all' ? 'active' : ''}`}
+                onClick={() => setLeaderboardTab('all')}
+              >
+                All Tiers
+              </button>
+              <button
+                type="button"
+                className={`lb-filter-chip chip-obsidian ${leaderboardTab === 'obsidian' ? 'active' : ''}`}
+                onClick={() => setLeaderboardTab('obsidian')}
+              >
+                <span>◆</span> Obsidian (21+ W)
+              </button>
+              <button
+                type="button"
+                className={`lb-filter-chip chip-platinum ${leaderboardTab === 'platinum' ? 'active' : ''}`}
+                onClick={() => setLeaderboardTab('platinum')}
+              >
+                <span>✦</span> Astral (13–20 W)
+              </button>
+              <button
+                type="button"
+                className={`lb-filter-chip chip-gold ${leaderboardTab === 'gold' ? 'active' : ''}`}
+                onClick={() => setLeaderboardTab('gold')}
+              >
+                <span>◈</span> Gold (7–12 W)
+              </button>
+              <button
+                type="button"
+                className={`lb-filter-chip chip-silver ${leaderboardTab === 'silver' ? 'active' : ''}`}
+                onClick={() => setLeaderboardTab('silver')}
+              >
+                <span>❖</span> Silver (3–6 W)
+              </button>
+              <button
+                type="button"
+                className={`lb-filter-chip chip-bronze ${leaderboardTab === 'bronze' ? 'active' : ''}`}
+                onClick={() => setLeaderboardTab('bronze')}
+              >
+                <span>▲</span> Bronze (0–2 W)
+              </button>
+            </div>
+
+            {/* Current Player Status Highlight Banner */}
+            <div className={`player-self-plaque rank-plaque-${rankProgress.currentTier.id}`}>
+              <div className="self-plaque-avatar">
+                <CommanderSigilVectorIcon sigil={customCommanderAvatar} size={26} />
+              </div>
+              <div className="self-plaque-info">
+                <div className="self-plaque-name">
+                  <span>{currentUser ? currentUser.displayName || currentUser.email : 'You (Local Commander)'}</span>
+                  <span className="self-plaque-tag">YOUR STANDING</span>
+                </div>
+                <div className="self-plaque-stats">
+                  <span>Rank: <strong>{rankProgress.currentTier.name} {rankProgress.currentTier.numeral}</strong></span>
+                  <span aria-hidden="true">·</span>
+                  <span>Rating: <strong>{playerRating} ELO</strong></span>
+                  <span aria-hidden="true">·</span>
+                  <span>Victories: <strong>{economy.stats.wins}</strong></span>
+                  <span aria-hidden="true">·</span>
+                  <span>Captures: <strong>{economy.stats.captures}</strong></span>
+                  <span aria-hidden="true">·</span>
+                  <span>Set: <strong>{equippedArchetypeObj.name}</strong></span>
+                </div>
+              </div>
+              {!currentUser && (
+                <button
+                  type="button"
+                  className="self-plaque-login-btn"
+                  onClick={handleGoogleLogin}
+                >
+                  Save to Cloud
+                </button>
+              )}
+            </div>
+
+            {/* Table of Live Feed Players */}
+            <div className="leaderboard-table-wrap">
+              <table className="leaderboard-table">
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Commander</th>
+                    <th>Tier</th>
+                    <th>Rating</th>
+                    <th>Wins</th>
+                    <th>Captures</th>
+                    <th>Piece Set</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboardPlayers
+                    .filter((p) => leaderboardTab === 'all' || p.rankTier === leaderboardTab)
+                    .map((p, idx) => {
+                      const tierObj = RANK_TIERS.find((t) => t.id === p.rankTier) || RANK_TIERS[0];
+                      const isCurrentUser = currentUser && p.userId === currentUser.uid;
+
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`lb-row ${isCurrentUser ? 'is-self' : ''}`}
+                        >
+                          <td className="lb-col-rank">
+                            <span className={`rank-badge rank-${idx + 1}`}>
+                              #{idx + 1}
+                            </span>
+                          </td>
+                          <td className="lb-col-user">
+                            <div className="lb-user-cell">
+                              {p.photoURL ? (
+                                <img src={p.photoURL} alt="" className="lb-avatar-img" />
+                              ) : (
+                                <span className="lb-avatar-glyph">{tierObj.crestGlyph}</span>
+                              )}
+                              <span className="lb-user-name">
+                                {p.displayName}
+                                {isCurrentUser && <span className="lb-you-tag">YOU</span>}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="lb-col-tier">
+                            <span
+                              className="lb-tier-pill"
+                              style={{
+                                color: tierObj.primaryHex,
+                                borderColor: tierObj.primaryHex
+                              }}
+                            >
+                              {tierObj.crestGlyph} {tierObj.name} {p.rankNumeral}
+                            </span>
+                          </td>
+                          <td className="lb-col-rating">
+                            <strong>{p.rating}</strong> ELO
+                          </td>
+                          <td className="lb-col-wins">{p.wins}</td>
+                          <td className="lb-col-caps">{p.captures}</td>
+                          <td className="lb-col-set">
+                            <span className="lb-set-tag">{p.activePieceType}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* 5. SETTINGS MODAL (VOLUME ADJUSTMENT, MUTE, PROFILE RANK, CLOUD SAVE)  */}
+      {/* ===================================================================== */}
+      {activeDialog === 'settings' && (
+        <div
+          className="sanctum-modal-backdrop"
+          onClick={() => setActiveDialog('gateway')}
+        >
+          <div
+            className="sanctum-modal-card settings-modal"
+            id="settings-drawer"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-modal-title"
+          >
+            <div className="sanctum-corner tl" aria-hidden="true"></div>
+            <div className="sanctum-corner tr" aria-hidden="true"></div>
+            <div className="sanctum-corner bl" aria-hidden="true"></div>
+            <div className="sanctum-corner br" aria-hidden="true"></div>
+
+            <div className="sanctum-modal-header">
+              <div className="sanctum-header-titles">
+                <div className="sanctum-modal-kicker">Sanctum Preferences</div>
+                <h2 className="sanctum-modal-title" id="settings-modal-title">
+                  Settings &amp; Profile
+                </h2>
+                <div className="sanctum-record-line">
+                  <span>Audio &amp; Volume</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Commander Profile</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Google Cloud Save</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="sanctum-modal-close gold-trim"
+                onClick={() => setActiveDialog('gateway')}
+              >
+                ← Back to Lobby
+              </button>
+            </div>
+
+            <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+
+            <div className="sanctum-modal-body">
+              {/* SECTION 1: AUDIO VOLUME & MUTE CONTROLS */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Audio &amp; Volume Controls</h3>
+                <div className="settings-volume-list">
+                  {/* Music Volume */}
+                  <div className="volume-slider-group">
+                    <div className="volume-slider-head">
+                      <div className="volume-label-col">
+                        <span className="volume-label">Sanctum Lobby Background Music</span>
+                        <span className="volume-sub">Chamber choirs, organ &amp; war drums</span>
+                      </div>
+                      <div className="volume-head-right">
+                        <span className="volume-val">{lobbyMusicEnabled ? `${musicVolume}%` : 'MUTED'}</span>
+                        <button
+                          type="button"
+                          className={`volume-mute-btn ${!lobbyMusicEnabled ? 'muted' : ''}`}
+                          onClick={handleToggleLobbyMusic}
+                        >
+                          {lobbyMusicEnabled ? 'Mute' : 'Unmute'}
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={musicVolume}
+                      className="volume-range-slider"
+                      onChange={(e) => handleMusicVolumeChange(Number(e.target.value))}
+                    />
+                  </div>
+
+                  {/* SFX Volume */}
+                  <div className="volume-slider-group">
+                    <div className="volume-slider-head">
+                      <div className="volume-label-col">
+                        <span className="volume-label">Combat &amp; UI Sound Effects (SFX)</span>
+                        <span className="volume-sub">Stone shatter physics, blade slashes &amp; button clicks</span>
+                      </div>
+                      <div className="volume-head-right">
+                        <span className="volume-val">{sfxEnabled ? `${sfxVolume}%` : 'MUTED'}</span>
+                        <button
+                          type="button"
+                          className={`volume-mute-btn ${!sfxEnabled ? 'muted' : ''}`}
+                          onClick={handleToggleSfx}
+                        >
+                          {sfxEnabled ? 'Mute' : 'Unmute'}
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={sfxVolume}
+                      className="volume-range-slider"
+                      onChange={(e) => handleSfxVolumeChange(Number(e.target.value))}
+                    />
+                  </div>
+
+                  {/* Victory Fanfare */}
+                  <label className="settings-toggle-row">
+                    <div>
+                      <span className="settings-toggle-title">Checkmate &amp; Check Victory Fanfare</span>
+                      <span className="settings-toggle-sub">Trumpet fanfare and voice announcement upon checkmate</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={voiceEnabled}
+                      onChange={handleToggleVoiceAnnouncer}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* SECTION 2: COMMANDER PROFILE & RANK CREST */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Commander Profile &amp; Rank Crest</h3>
+                <p className="settings-section-sub">
+                  Customize the sigil displayed in your lobby portrait and leaderboard badge.
+                </p>
+
+                <div className="profile-crest-picker" role="radiogroup" aria-label="Commander Sigil">
+                  {[
+                    { glyph: '♔', name: 'High King' },
+                    { glyph: '♕', name: 'Empress' },
+                    { glyph: '🐉', name: 'Dragon Lord' },
+                    { glyph: '⚔', name: 'Sanctum Champion' },
+                    { glyph: '⚡', name: 'Arcane Archon' },
+                    { glyph: '🛡', name: 'Paladin Sentinel' }
+                  ].map((sigil) => {
+                    const isSelected = customCommanderAvatar === sigil.glyph;
+                    return (
+                      <button
+                        key={sigil.glyph}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        className={`crest-picker-btn ${isSelected ? 'selected' : ''}`}
+                        onClick={() => handleSelectAvatar(sigil.glyph)}
+                      >
+                        <span className="crest-glyph">
+                          <CommanderSigilVectorIcon sigil={sigil.glyph} size={28} />
+                        </span>
+                        <span className="crest-name">{sigil.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="rank-preview-subheading">
+                  Rank Tier Border Effect (Preview Any Border)
+                </div>
+                <div className="rank-ladder-pills" role="group" aria-label="Rank Tier Border Preview">
+                  {RANK_TIERS.map((tier) => {
+                    const isEarned = rankProgress.currentTier.id === tier.id;
+                    const isUnlocked = economy.stats.wins >= tier.minWins;
+                    const isSelected = displayedRankTier.id === tier.id;
+                    return (
+                      <button
+                        key={tier.id}
+                        type="button"
+                        className={`rank-tier-chip chip-${tier.id} ${isSelected ? 'selected' : ''} ${
+                          isEarned ? 'earned' : ''
+                        }`}
+                        onClick={() =>
+                          setPreviewRankTierId(tier.id === rankProgress.currentTier.id ? null : tier.id)
+                        }
+                      >
+                        <span className="chip-glyph" aria-hidden="true">{tier.crestGlyph}</span>
+                        <span className="chip-name">{tier.name}</span>
+                        <span className="chip-req">
+                          {isEarned ? 'ACTIVE' : isUnlocked ? 'UNLOCKED' : `${tier.minWins}W`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 3: GOOGLE CLOUD SAVE & AUTH */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Google Cloud Save &amp; Authentication</h3>
+                <div className="cloud-save-card">
+                  <div className="cloud-card-info">
+                    <div className="cloud-card-title">
+                      {currentUser ? 'Cloud Backup Active' : 'Sign In with Google'}
+                    </div>
+                    <p className="cloud-card-desc">
+                      {currentUser
+                        ? `Connected as ${currentUser.displayName || currentUser.email}. All Gold, equipped piece sets, and match victories are safely backed up to Firebase Firestore.`
+                        : 'Link your Google Account to preserve your Gold, equipped 3D piece sets, and victory rank across all mobile devices and browsers.'}
+                    </p>
+                    {cloudSyncMessage && (
+                      <div className={`cloud-status-badge ${cloudSyncStatus}`}>
+                        {cloudSyncMessage}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="cloud-card-actions">
+                    {currentUser ? (
+                      <>
+                        <button
+                          type="button"
+                          className="sanctum-action-btn sync-btn"
+                          onClick={handleManualCloudSync}
+                        >
+                          Sync Progress Now
+                        </button>
+                        <button
+                          type="button"
+                          className="sanctum-action-btn logout-btn"
+                          onClick={handleGoogleLogout}
+                        >
+                          Sign Out
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="sanctum-action-btn google-login-btn"
+                        onClick={handleGoogleLogin}
+                      >
+                        Sign In with Google
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
