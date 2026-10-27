@@ -209,15 +209,24 @@ export async function saveUserDataToCloud(
   economy: EconomyState,
   playerRating: number,
   rankTierId: string,
-  rankNumeral: string
+  rankNumeral: string,
+  customPhotoOverride?: string
 ): Promise<void> {
   if (!user) return;
 
+  const customPhoto =
+    customPhotoOverride !== undefined
+      ? customPhotoOverride
+      : localStorage.getItem('wizardchess_custom_photo') || '';
+  const customName = (localStorage.getItem('wizardchess_commander_name') || '').trim();
+  const effectiveDisplayName = customName || user.displayName || 'James Alburo';
+  const effectivePhotoURL = customPhoto || user.photoURL || '';
+
   const data: CloudUserProfile = {
     userId: user.uid,
-    displayName: user.displayName || 'James Alburo',
+    displayName: effectiveDisplayName,
     email: user.email || '',
-    photoURL: user.photoURL || '',
+    photoURL: effectivePhotoURL,
     gold: economy.gold,
     ownedPieceTypes: economy.ownedPieceTypes,
     activePieceType: economy.activePieceType,
@@ -249,8 +258,8 @@ export async function saveUserDataToCloud(
         lbDocRef,
         {
           userId: user.uid,
-          displayName: user.displayName || 'James Alburo',
-          photoURL: user.photoURL || '',
+          displayName: effectiveDisplayName,
+          photoURL: effectivePhotoURL,
           wins: economy.stats.wins,
           captures: economy.stats.captures,
           rating: playerRating,

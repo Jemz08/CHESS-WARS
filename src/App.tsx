@@ -232,6 +232,13 @@ export default function App() {
   const [customCommanderAvatar, setCustomCommanderAvatar] = useState<string>(() => {
     return localStorage.getItem('wizardchess_commander_avatar') || '♔';
   });
+  const [customProfilePhoto, setCustomProfilePhoto] = useState<string>(() => {
+    return localStorage.getItem('wizardchess_custom_photo') || '';
+  });
+  const [customCommanderName, setCustomCommanderName] = useState<string>(() => {
+    return localStorage.getItem('wizardchess_commander_name') || '';
+  });
+  const profileFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Rank Preview State
   const [previewRankTierId, setPreviewRankTierId] = useState<string | null>(null);
@@ -339,6 +346,83 @@ export default function App() {
     getEngine()?.playLobbyClickSfx?.('card');
   };
 
+  const handleProfilePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 256;
+        let w = img.width;
+        let h = img.height;
+        if (w > h) {
+          if (w > maxDim) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          }
+        } else if (h > maxDim) {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.84);
+          setCustomProfilePhoto(dataUrl);
+          localStorage.setItem('wizardchess_custom_photo', dataUrl);
+          getEngine()?.playLobbyClickSfx?.('unlock');
+          if (currentUser) {
+            try {
+              await saveUserDataToCloud(
+                currentUser,
+                economy,
+                playerRating,
+                rankProgress.currentTier.id,
+                rankProgress.currentTier.numeral,
+                dataUrl
+              );
+              setCloudSyncStatus('synced');
+              setCloudSyncMessage('Custom profile photo saved & synced!');
+            } catch {}
+          }
+        }
+      };
+      if (typeof reader.result === 'string') {
+        img.src = reader.result;
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleRemoveCustomPhoto = async () => {
+    setCustomProfilePhoto('');
+    localStorage.removeItem('wizardchess_custom_photo');
+    getEngine()?.playLobbyClickSfx?.('close');
+    if (currentUser) {
+      try {
+        await saveUserDataToCloud(
+          currentUser,
+          economy,
+          playerRating,
+          rankProgress.currentTier.id,
+          rankProgress.currentTier.numeral,
+          ''
+        );
+      } catch {}
+    }
+  };
+
+  const handleCommanderNameChange = (val: string) => {
+    const trimmed = val.slice(0, 26);
+    setCustomCommanderName(trimmed);
+    localStorage.setItem('wizardchess_commander_name', trimmed);
+  };
+
   // Subscribe to Firebase Auth and Firestore Cloud Sync
   useEffect(() => {
     const unsubAuth = subscribeToAuth(async (user) => {
@@ -377,6 +461,12 @@ export default function App() {
               saveEconomyState(merged);
               return merged;
             });
+            if (cloudData.photoURL && !localStorage.getItem('wizardchess_custom_photo')) {
+              setCustomProfilePhoto(cloudData.photoURL);
+            }
+            if (cloudData.displayName && !localStorage.getItem('wizardchess_commander_name')) {
+              setCustomCommanderName(cloudData.displayName);
+            }
             setCloudSyncStatus('synced');
             setCloudSyncMessage('Cloud save restored & synced.');
           } else {
@@ -502,15 +592,20 @@ export default function App() {
     return () => window.removeEventListener('wizardchess:ready', applyEquippedSkins);
   }, [economy.activePieceType, economy.activePieceSkin, economy.activeBoardSkin, economy.activeScenery]);
 
-  // Sync Lobby Music active state whenever the Lobby/Armory dialog or match state changes
+  // Sync Lobby Music active state & Pause Background 3D Game whenever in Lobby
   useEffect(() => {
     const isLobbyOpen = activeDialog !== 'none' || !hasStartedGame;
-    const syncLobbyMusic = () => {
-      getEngine()?.setLobbyMusicActive?.(isLobbyOpen);
+    if (activeDialog !== 'none') {
+      setMobileSheetOpen(false);
+    }
+    const syncLobbyState = () => {
+      const eng = getEngine();
+      eng?.setLobbyMusicActive?.(isLobbyOpen);
+      eng?.setLobbyPaused?.(isLobbyOpen);
     };
-    syncLobbyMusic();
-    window.addEventListener('wizardchess:ready', syncLobbyMusic);
-    return () => window.removeEventListener('wizardchess:ready', syncLobbyMusic);
+    syncLobbyState();
+    window.addEventListener('wizardchess:ready', syncLobbyState);
+    return () => window.removeEventListener('wizardchess:ready', syncLobbyState);
   }, [activeDialog, hasStartedGame]);
 
   // Delegated Mixkit UI Click SFX for all Lobby, Armory, and HUD controls
@@ -1321,93 +1416,92 @@ export default function App() {
         Show UI [H]
       </button>
 
-      <div id="hud-top" aria-hidden={uiHidden}>
+      <div
+        id="hud-top"
+        aria-hidden={uiHidden || activeDialog !== 'none'}
+        style={{ display: activeDialog !== 'none' ? 'none' : undefined }}
+      >
         <div className="hud-group" id="hud-left">
-          <div className="brand-pill">
-            <span className="brand-title">Wizard Chess</span>
-          </div>
+          <button
+            type="button"
+            className="hud-btn primary hud-lobby-back-btn"
+            id="btn-hud-lobby-top"
+            onClick={() => {
+              setMobileSheetOpen(false);
+              getEngine()?.setLobbyPaused?.(true);
+              setActiveDialog('gateway');
+            }}
+            title="Return to Sanctum Lobby (Pauses Game)"
+          >
+            ← Lobby
+          </button>
+
           <div className={`status-pill ${inCheck ? 'in-check' : ''}`} id="status-pill">
             <span className="turn-dot" id="turn-dot"></span>
-            <span id="turn-text">Select Game Mode</span>
-            <span className="mode-badge" id="mode-badge">Sanctum Lobby</span>
+            <span id="turn-text">White to Move</span>
+            <span className="mode-badge" id="mode-badge">Vs Bot</span>
           </div>
 
-          <div
-            className={`check-indicator-badge ${inCheck ? 'active' : ''}`}
-            id="check-indicator-badge"
-            role="status"
-            aria-live="assertive"
-            title={
-              inCheck
-                ? `${checkedColor === 'b' ? 'Black' : 'White'} King is in CHECK!`
-                : 'No King currently in Check'
-            }
-          >
-            <span className="check-indicator-icon" aria-hidden="true">
-              <PlaySwordsVectorIcon size={15} />
-            </span>
-            <span className="check-indicator-label">
-              {inCheck
-                ? `CHECK • ${checkedColor === 'b' ? 'BLACK KING' : 'WHITE KING'}`
-                : 'NO CHECK'}
-            </span>
-          </div>
+          {inCheck && (
+            <div
+              className="check-indicator-badge active"
+              id="check-indicator-badge"
+              role="status"
+              aria-live="assertive"
+            >
+              <span className="check-indicator-icon" aria-hidden="true">
+                <PlaySwordsVectorIcon size={12} />
+              </span>
+              <span className="check-indicator-label">CHECK!</span>
+            </div>
+          )}
 
           <button
             type="button"
             className="gold-wallet-btn"
             id="gold-wallet-badge"
-            onClick={() =>
-              setActiveDialog((prev) =>
-                prev === 'armory' ? (hasStartedGame ? 'none' : 'gateway') : 'armory'
-              )
-            }
-            title="Gold Coins earned from shattering pieces and winning matches — Click to open Skin Reliquary"
+            onClick={() => {
+              setMobileSheetOpen(false);
+              getEngine()?.setLobbyPaused?.(true);
+              setActiveDialog('armory');
+            }}
+            title="Open Skin Reliquary"
           >
             <span className="gold-coin-glyph" aria-hidden="true">
-              <GoldCoinVectorIcon size={16} />
+              <GoldCoinVectorIcon size={13} />
             </span>
             <span className="gold-wallet-amount">{economy.gold}</span>
-            <span className="gold-wallet-unit">Gold</span>
-          </button>
-
-          <button
-            type="button"
-            className={`hud-rank-pill rank-pill-${rankProgress.currentTier.id}`}
-            onClick={() => setActiveDialog('gateway')}
-            title={`Current Rank: ${rankProgress.currentTier.title} (${economy.stats.wins} Wins) — Click to open Sanctum Lobby`}
-          >
-            <span className="hud-rank-glyph" aria-hidden="true">
-              <CommanderSigilVectorIcon sigil={rankProgress.currentTier.crestGlyph} size={15} />
-            </span>
-            <span className="hud-rank-label">{rankProgress.currentTier.name}</span>
-          </button>
-
-          <button
-            type="button"
-            className="hud-btn hud-settings-btn"
-            id="btn-hud-settings-top"
-            onClick={() => {
-              getEngine()?.playLobbyClickSfx?.('tab');
-              setActiveDialog('settings');
-            }}
-            title="Sanctum Audio & Profile Settings"
-          >
-            <SettingsGearVectorIcon size={14} />
-            <span>Settings</span>
           </button>
         </div>
 
-        <button
-          type="button"
-          className={`hud-btn mobile-controls-trigger ${mobileSheetOpen ? 'active' : ''}`}
-          id="btn-mobile-controls"
-          aria-expanded={mobileSheetOpen}
-          aria-controls="hud-right"
-          onClick={() => setMobileSheetOpen((prev) => !prev)}
-        >
-          {mobileSheetOpen ? 'Close' : 'Menu'}
-        </button>
+        <div className="hud-compact-actions">
+          <button
+            type="button"
+            className="hud-btn hud-micro-btn"
+            onClick={() => getEngine()?.setCameraPreset?.('player')}
+            title="Flip / Reset Player Camera"
+          >
+            Cam ↻
+          </button>
+          <button
+            type="button"
+            className={`hud-btn hud-micro-btn ${sfxEnabled ? 'active' : ''}`}
+            onClick={handleToggleSfx}
+            title="Toggle Sound Effects"
+          >
+            {sfxEnabled ? 'SFX' : 'Mute'}
+          </button>
+          <button
+            type="button"
+            className={`hud-btn mobile-controls-trigger ${mobileSheetOpen ? 'active' : ''}`}
+            id="btn-mobile-controls"
+            aria-expanded={mobileSheetOpen}
+            aria-controls="hud-right"
+            onClick={() => setMobileSheetOpen((prev) => !prev)}
+          >
+            {mobileSheetOpen ? '✕' : '☰ Toggles'}
+          </button>
+        </div>
 
         <div
           className={`mobile-sheet-backdrop ${mobileSheetOpen ? 'open' : ''}`}
@@ -1422,19 +1516,8 @@ export default function App() {
           className={`hud-group ${mobileSheetOpen ? 'mobile-sheet-open' : ''}`}
           id="hud-right"
         >
-          <div
-            className="mobile-sheet-handle-wrap"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMobileSheetOpen(false);
-            }}
-            aria-hidden="true"
-          >
-            <div className="mobile-sheet-handle"></div>
-          </div>
-
           <div className="mobile-sheet-header">
-            <span className="mobile-sheet-title">Sanctum Controls</span>
+            <span className="mobile-sheet-title">Match Toggles</span>
             <button
               type="button"
               className="mobile-sheet-close"
@@ -1443,59 +1526,44 @@ export default function App() {
                 e.stopPropagation();
                 setMobileSheetOpen(false);
               }}
-              aria-label="Close Controls"
+              aria-label="Close Toggles"
             >
-              Close ✕
+              ✕
             </button>
           </div>
 
-          <div className="mobile-sheet-section-label">Arena, Armory &amp; Settings</div>
+          <div className="mobile-sheet-section-label">Camera Views (Tap to Flip)</div>
 
           <button
-            type="button"
-            className={`hud-btn primary ${activeDialog === 'gateway' || activeDialog === 'play' ? 'active' : ''}`}
-            id="btn-arena-hub"
-            title="Open Sanctum Gateway: Play, Skins, Google Login, Live Leaderboards, and Settings"
-            onClick={() => {
-              setMobileSheetOpen(false);
-              setActiveDialog((prev) =>
-                prev === 'gateway' ? (hasStartedGame ? 'none' : 'gateway') : 'gateway'
-              );
-            }}
+            className="hud-btn active"
+            id="btn-cam-player"
+            title="Player Camera (Click again to flip White / Black view)"
           >
-            Sanctum Lobby
+            Player
           </button>
-
           <button
-            type="button"
-            className={`hud-btn ${activeDialog === 'armory' ? 'active' : ''}`}
-            id="btn-skin-shop"
-            title="Unlock and equip 3D Piece Sets and Board Themes with Gold"
-            onClick={() => {
-              setMobileSheetOpen(false);
-              setActiveDialog((prev) =>
-                prev === 'armory' ? (hasStartedGame ? 'none' : 'gateway') : 'armory'
-              );
-            }}
+            className="hud-btn"
+            id="btn-cam-top"
+            title="Overhead Board View"
           >
-            Skins ({economy.gold}G)
+            Overhead
           </button>
-
           <button
-            type="button"
-            className={`hud-btn ${activeDialog === 'settings' ? 'active' : ''}`}
-            id="btn-sheet-settings"
-            title="Adjust volume, sound effects, rank profile, and cloud saves"
-            onClick={() => {
-              setMobileSheetOpen(false);
-              setActiveDialog('settings');
-            }}
+            className="hud-btn"
+            id="btn-cam-side"
+            title="Side Profile View"
           >
-            <SettingsGearVectorIcon size={14} /> Settings
+            Side
+          </button>
+          <button
+            className="hud-btn"
+            id="btn-cam-wide"
+            title="Wide Cathedral View"
+          >
+            Cathedral
           </button>
 
-          <div className="hud-divider" aria-hidden="true"></div>
-          <div className="mobile-sheet-section-label">Game Actions</div>
+          <div className="mobile-sheet-section-label">Match Actions</div>
 
           <button
             className="hud-btn"
@@ -1503,7 +1571,7 @@ export default function App() {
             title="Switch between Playing as White and Playing as Black"
             onClick={() => setMobileSheetOpen(false)}
           >
-            Play as Black
+            Switch Side
           </button>
           <button
             className="hud-btn"
@@ -1516,55 +1584,18 @@ export default function App() {
           <button
             className="hud-btn"
             id="btn-reset"
-            title="Start a fresh game on the altar"
+            title="Restart Match on the Altar"
             onClick={() => setMobileSheetOpen(false)}
           >
-            New Game
+            Restart
           </button>
 
-          <div className="hud-divider" aria-hidden="true"></div>
-          <div className="mobile-sheet-section-label">
-            <span>Camera Views</span>
-            <span className="mobile-sheet-section-sub">Tap active view to flip</span>
-          </div>
-
-          <button
-            className="hud-btn active"
-            id="btn-cam-player"
-            title="Player Camera (Click again to flip White / Black view)"
-          >
-            Player Cam
-          </button>
-          <button
-            className="hud-btn"
-            id="btn-cam-top"
-            title="Overhead Board View (Click again to flip White / Black orientation)"
-          >
-            Overhead
-          </button>
-          <button
-            className="hud-btn"
-            id="btn-cam-side"
-            title="Side Profile View (Click again to switch East / West side)"
-          >
-            Side
-          </button>
-          <button
-            className="hud-btn"
-            id="btn-cam-wide"
-            title="Wide Cathedral View (Click again to switch North Rose / South Narthex)"
-          >
-            Cathedral
-          </button>
-
-          <div className="hud-divider" aria-hidden="true"></div>
-          <div className="mobile-sheet-section-label">Display, Voice &amp; Gestures</div>
+          <div className="mobile-sheet-section-label">Quick Audio &amp; HUD</div>
 
           <button
             type="button"
             className={`hud-btn ${sfxEnabled ? 'active' : ''}`}
             id="btn-sfx-toggle"
-            title="Toggle Combat, Lobby Click & Piece Kill Sound Effects (SFX)"
             onClick={handleToggleSfx}
           >
             {sfxEnabled ? 'SFX: ON' : 'SFX: OFF'}
@@ -1574,7 +1605,6 @@ export default function App() {
             type="button"
             className={`hud-btn ${lobbyMusicEnabled ? 'active' : ''}`}
             id="btn-music-toggle"
-            title="Toggle Sanctum Lobby Background Music"
             onClick={handleToggleLobbyMusic}
           >
             {lobbyMusicEnabled ? 'Music: ON' : 'Music: OFF'}
@@ -1584,7 +1614,6 @@ export default function App() {
             type="button"
             className={`hud-btn ${voiceEnabled ? 'active' : ''}`}
             id="btn-voice-toggle"
-            title="Toggle Check & Checkmate Victory Fanfare Announcement"
             onClick={handleToggleVoiceAnnouncer}
           >
             {voiceEnabled ? 'Fanfare: ON' : 'Fanfare: OFF'}
@@ -1593,15 +1622,36 @@ export default function App() {
           <button
             className="hud-btn"
             id="btn-hide-ui"
-            title="Toggle HUD visibility (Shortcut: H)"
             onClick={() => setMobileSheetOpen(false)}
           >
             Hide UI [H]
           </button>
 
-          <div className="mobile-sheet-hint">
-            <strong>Touch:</strong> Tap Piece to Move &nbsp;•&nbsp; 1-Finger Drag: Orbit &nbsp;•&nbsp; 2-Finger Drag: Pan &nbsp;•&nbsp; Pinch: Zoom
-          </div>
+          <button
+            type="button"
+            className="hud-btn primary"
+            id="btn-arena-hub"
+            onClick={() => {
+              setMobileSheetOpen(false);
+              getEngine()?.setLobbyPaused?.(true);
+              setActiveDialog('gateway');
+            }}
+          >
+            ← Return to Lobby
+          </button>
+
+          <button
+            type="button"
+            className="hud-btn"
+            id="btn-skin-shop"
+            onClick={() => {
+              setMobileSheetOpen(false);
+              getEngine()?.setLobbyPaused?.(true);
+              setActiveDialog('armory');
+            }}
+          >
+            Skins ({economy.gold}G)
+          </button>
         </div>
       </div>
 
@@ -1644,24 +1694,13 @@ export default function App() {
               </div>
 
               <div className="gateway-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  type="button"
-                  className="sanctum-modal-close"
-                  id="btn-gateway-settings-header"
-                  onClick={() => {
-                    getEngine()?.playLobbyClickSfx?.('tab');
-                    setActiveDialog('settings');
-                  }}
-                  title="Open Sanctum Settings: Audio, Volume & Profile"
-                >
-                  <SettingsGearVectorIcon size={14} /> Settings
-                </button>
                 {hasStartedGame && (
                   <button
                     type="button"
                     className="sanctum-modal-close gold-trim"
                     onClick={() => {
                       requestAppFullscreenPortrait();
+                      getEngine()?.setLobbyPaused?.(false);
                       setActiveDialog('none');
                     }}
                   >
@@ -1680,9 +1719,14 @@ export default function App() {
               aria-label="Player Rank Tier and Portrait"
             >
               <div className="rank-portrait-column">
-                <div
-                  className={`rank-portrait-shell rank-border-${displayedRankTier.id}`}
-                  title={`${displayedRankTier.title} — ${displayedRankTier.borderEffectName}`}
+                <button
+                  type="button"
+                  className={`rank-portrait-shell rank-border-${displayedRankTier.id} clickable-portrait-btn`}
+                  title="Click to Change Profile Photo & Commander Name"
+                  onClick={() => {
+                    getEngine()?.playLobbyClickSfx?.('tab');
+                    setActiveDialog('settings');
+                  }}
                 >
                   <div className="rank-border-aura" aria-hidden="true"></div>
                   <div className="rank-border-ring" aria-hidden="true"></div>
@@ -1692,10 +1736,10 @@ export default function App() {
                   <span className="rank-corner-ornament br" aria-hidden="true"></span>
 
                   <div className="rank-portrait-inner">
-                    {currentUser?.photoURL ? (
+                    {customProfilePhoto || currentUser?.photoURL ? (
                       <img
-                        src={currentUser.photoURL}
-                        alt={currentUser.displayName || 'Commander'}
+                        src={customProfilePhoto || currentUser?.photoURL || ''}
+                        alt={customCommanderName || currentUser?.displayName || 'Commander'}
                         className="rank-commander-img"
                       />
                     ) : (
@@ -1709,7 +1753,7 @@ export default function App() {
                   <div className="rank-crest-seal" aria-hidden="true">
                     <CommanderSigilVectorIcon sigil={displayedRankTier.crestGlyph} size={14} />
                   </div>
-                </div>
+                </button>
               </div>
 
               <div className="rank-details-column">
@@ -1720,7 +1764,9 @@ export default function App() {
                       style={{ color: displayedRankTier.primaryHex }}
                     >
                       Rank {displayedRankTier.numeral} · {displayedRankTier.name} Tier
-                      {currentUser ? ` · ${currentUser.displayName || currentUser.email}` : ' · Local Commander'}
+                      {' · '}
+                      {customCommanderName ||
+                        (currentUser ? currentUser.displayName || currentUser.email : 'Local Commander')}
                     </span>
                     <div className="rank-tier-heading">
                       <span className="rank-tier-main-title">{displayedRankTier.title}</span>
@@ -1871,7 +1917,7 @@ export default function App() {
                 </div>
                 <div className="gateway-card-content">
                   <span className="gateway-card-title">SETTINGS</span>
-                  <span className="gateway-card-sub">Music &amp; SFX Volume · Rank Profile · Mute</span>
+                  <span className="gateway-card-sub">Change Profile Photo &amp; Name · Audio Volume</span>
                 </div>
                 <span className="gateway-card-chevron" aria-hidden="true">›</span>
               </button>
@@ -1921,22 +1967,20 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="armory-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  type="button"
-                  className="sanctum-modal-close"
-                  onClick={() => {
-                    getEngine()?.playLobbyClickSfx?.('tab');
-                    setActiveDialog('settings');
-                  }}
-                  title="Sanctum Audio & Profile Settings"
-                >
-                  <SettingsGearVectorIcon size={14} /> Settings
-                </button>
+              <div className="armory-header-right" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {hasStartedGame && (
+                  <button
+                    type="button"
+                    className="sanctum-modal-close"
+                    onClick={() => setActiveDialog("none")}
+                  >
+                    Resume Match
+                  </button>
+                )}
                 <button
                   type="button"
                   className="sanctum-modal-close gold-trim"
-                  onClick={() => setActiveDialog('gateway')}
+                  onClick={() => setActiveDialog("gateway")}
                 >
                   ← Back to Lobby
                 </button>
@@ -1945,196 +1989,7 @@ export default function App() {
 
             <div className="sanctum-tapered-rule" aria-hidden="true"></div>
 
-            {/* Commander Portrait & Rank Tier Progression Banner */}
-            <div
-              className={`sanctum-rank-banner rank-banner-${displayedRankTier.id}`}
-              aria-label="Player Rank Tier and Portrait"
-            >
-              {/* User Lobby Portrait with Unique Rank Tier Border Effect */}
-              <div className="rank-portrait-column">
-                <div
-                  className={`rank-portrait-shell rank-border-${displayedRankTier.id}`}
-                  title={`${displayedRankTier.title} — ${displayedRankTier.borderEffectName}`}
-                >
-                  <div className="rank-border-aura" aria-hidden="true"></div>
-                  <div className="rank-border-ring" aria-hidden="true"></div>
-                  <span className="rank-corner-ornament tl" aria-hidden="true"></span>
-                  <span className="rank-corner-ornament tr" aria-hidden="true"></span>
-                  <span className="rank-corner-ornament bl" aria-hidden="true"></span>
-                  <span className="rank-corner-ornament br" aria-hidden="true"></span>
-
-                  <div className="rank-portrait-inner">
-                    <svg
-                      viewBox="0 0 88 88"
-                      className="rank-commander-svg"
-                      aria-hidden="true"
-                    >
-                      <defs>
-                        <radialGradient id="commanderBgGrad" cx="50%" cy="35%" r="65%">
-                          <stop offset="0%" stopColor={displayedRankTier.primaryHex} stopOpacity="0.32" />
-                          <stop offset="60%" stopColor="#121622" stopOpacity="0.95" />
-                          <stop offset="100%" stopColor="#06080d" stopOpacity="1" />
-                        </radialGradient>
-                        <linearGradient id="commanderArmorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.92" />
-                          <stop offset="45%" stopColor={displayedRankTier.primaryHex} stopOpacity="0.95" />
-                          <stop offset="100%" stopColor={displayedRankTier.secondaryHex} stopOpacity="0.98" />
-                        </linearGradient>
-                      </defs>
-                      <rect width="88" height="88" rx="6" fill="url(#commanderBgGrad)" />
-                      {/* Cathedral Rose Halo */}
-                      <circle
-                        cx="44"
-                        cy="38"
-                        r="26"
-                        fill="none"
-                        stroke={displayedRankTier.primaryHex}
-                        strokeOpacity="0.34"
-                        strokeWidth="1.2"
-                        strokeDasharray="3 2"
-                      />
-                      {/* Sculpted Grandmaster Sovereign Bust & Crown */}
-                      <path
-                        d="M18 82 C19 64, 29 56, 44 56 C59 56, 69 64, 70 82 Z"
-                        fill="url(#commanderArmorGrad)"
-                        stroke={displayedRankTier.primaryHex}
-                        strokeWidth="1.4"
-                      />
-                      {/* Pauldron & Collar Filigree */}
-                      <path
-                        d="M25 66 L44 75 L63 66"
-                        fill="none"
-                        stroke="#0a0d14"
-                        strokeWidth="2.2"
-                      />
-                      {/* Armored Helm / Visor */}
-                      <path
-                        d="M32 34 C32 23, 56 23, 56 34 L54 48 C54 53, 34 53, 34 48 Z"
-                        fill="url(#commanderArmorGrad)"
-                        stroke="#0a0d14"
-                        strokeWidth="1.5"
-                      />
-                      {/* Sovereign Crown Spires */}
-                      <path
-                        d="M30 28 L33 17 L39 24 L44 13 L49 24 L55 17 L58 28 Z"
-                        fill={displayedRankTier.primaryHex}
-                        stroke="#0a0d14"
-                        strokeWidth="1.1"
-                      />
-                      {/* Glowing Visor Eyes */}
-                      <path
-                        d="M36 37 L42 39 L36 41 Z M52 37 L46 39 L52 41 Z"
-                        fill="#ffffff"
-                      />
-                    </svg>
-                    <div className="rank-portrait-shimmer" aria-hidden="true"></div>
-                  </div>
-
-                  <div className="rank-crest-seal" aria-hidden="true">
-                    <span>{displayedRankTier.crestGlyph}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Rank Tier Details, Progress Bar & Interactive Tier Inspector */}
-              <div className="rank-details-column">
-                <div className="rank-title-row">
-                  <div className="rank-title-group">
-                    <span
-                      className="rank-tier-kicker"
-                      style={{ color: displayedRankTier.primaryHex }}
-                    >
-                      Rank {displayedRankTier.numeral} · {displayedRankTier.name} Tier
-                      {previewRankTierId && previewRankTierId !== rankProgress.currentTier.id
-                        ? ' (Border Preview)'
-                        : ' (Earned Rank)'}
-                    </span>
-                    <div className="rank-tier-heading">
-                      <span className="rank-tier-main-title">{displayedRankTier.title}</span>
-                      <span className="rank-border-tag">
-                        ✦ {displayedRankTier.borderEffectName}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="rank-win-counter">
-                    <span className="rank-win-num">{economy.stats.wins}</span>
-                    <span className="rank-win-label">
-                      {economy.stats.wins === 1 ? 'Victory' : 'Victories'} · {playerRating} ELO
-                    </span>
-                  </div>
-                </div>
-
-                {/* Progress Bar toward Next Rank Tier */}
-                <div className="rank-progress-wrap">
-                  <div className="rank-progress-labels">
-                    <span className="rank-border-desc">{displayedRankTier.borderDescription}</span>
-                    <span className="rank-next-target">
-                      {rankProgress.nextTier
-                        ? `${rankProgress.winsRemaining} more ${
-                            rankProgress.winsRemaining === 1 ? 'win' : 'wins'
-                          } to ${rankProgress.nextTier.name} (${rankProgress.nextTier.minWins}W)`
-                        : 'Max Rank Tier Achieved (21+ Wins)'}
-                    </span>
-                  </div>
-                  <div className="rank-progress-track" aria-hidden="true">
-                    <div
-                      className="rank-progress-fill"
-                      style={{
-                        width: `${rankProgress.progressPercent}%`,
-                        background: `linear-gradient(90deg, ${displayedRankTier.secondaryHex}, ${displayedRankTier.primaryHex})`
-                      }}
-                    ></div>
-                  </div>
-                </div>
-
-                {/* Interactive Tier Ladder: Click any tier to preview its Portrait Border Effect */}
-                <div className="rank-ladder-row">
-                  <div className="rank-ladder-pills" role="group" aria-label="Rank Tier Border Preview">
-                    {RANK_TIERS.map((tier) => {
-                      const isEarned = rankProgress.currentTier.id === tier.id;
-                      const isUnlocked = economy.stats.wins >= tier.minWins;
-                      const isSelected = displayedRankTier.id === tier.id;
-                      return (
-                        <button
-                          key={tier.id}
-                          type="button"
-                          className={`rank-tier-chip chip-${tier.id} ${isSelected ? 'selected' : ''} ${
-                            isEarned ? 'earned' : ''
-                          }`}
-                          onClick={() =>
-                            setPreviewRankTierId(tier.id === rankProgress.currentTier.id ? null : tier.id)
-                          }
-                          title={`Preview ${tier.title} portrait border (${
-                            tier.maxWins !== null
-                              ? `${tier.minWins}–${tier.maxWins} Wins`
-                              : `${tier.minWins}+ Wins`
-                          })`}
-                        >
-                          <span className="chip-glyph" aria-hidden="true">{tier.crestGlyph}</span>
-                          <span className="chip-name">{tier.name}</span>
-                          <span className="chip-req">
-                            {isEarned ? 'ACTIVE' : isUnlocked ? 'UNLOCKED' : `${tier.minWins}W`}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {previewRankTierId && previewRankTierId !== rankProgress.currentTier.id && (
-                    <button
-                      type="button"
-                      className="rank-reset-preview-btn"
-                      onClick={() => setPreviewRankTierId(null)}
-                    >
-                      Show Earned ({rankProgress.currentTier.name})
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Engraved 3-Slot Sanctum Loadout Ledger */}
+            {/* Engraved 4-Slot Sanctum Loadout Ledger */}
             <div className="sanctum-loadout-ledger" aria-label="Equipped Sanctum Loadout">
               <button
                 type="button"
@@ -3168,11 +3023,22 @@ export default function App() {
             {/* Current Player Status Highlight Banner */}
             <div className={`player-self-plaque rank-plaque-${rankProgress.currentTier.id}`}>
               <div className="self-plaque-avatar">
-                <CommanderSigilVectorIcon sigil={customCommanderAvatar} size={26} />
+                {customProfilePhoto || currentUser?.photoURL ? (
+                  <img
+                    src={customProfilePhoto || currentUser?.photoURL || ''}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                  />
+                ) : (
+                  <CommanderSigilVectorIcon sigil={customCommanderAvatar} size={26} />
+                )}
               </div>
               <div className="self-plaque-info">
                 <div className="self-plaque-name">
-                  <span>{currentUser ? currentUser.displayName || currentUser.email : 'You (Local Commander)'}</span>
+                  <span>
+                    {customCommanderName ||
+                      (currentUser ? currentUser.displayName || currentUser.email : 'You (Local Commander)')}
+                  </span>
                   <span className="self-plaque-tag">YOUR STANDING</span>
                 </div>
                 <div className="self-plaque-stats">
@@ -3319,7 +3185,143 @@ export default function App() {
             <div className="sanctum-tapered-rule" aria-hidden="true"></div>
 
             <div className="sanctum-modal-body">
-              {/* SECTION 1: AUDIO VOLUME & MUTE CONTROLS */}
+              {/* SECTION 1: CHANGE PROFILE — PHOTO UPLOAD, COMMANDER NAME & RANK CREST */}
+              <div className="settings-section" id="settings-profile-section">
+                <h3 className="settings-section-title">Change Profile — Photo, Name &amp; Crest</h3>
+                <p className="settings-section-sub">
+                  Upload a custom profile photo, edit your Commander display name, or choose a royal crest sigil.
+                </p>
+
+                <div className="settings-profile-upload-card">
+                  <div className={`rank-portrait-shell rank-border-${displayedRankTier.id} settings-portrait-preview`}>
+                    <div className="rank-border-aura" aria-hidden="true"></div>
+                    <div className="rank-border-ring" aria-hidden="true"></div>
+                    <div className="rank-portrait-inner">
+                      {customProfilePhoto || currentUser?.photoURL ? (
+                        <img
+                          src={customProfilePhoto || currentUser?.photoURL || ''}
+                          alt="Player Profile"
+                          className="rank-commander-img"
+                        />
+                      ) : (
+                        <div className="rank-commander-glyph-avatar">
+                          <CommanderSigilVectorIcon sigil={customCommanderAvatar} size={38} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="settings-profile-upload-controls">
+                    <div className="settings-name-field-row">
+                      <label htmlFor="commander-name-input" className="settings-mini-label">
+                        Commander Display Name
+                      </label>
+                      <input
+                        id="commander-name-input"
+                        type="text"
+                        className="settings-name-input"
+                        placeholder={currentUser?.displayName || 'Enter Commander Name...'}
+                        value={customCommanderName}
+                        onChange={(e) => handleCommanderNameChange(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="settings-photo-btn-row">
+                      <input
+                        ref={profileFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={handleProfilePhotoUpload}
+                      />
+                      <button
+                        type="button"
+                        className="sanctum-action-btn upload-photo-btn"
+                        id="btn-upload-profile-photo"
+                        onClick={() => profileFileInputRef.current?.click()}
+                      >
+                        Upload Profile Photo
+                      </button>
+                      {customProfilePhoto && (
+                        <button
+                          type="button"
+                          className="sanctum-action-btn logout-btn"
+                          onClick={handleRemoveCustomPhoto}
+                        >
+                          Remove Photo
+                        </button>
+                      )}
+                    </div>
+                    <span className="settings-upload-hint">
+                      Supports PNG, JPG, WEBP. Automatically cropped &amp; synced to your profile.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="rank-preview-subheading">
+                  Or Choose a Royal Sigil Avatar
+                </div>
+                <div className="profile-crest-picker" role="radiogroup" aria-label="Commander Sigil">
+                  {[
+                    { glyph: '♔', name: 'High King' },
+                    { glyph: '♕', name: 'Empress' },
+                    { glyph: '🐉', name: 'Dragon Lord' },
+                    { glyph: '⚔', name: 'Sanctum Champion' },
+                    { glyph: '⚡', name: 'Arcane Archon' },
+                    { glyph: '🛡', name: 'Paladin Sentinel' }
+                  ].map((sigil) => {
+                    const isSelected = customCommanderAvatar === sigil.glyph;
+                    return (
+                      <button
+                        key={sigil.glyph}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        className={`crest-picker-btn ${isSelected ? 'selected' : ''}`}
+                        onClick={() => handleSelectAvatar(sigil.glyph)}
+                      >
+                        <span className="crest-glyph">
+                          <CommanderSigilVectorIcon sigil={sigil.glyph} size={28} />
+                        </span>
+                        <span className="crest-name">{sigil.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="rank-preview-subheading">
+                  Rank Tier Border Effect (Preview Any Border)
+                </div>
+                <div className="rank-ladder-pills" role="group" aria-label="Rank Tier Border Preview">
+                  {RANK_TIERS.map((tier) => {
+                    const isEarned = rankProgress.currentTier.id === tier.id;
+                    const isUnlocked = economy.stats.wins >= tier.minWins;
+                    const isSelected = displayedRankTier.id === tier.id;
+                    return (
+                      <button
+                        key={tier.id}
+                        type="button"
+                        className={`rank-tier-chip chip-${tier.id} ${isSelected ? 'selected' : ''} ${
+                          isEarned ? 'earned' : ''
+                        }`}
+                        onClick={() =>
+                          setPreviewRankTierId(tier.id === rankProgress.currentTier.id ? null : tier.id)
+                        }
+                      >
+                        <span className="chip-glyph" aria-hidden="true">
+                          <CommanderSigilVectorIcon sigil={tier.crestGlyph} size={15} />
+                        </span>
+                        <span className="chip-name">{tier.name}</span>
+                        <span className="chip-req">
+                          {isEarned ? 'ACTIVE' : isUnlocked ? 'UNLOCKED' : `${tier.minWins}W`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 2: AUDIO VOLUME & MUTE CONTROLS */}
               <div className="settings-section">
                 <h3 className="settings-section-title">Audio &amp; Volume Controls</h3>
                 <div className="settings-volume-list">
@@ -3394,71 +3396,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SECTION 2: COMMANDER PROFILE & RANK CREST */}
-              <div className="settings-section">
-                <h3 className="settings-section-title">Commander Profile &amp; Rank Crest</h3>
-                <p className="settings-section-sub">
-                  Customize the sigil displayed in your lobby portrait and leaderboard badge.
-                </p>
-
-                <div className="profile-crest-picker" role="radiogroup" aria-label="Commander Sigil">
-                  {[
-                    { glyph: '♔', name: 'High King' },
-                    { glyph: '♕', name: 'Empress' },
-                    { glyph: '🐉', name: 'Dragon Lord' },
-                    { glyph: '⚔', name: 'Sanctum Champion' },
-                    { glyph: '⚡', name: 'Arcane Archon' },
-                    { glyph: '🛡', name: 'Paladin Sentinel' }
-                  ].map((sigil) => {
-                    const isSelected = customCommanderAvatar === sigil.glyph;
-                    return (
-                      <button
-                        key={sigil.glyph}
-                        type="button"
-                        role="radio"
-                        aria-checked={isSelected}
-                        className={`crest-picker-btn ${isSelected ? 'selected' : ''}`}
-                        onClick={() => handleSelectAvatar(sigil.glyph)}
-                      >
-                        <span className="crest-glyph">
-                          <CommanderSigilVectorIcon sigil={sigil.glyph} size={28} />
-                        </span>
-                        <span className="crest-name">{sigil.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="rank-preview-subheading">
-                  Rank Tier Border Effect (Preview Any Border)
-                </div>
-                <div className="rank-ladder-pills" role="group" aria-label="Rank Tier Border Preview">
-                  {RANK_TIERS.map((tier) => {
-                    const isEarned = rankProgress.currentTier.id === tier.id;
-                    const isUnlocked = economy.stats.wins >= tier.minWins;
-                    const isSelected = displayedRankTier.id === tier.id;
-                    return (
-                      <button
-                        key={tier.id}
-                        type="button"
-                        className={`rank-tier-chip chip-${tier.id} ${isSelected ? 'selected' : ''} ${
-                          isEarned ? 'earned' : ''
-                        }`}
-                        onClick={() =>
-                          setPreviewRankTierId(tier.id === rankProgress.currentTier.id ? null : tier.id)
-                        }
-                      >
-                        <span className="chip-glyph" aria-hidden="true">{tier.crestGlyph}</span>
-                        <span className="chip-name">{tier.name}</span>
-                        <span className="chip-req">
-                          {isEarned ? 'ACTIVE' : isUnlocked ? 'UNLOCKED' : `${tier.minWins}W`}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* SECTION 3: GOOGLE CLOUD SAVE & AUTH */}
               <div className="settings-section">
                 <h3 className="settings-section-title">Google Cloud Save &amp; Authentication</h3>
@@ -3514,9 +3451,12 @@ export default function App() {
         </div>
       )}
 
-      <div id="hud-bottom">
+      <div
+        id="hud-bottom"
+        style={{ display: activeDialog !== 'none' ? 'none' : undefined }}
+      >
         <div className="hint-pill" id="controls-hint">
-          <strong>Controls:</strong> Click Piece to Move &nbsp;•&nbsp; Left-Drag: Orbit &nbsp;•&nbsp; Right-Drag: Pan &nbsp;•&nbsp; Scroll: Zoom &nbsp;•&nbsp; WASD + R/F: Fly Cam &nbsp;•&nbsp; H: Hide UI
+          <strong>Controls:</strong> Click Piece to Move &nbsp;•&nbsp; Drag: Orbit &nbsp;•&nbsp; Scroll: Zoom &nbsp;•&nbsp; H: Hide UI
         </div>
         {gameMode === 'pass' && (
           <button
@@ -3524,7 +3464,7 @@ export default function App() {
             className="hud-btn pass-flip-btn"
             onClick={() => getEngine()?.flipPassCameraNow?.()}
           >
-            Flip Turn Camera ↻
+            Flip Cam ↻
           </button>
         )}
         <div className="captured-pill" id="captured-tray"></div>

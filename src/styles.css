@@ -4520,3 +4520,369 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   color: var(--gold-bright);
   filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.7));
 }
+
+
+/* ========================================================================== */
+/* Ultra-Compact Top HUD Bar, Compact Menu Popover & Profile Photo Upload     */
+/* ========================================================================== */
+
+#hud-top {
+  top: max(6px, env(safe-area-inset-top, 6px)) !important;
+  left: 6px !important;
+  right: 6px !important;
+  gap: 4px !important;
+  z-index: 30 !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap !important;
+}
+
+#hud-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.hud-lobby-back-btn {
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 2px 8px !important;
+  font-size: 0.64rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  border-radius: 4px !important;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.status-pill {
+  padding: 2px 7px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  font-size: 0.64rem !important;
+  gap: 4px !important;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.status-pill #turn-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-pill .mode-badge {
+  font-size: 0.54rem !important;
+  padding: 1px 5px !important;
+}
+
+@media (max-width: 560px) {
+  .status-pill .mode-badge {
+    display: none !important;
+  }
+}
+
+.check-indicator-badge:not(.active) {
+  display: none !important;
+}
+
+.check-indicator-badge.active {
+  padding: 2px 6px !important;
+  height: 28px !important;
+  font-size: 0.58rem !important;
+  gap: 3px !important;
+  flex-shrink: 0;
+}
+
+.gold-wallet-btn {
+  padding: 2px 7px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  font-size: 0.66rem !important;
+  gap: 3px !important;
+  flex-shrink: 0;
+}
+
+.hud-compact-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.hud-micro-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 2px 7px !important;
+  font-size: 0.62rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  border-radius: 4px !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Unified Compact Menu Trigger Button on All Viewports */
+#btn-mobile-controls.mobile-controls-trigger {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  pointer-events: auto;
+  flex-shrink: 0;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 2px 8px !important;
+  font-size: 0.64rem !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
+  border: 1px solid rgba(212, 175, 55, 0.55);
+  background: rgba(12, 15, 22, 0.92);
+  color: var(--gold-bright);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+}
+
+.clickable-portrait-btn {
+  cursor: pointer;
+  border: none;
+  padding: 5px;
+}
+
+.mobile-sheet-backdrop {
+  display: block !important;
+  position: fixed;
+  inset: 0;
+  z-index: 28;
+  background: rgba(4, 6, 11, 0.35);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.mobile-sheet-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Ultra-Compact Floating Toggles Popover (#hud-right) */
+#hud-right {
+  position: fixed !important;
+  top: calc(max(6px, env(safe-area-inset-top, 6px)) + 32px) !important;
+  right: 6px !important;
+  left: auto !important;
+  bottom: auto !important;
+  width: min(256px, calc(100vw - 12px)) !important;
+  max-height: calc(100dvh - 48px) !important;
+  z-index: 29 !important;
+  background: linear-gradient(180deg, rgba(14, 18, 28, 0.98) 0%, rgba(8, 10, 16, 0.99) 100%) !important;
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 175, 55, 0.52) !important;
+  border-radius: 6px !important;
+  padding: 7px 8px 8px !important;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.88) !important;
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 4px !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  pointer-events: none !important;
+  transform: translateY(-6px) scale(0.97) !important;
+  opacity: 0 !important;
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.14s ease !important;
+}
+
+#hud-right.mobile-sheet-open {
+  transform: translateY(0) scale(1) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+#hud-right .mobile-sheet-handle-wrap,
+#hud-right .hud-divider,
+#hud-right .mobile-sheet-hint {
+  display: none !important;
+}
+
+#hud-right .mobile-sheet-header {
+  grid-column: span 6;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 4px !important;
+  margin-bottom: 1px !important;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.18);
+}
+
+#hud-right .mobile-sheet-title {
+  font-size: 0.66rem !important;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+}
+
+#hud-right .mobile-sheet-close {
+  min-height: 20px !important;
+  padding: 1px 6px !important;
+  font-size: 0.6rem !important;
+}
+
+#hud-right .mobile-sheet-section-label {
+  grid-column: span 6;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.54rem !important;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 2px 1px 0 !important;
+}
+
+#hud-right .hud-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 26px !important;
+  height: 26px !important;
+  padding: 2px 5px !important;
+  border-radius: 4px !important;
+  font-size: 0.6rem !important;
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#btn-cam-player,
+#btn-cam-top,
+#btn-cam-side,
+#btn-cam-wide {
+  grid-column: span 3 !important;
+}
+
+#btn-side-toggle,
+#btn-ai-move,
+#btn-reset {
+  grid-column: span 2 !important;
+}
+
+#btn-sfx-toggle,
+#btn-music-toggle,
+#btn-voice-toggle,
+#btn-hide-ui {
+  grid-column: span 3 !important;
+}
+
+#btn-arena-hub,
+#btn-skin-shop {
+  grid-column: span 3 !important;
+}
+
+/* Profile Photo Upload Card inside Settings Modal */
+.settings-profile-upload-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(20, 24, 36, 0.92), rgba(10, 13, 20, 0.96));
+  border: 1px solid rgba(212, 175, 55, 0.36);
+  border-radius: 6px;
+}
+
+.settings-portrait-preview {
+  width: 72px !important;
+  height: 72px !important;
+  flex-shrink: 0;
+}
+
+.settings-profile-upload-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-name-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-mini-label {
+  font-family: 'Cinzel', 'Georgia', serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.settings-name-input {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(212, 175, 55, 0.38);
+  background: rgba(7, 9, 14, 0.92);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  outline: none;
+}
+
+.settings-name-input:focus {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.25);
+}
+
+.settings-photo-btn-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upload-photo-btn {
+  background: linear-gradient(180deg, rgba(245, 215, 110, 0.24) 0%, rgba(212, 175, 55, 0.14) 100%) !important;
+  border: 1px solid rgba(245, 215, 110, 0.68) !important;
+  color: var(--gold-bright) !important;
+  padding: 6px 12px !important;
+  font-size: 0.7rem !important;
+}
+
+.upload-photo-btn:hover {
+  background: linear-gradient(180deg, rgba(245, 215, 110, 0.36) 0%, rgba(212, 175, 55, 0.22) 100%) !important;
+}
+
+.settings-upload-hint {
+  font-size: 0.64rem;
+  color: var(--muted);
+}
+
+@media (max-width: 520px) {
+  .settings-profile-upload-card {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .settings-portrait-preview {
+    margin: 0 auto;
+  }
+  .settings-photo-btn-row {
+    justify-content: center;
+  }
+}

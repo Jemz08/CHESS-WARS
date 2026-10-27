@@ -53,7 +53,7 @@ export function initWizardChess() {
       preserveDrawingBuffer: isAutomatedTest
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = false;
@@ -64,6 +64,21 @@ export function initWizardChess() {
     if (renderer.debug) {
       renderer.debug.checkShaderErrors = false;
     }
+    renderer.domElement.addEventListener(
+      'webglcontextlost',
+      (e) => {
+        e.preventDefault();
+      },
+      false
+    );
+    renderer.domElement.addEventListener(
+      'webglcontextrestored',
+      () => {
+        renderer.shadowMap.needsUpdate = true;
+        renderer.render(scene, camera);
+      },
+      false
+    );
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -225,8 +240,8 @@ export function initWizardChess() {
     const keyLight = new THREE.DirectionalLight(0xfff0d6, 2.55);
     keyLight.position.set(3.8, 8.5, 4.2);
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.mapSize.width = 1024;
+    keyLight.shadow.mapSize.height = 1024;
     keyLight.shadow.camera.near = 1.0;
     keyLight.shadow.camera.far = 22.0;
     const d = 3.2;
@@ -1631,40 +1646,43 @@ export function initWizardChess() {
         );
       });
 
-      // 2. Load 6 Sculpted & Rigged Chess Piece Models (shared between White & Black with PBR materials)
-      for (const type of PIECE_TYPES) {
-        await new Promise((resolve) => {
-          loadGltfModel(`${type}_white`).then(
-            (gltf) => {
-              const toRemove = [];
-              gltf.scene.traverse((child) => {
-                const nm = child.name || '';
-                if (nm.includes('Icosphere') || nm.includes('glTF_not_exported')) {
-                  child.visible = false;
-                  toRemove.push(child);
-                }
-              });
-              for (const rem of toRemove) {
-                if (rem.parent) rem.parent.remove(rem);
-              }
+      // 2. Load 6 Sculpted & Rigged Chess Piece Models in parallel
+      await Promise.all(
+        PIECE_TYPES.map(
+          (type) =>
+            new Promise((resolve) => {
+              loadGltfModel(`${type}_white`).then(
+                (gltf) => {
+                  const toRemove = [];
+                  gltf.scene.traverse((child) => {
+                    const nm = child.name || '';
+                    if (nm.includes('Icosphere') || nm.includes('glTF_not_exported')) {
+                      child.visible = false;
+                      toRemove.push(child);
+                    }
+                  });
+                  for (const rem of toRemove) {
+                    if (rem.parent) rem.parent.remove(rem);
+                  }
 
-              const tpl = {
-                scene: gltf.scene,
-                animations: gltf.animations || []
-              };
-              pieceTemplates[`${type}_w`] = tpl;
-              pieceTemplates[`${type}_b`] = tpl;
-              bumpProgress(`Summoned ${type.toUpperCase()} Statue...`);
-              resolve();
-            },
-            (err) => {
-              console.warn(`Piece load warning (${type}):`, err);
-              bumpProgress(`Loaded ${type}`);
-              resolve();
-            }
-          );
-        });
-      }
+                  const tpl = {
+                    scene: gltf.scene,
+                    animations: gltf.animations || []
+                  };
+                  pieceTemplates[`${type}_w`] = tpl;
+                  pieceTemplates[`${type}_b`] = tpl;
+                  bumpProgress(`Summoned ${type.toUpperCase()} Statue...`);
+                  resolve();
+                },
+                (err) => {
+                  console.warn(`Piece load warning (${type}):`, err);
+                  bumpProgress(`Loaded ${type}`);
+                  resolve();
+                }
+              );
+            })
+        )
+      );
 
       document.getElementById('loading-overlay')?.classList.add('hidden');
       sfxVfxManager.playLoadingCompleteSfx?.();
@@ -1816,10 +1834,19 @@ export function initWizardChess() {
         }
         activeMixers.push(mixer);
       } else {
-        root = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.1, 0.14, 0.42, 16),
-          color === 'w' ? whitePieceMat : blackPieceMat
-        );
+        const builtFallback = buildProceduralPieceGroup('classic_staunton', type, color, {
+          whitePieceMat,
+          blackPieceMat,
+          goldTrimMat: sideTrimMat,
+          forgedSteelMat: sideBladeMat
+        });
+        root = builtFallback.root;
+        proceduralAnim = {
+          animRig: builtFallback.animRig,
+          animParts: builtFallback.animParts,
+          mode: 'idle',
+          clipTime: 0
+        };
       }
 
       const worldPos = boardToWorld(r, c);
@@ -1971,6 +1998,7 @@ export function initWizardChess() {
     }
 
     // Scripted Chess Notation & Step-Through Choreography State (Features 3a, 3b, 3c)
+    let lobbyPaused = true;
     let scriptedGameActive = false;
     let scriptDeviated = false;
     let scriptMoves = [];
@@ -3500,7 +3528,7 @@ export function initWizardChess() {
         clearTimeout(aiTimer);
         aiTimer = null;
       }
-      if (!matchStarted) return;
+      if (!matchStarted || lobbyPaused) return;
       if (gameOver || isAnimatingMove || preMoveHighlightTask) return;
       if (scriptedGameActive) return;
       if (gameMode !== 'single' || !aiAutoPlay) return;
@@ -3510,6 +3538,8 @@ export function initWizardChess() {
         aiTimer = setTimeout(() => {
           aiTimer = null;
           if (
+            matchStarted &&
+            !lobbyPaused &&
             !scriptedGameActive &&
             gameMode === 'single' &&
             currentTurn === aiColor &&
@@ -4493,7 +4523,7 @@ export function initWizardChess() {
     renderer.domElement.addEventListener('pointerup', (e) => {
       const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
       if (moveDist > 6) return;
-      if (!matchStarted || isAnimatingMove || gameOver) return;
+      if (!matchStarted || lobbyPaused || isAnimatingMove || gameOver) return;
 
       // Enforce turn ownership in Multiplayer, and in Single Player only block while AI auto-move timer is actively pending
       if (gameMode === 'multi' && currentTurn !== playerColor) return;
@@ -4963,7 +4993,9 @@ export function initWizardChess() {
 
     function handleMatchmakingSuccess(code, assignedColor, roomObj, opponentRating = 1000) {
       clearMatchmakingTimers();
+      lobbyPaused = false;
       matchStarted = true;
+      orbitControls.enabled = true;
       onlineQueueStatus = 'matched';
       scriptedGameActive = false;
       gameMode = 'multi';
@@ -5213,9 +5245,12 @@ export function initWizardChess() {
     }
 
     function startBotMatch(difficulty = 'medium', side = 'w') {
+      document.getElementById('loading-overlay')?.classList.add('hidden');
       cancelOnlineMatchmaking();
       stopMultiplayerSync();
+      lobbyPaused = false;
       matchStarted = true;
+      orbitControls.enabled = true;
       scriptedGameActive = false;
       gameMode = 'single';
       botDifficulty = ['easy', 'medium', 'hard'].includes(difficulty) ? difficulty : 'medium';
@@ -5230,12 +5265,21 @@ export function initWizardChess() {
       }
       window.history.replaceState({}, '', window.location.pathname);
       resetChessBoard(true);
+      setCameraForSide(playerColor, true);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, camera);
     }
 
     function startPassAndPlayMatch(autoFlip = true) {
+      document.getElementById('loading-overlay')?.classList.add('hidden');
       cancelOnlineMatchmaking();
       stopMultiplayerSync();
+      lobbyPaused = false;
       matchStarted = true;
+      orbitControls.enabled = true;
       scriptedGameActive = false;
       gameMode = 'pass';
       passAutoFlip = Boolean(autoFlip);
@@ -5250,6 +5294,12 @@ export function initWizardChess() {
       }
       window.history.replaceState({}, '', window.location.pathname);
       resetChessBoard(true);
+      setCameraForSide('w', true);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, camera);
     }
 
     async function createMultiplayerRoom(preferredColor) {
@@ -5764,6 +5814,27 @@ export function initWizardChess() {
       getLobbyMusicEnabled: () => sfxVfxManager.getLobbyMusicEnabled?.() ?? true,
       setLobbyMusicVolume: (vol) => sfxVfxManager.setLobbyMusicVolume?.(vol),
       getLobbyMusicVolume: () => sfxVfxManager.getLobbyMusicVolume?.() ?? 1.0,
+      setLobbyPaused: (paused) => {
+        lobbyPaused = Boolean(paused);
+        if (lobbyPaused) {
+          if (aiTimer) {
+            clearTimeout(aiTimer);
+            aiTimer = null;
+          }
+          preMoveHighlightTask = null;
+          heldCameraKeys.clear();
+          orbitControls.enabled = false;
+        } else {
+          orbitControls.enabled = true;
+          clock.getDelta();
+          renderer.shadowMap.needsUpdate = true;
+          renderer.render(scene, camera);
+          if (matchStarted) {
+            maybeScheduleAIMove();
+          }
+        }
+      },
+      getLobbyPaused: () => lobbyPaused,
       triggerPieceKillVfxPreview: (victimType = 'queen', r = 3, c = 3) => {
         const wPos = boardToWorld(r, c);
         spawnStoneShatter(wPos, 'b', victimType, 'queen', 0, -1);
@@ -6365,6 +6436,10 @@ export function initWizardChess() {
         requestAnimationFrame(animate);
       }
       if (manualStepMode) return;
+      if (lobbyPaused && !navigator.webdriver) {
+        clock.getDelta();
+        return;
+      }
       const dt = Math.min(clock.getDelta(), 0.1);
       stepScene(dt || 0.016, true);
     }
@@ -6376,25 +6451,34 @@ export function initWizardChess() {
     });
 
 
-    // Startup sequence
+    // Startup sequence: initialize the 3D board & render loop immediately so the canvas is never blank,
+    // then upgrade pieces in-place as soon as GLTF assets finish streaming
+    const params = new URLSearchParams(window.location.search);
+    const urlSide = params.get('side');
+    const urlRoom = params.get('room');
+    if (urlSide === 'b' || urlSide === 'black') {
+      playerColor = 'b';
+    }
+    resetChessBoard(true, true);
+    setCameraForSide(playerColor, true);
+    orbitControls.enabled = false;
+    renderer.render(scene, camera);
+    if (!navigator.webdriver) {
+      animate();
+    }
+
     (async () => {
       await loadAllAssets();
-      const params = new URLSearchParams(window.location.search);
-      const urlSide = params.get('side');
-      const urlRoom = params.get('room');
-      if (urlSide === 'b' || urlSide === 'black') {
-        playerColor = 'b';
-      }
-      if (urlRoom) {
+      if (urlRoom && !matchStarted) {
         await joinMultiplayerRoom(urlRoom);
       } else {
-        resetChessBoard(true, true);
+        rebuildBoardPieces();
       }
+      renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, camera);
       window.dispatchEvent(new CustomEvent('wizardchess:ready'));
       if (navigator.webdriver) {
         window.wizardChess.stepBy(0.9, 15);
-      } else {
-        animate();
       }
     })();
 }
