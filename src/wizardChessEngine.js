@@ -8,7 +8,7 @@ import {
   rebuildBoardArchitectureGroup
 } from './customBoardAndPieceModels.js';
 import { createWorldSceneryManager } from './worldSceneries.js';
-import { createSoundAndVfxManager, PIECE_KILL_PROFILES } from './soundAndVfxEngine.js';
+import { createSoundAndVfxManager, PIECE_KILL_PROFILES, getArchetypeKillProfile } from './soundAndVfxEngine.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -1803,6 +1803,8 @@ export function initWizardChess() {
         proceduralAnim = {
           animRig: built.animRig,
           animParts: built.animParts,
+          archetype: sideArchetype,
+          pieceType: type,
           mode: 'idle',
           clipTime: 0
         };
@@ -1844,6 +1846,8 @@ export function initWizardChess() {
         proceduralAnim = {
           animRig: builtFallback.animRig,
           animParts: builtFallback.animParts,
+          archetype: 'classic_staunton',
+          pieceType: type,
           mode: 'idle',
           clipTime: 0
         };
@@ -2509,18 +2513,19 @@ export function initWizardChess() {
     const sharedCrystalGeo = new THREE.OctahedronGeometry(1.15, 0);
     const sharedDragonGeo = new THREE.TetrahedronGeometry(1.25, 0);
 
-    function spawnStoneShatter(worldPos, color, victimType = 'pawn', attackerType = 'queen', dirX = 0, dirZ = 1) {
+    function spawnStoneShatter(worldPos, color, victimType = 'pawn', attackerType = 'queen', dirX = 0, dirZ = 1, attackerArchetype = null) {
       const primaryMat = color === 'w' ? whitePieceMat : blackPieceMat;
       const sideArchetype = getSideArchetype(color);
+      const resolvedAttackerArch = attackerArchetype || getSideArchetype(color === 'w' ? 'b' : 'w');
       const sideTrimMat = color === 'w' ? whiteTrimMat : blackTrimMat;
       const sideBladeMat = color === 'w' ? whiteBladeMat : blackBladeMat;
 
       const vType = String(victimType || 'pawn').toLowerCase();
-      const killProfile = PIECE_KILL_PROFILES[vType] || PIECE_KILL_PROFILES.pawn;
+      const killProfile = getArchetypeKillProfile(resolvedAttackerArch, vType);
 
-      // Trigger piece-specific procedural SFX and multi-stage 3D Kill VFX spectacle
-      sfxVfxManager.playPieceKillSfx(vType, attackerType);
-      sfxVfxManager.spawnPieceKillVfx(worldPos, vType, color, attackerType, dirX, dirZ);
+      // Trigger Chess Piece Set-specific procedural SFX and multi-stage 3D Kill VFX spectacle
+      sfxVfxManager.playPieceKillSfx(vType, attackerType, resolvedAttackerArch);
+      sfxVfxManager.spawnPieceKillVfx(worldPos, vType, color, attackerType, dirX, dirZ, resolvedAttackerArch);
 
       let mainGeo = sharedShardGeo;
       if (sideArchetype === 'classic_staunton') mainGeo = sharedSplinterGeo;
@@ -2540,7 +2545,7 @@ export function initWizardChess() {
         vType === 'bishop' ? 1.18 : 1.05;
 
       for (let i = 0; i < shardCount; i++) {
-        const isGlowingCoreShard = i % 6 === 0;
+        const isGlowingCoreShard = i % 5 === 0;
         const isAccentShard = !isGlowingCoreShard && i % 3 === 0;
         const shardMat = isGlowingCoreShard
           ? glowingEmberMat
@@ -3136,10 +3141,11 @@ export function initWizardChess() {
           } else {
             // Phase 2: Rigged Attack (Continuous Stalk -> Physical Weapon Impact -> Shatter Burst -> Follow-Through Advance)
             phaseName = 'strike';
+            const attackerArchetype = piece.archetype || getSideArchetype(piece.color);
             if (!attackAnimStarted) {
               attackAnimStarted = true;
               playPieceClip(piece, 'Attack', false, 0.08);
-              sfxVfxManager.playAttackChargeAndSwingSfx(piece.type, captured?.type || 'pawn');
+              sfxVfxManager.playAttackChargeAndSwingSfx(piece.type, captured?.type || 'pawn', attackerArchetype);
             }
 
             // Keep any bystanders immediately adjacent to strikePos yielded slightly outward during the weapon swing
@@ -3161,33 +3167,62 @@ export function initWizardChess() {
 
             const atkClipTime = (elapsed - tApproach) * atkProfile.timeScale;
 
-            // Keep attacker continuously moving forward during wind-up stalk, downward strike, and post-shatter follow-through
+            // Archetype-specific root choreography during the strike phase:
+            // - gothic_warriors (default): melee stalk & forward weapon lunge
+            // - classic_staunton: telekinetic glide toward target while ascending vertically for straight-down anvil drop
+            // - arcane_cyber: stabilized ranged laser-cannon lock-on stance with hydraulic recoil kickback (zero melee ram)
+            // - dragon_elemental: holds aerial standoff hover (slight backward breath-pressure recoil, zero forward headbutt/ram)
             if (!shatterTriggered && captured && captured.mesh) {
               const stalkLead = 0.028;
               let lungeOffset = 0;
-              if (atkClipTime < SWING_START_CLIP_TIME) {
-                const windupProgress = Math.min(1, atkClipTime / Math.max(0.05, SWING_START_CLIP_TIME));
-                lungeOffset = windupProgress * stalkLead;
+              if (attackerArchetype === 'dragon_elemental') {
+                // Dragon hovers at standoff distance and recoils slightly from its sustained flamethrower breath stream
+                const breathPhase = Math.min(1, atkClipTime / Math.max(0.1, BLOW_CLIP_TIME));
+                lungeOffset = -Math.sin(breathPhase * Math.PI) * 0.024;
+              } else if (attackerArchetype === 'classic_staunton') {
+                // Staunton piece glides smoothly toward the target while ascending high into the air for its vertical anvil drop
+                const glidePhase = Math.min(1, atkClipTime / Math.max(0.1, CONTACT_CLIP_TIME));
+                const smoothGlide = glidePhase * glidePhase * (3 - 2 * glidePhase);
+                lungeOffset = smoothGlide * Math.max(0.032, atkProfile.maxLunge * 0.85);
+              } else if (attackerArchetype === 'arcane_cyber') {
+                // Cyber-Mech holds stabilized ranged firing stance and recoils backward as dual railguns & chest laser discharge
+                if (atkClipTime < 0.25) {
+                  const lockPhase = Math.min(1, atkClipTime / 0.25);
+                  lungeOffset = lockPhase * 0.012;
+                } else {
+                  const firePhase = Math.min(1, (atkClipTime - 0.25) / Math.max(0.05, BLOW_CLIP_TIME - 0.25));
+                  lungeOffset = 0.012 - Math.sin(firePhase * Math.PI) * 0.034;
+                }
               } else {
-                const slashPhase = Math.min(
-                  1,
-                  (atkClipTime - SWING_START_CLIP_TIME) / Math.max(0.05, BLOW_CLIP_TIME - SWING_START_CLIP_TIME)
-                );
-                lungeOffset =
-                  stalkLead + Math.sin(slashPhase * Math.PI * 0.85) * Math.max(0.018, atkProfile.maxLunge - stalkLead);
+                // Default gothic_warriors melee stalk & lunge
+                if (atkClipTime < SWING_START_CLIP_TIME) {
+                  const windupProgress = Math.min(1, atkClipTime / Math.max(0.05, SWING_START_CLIP_TIME));
+                  lungeOffset = windupProgress * stalkLead;
+                } else {
+                  const slashPhase = Math.min(
+                    1,
+                    (atkClipTime - SWING_START_CLIP_TIME) / Math.max(0.05, BLOW_CLIP_TIME - SWING_START_CLIP_TIME)
+                  );
+                  lungeOffset =
+                    stalkLead + Math.sin(slashPhase * Math.PI * 0.85) * Math.max(0.018, atkProfile.maxLunge - stalkLead);
+                }
               }
               piece.mesh.position.set(
                 strikePos.x + dirX * lungeOffset,
                 BOARD_SURFACE_Y,
                 strikePos.z + dirZ * lungeOffset
               );
-              if (atkClipTime < CONTACT_CLIP_TIME) {
+              const effectiveContactTime =
+                attackerArchetype === 'dragon_elemental' || attackerArchetype === 'arcane_cyber'
+                  ? Math.min(CONTACT_CLIP_TIME, 0.28)
+                  : CONTACT_CLIP_TIME;
+              if (atkClipTime < effectiveContactTime) {
                 captured.mesh.position.copy(endPos);
               } else {
-                // Weapon makes physical impact on defender before defender bursts
+                // Weapon / laser beam / dragonfire makes impact on defender before defender bursts
                 const shoveProgress = Math.min(
                   1,
-                  (atkClipTime - CONTACT_CLIP_TIME) / Math.max(0.04, BLOW_CLIP_TIME - CONTACT_CLIP_TIME)
+                  (atkClipTime - effectiveContactTime) / Math.max(0.04, BLOW_CLIP_TIME - effectiveContactTime)
                 );
                 const shoveDist = shoveProgress * 0.045;
                 captured.mesh.position.set(
@@ -3203,17 +3238,22 @@ export function initWizardChess() {
               }
             }
 
-            // Contact: weapon physically strikes defender
+            // Contact: weapon / laser / dragonfire strikes defender with set-specific 3D contact effect
+            const contactThreshold =
+              attackerArchetype === 'dragon_elemental' || attackerArchetype === 'arcane_cyber'
+                ? Math.min(CONTACT_CLIP_TIME, 0.28)
+                : CONTACT_CLIP_TIME;
             if (
               !defenderFlinchTriggered &&
-              (atkClipTime >= CONTACT_CLIP_TIME || elapsed >= tContact + 0.06)
+              (atkClipTime >= contactThreshold || elapsed >= tContact + 0.06)
             ) {
               defenderFlinchTriggered = true;
               if (captured) {
                 playPieceClip(captured, 'Shatter', false, 0.04);
-                sfxVfxManager.playWeaponContactClashSfx(piece.type, captured.type);
-                sfxVfxManager.spawnWeaponContactVfx(endPos, dirX, dirZ, captured.type);
-                impactFlashLight.color.setHex(0xffe0a3);
+                sfxVfxManager.playWeaponContactClashSfx(piece.type, captured.type, attackerArchetype);
+                sfxVfxManager.spawnWeaponContactVfx(endPos, dirX, dirZ, captured.type, attackerArchetype);
+                const contactProf = getArchetypeKillProfile(attackerArchetype, captured.type);
+                impactFlashLight.color.setHex(contactProf.primaryHex || 0xffe0a3);
                 impactFlashLight.position.set(
                   endPos.x - dirX * 0.08,
                   BOARD_SURFACE_Y + 0.28,
@@ -3223,7 +3263,7 @@ export function initWizardChess() {
               }
             }
 
-            // Blow Burst: after visible weapon impact & follow-through, defender explodes with piece-specific Kill VFX & SFX!
+            // Blow Burst: after visible weapon impact & follow-through, defender explodes with piece-set-specific Kill VFX & SFX!
             if (!shatterTriggered && (atkClipTime >= BLOW_CLIP_TIME || elapsed >= tImpact + 0.06)) {
               shatterTriggered = true;
               impactActualTime = elapsed;
@@ -3231,8 +3271,8 @@ export function initWizardChess() {
               if (captured && captured.mesh) {
                 const shatterOrigin = captured.mesh.position.clone();
                 scene.remove(captured.mesh);
-                spawnStoneShatter(shatterOrigin, captured.color, captured.type, piece.type, dirX, dirZ);
-                const killProf = PIECE_KILL_PROFILES[captured.type] || PIECE_KILL_PROFILES.pawn;
+                spawnStoneShatter(shatterOrigin, captured.color, captured.type, piece.type, dirX, dirZ, attackerArchetype);
+                const killProf = getArchetypeKillProfile(attackerArchetype, captured.type);
                 const isHumanCapture =
                   gameMode === 'pass' ||
                   (gameMode === 'single' && piece.color === playerColor) ||
@@ -3242,6 +3282,7 @@ export function initWizardChess() {
                     detail: {
                       attackerColor: piece.color,
                       attackerType: piece.type,
+                      attackerArchetype,
                       capturedType: captured.type,
                       capturedColor: captured.color,
                       killTitle: killProf.title,
@@ -4074,8 +4115,9 @@ export function initWizardChess() {
     // Feature 7: Checkmate Rigged King Fall-Over Animation & Cathedral Overlay
     // =========================================================================
     function spawnKingFallImpact(worldPos, color) {
-      sfxVfxManager.playPieceKillSfx('king', 'queen');
-      sfxVfxManager.spawnPieceKillVfx(worldPos, 'king', color, 'queen', 0, 1);
+      const winnerArch = getSideArchetype(color === 'w' ? 'b' : 'w');
+      sfxVfxManager.playPieceKillSfx('king', 'queen', winnerArch);
+      sfxVfxManager.spawnPieceKillVfx(worldPos, 'king', color, 'queen', 0, 1, winnerArch);
       const mat = color === 'w' ? whitePieceMat : blackPieceMat;
       for (let i = 0; i < 28; i++) {
         const sz = 0.018 + Math.random() * 0.034;
@@ -5835,9 +5877,16 @@ export function initWizardChess() {
         }
       },
       getLobbyPaused: () => lobbyPaused,
-      triggerPieceKillVfxPreview: (victimType = 'queen', r = 3, c = 3) => {
+      triggerPieceKillVfxPreview: (victimType = 'queen', r = 3, c = 3, attackerArchetype = null) => {
         const wPos = boardToWorld(r, c);
-        spawnStoneShatter(wPos, 'b', victimType, 'queen', 0, -1);
+        spawnStoneShatter(wPos, 'b', victimType, 'queen', 0, -1, attackerArchetype);
+      },
+      playShowcaseAttackSfx: (archetypeId = 'gothic_warriors', pieceType = 'king') => {
+        sfxVfxManager.playAttackChargeAndSwingSfx(pieceType, 'queen', archetypeId);
+        setTimeout(() => {
+          sfxVfxManager.playWeaponContactClashSfx(pieceType, 'queen', archetypeId);
+          sfxVfxManager.playPieceKillSfx('queen', pieceType, archetypeId);
+        }, 380);
       },
       getShowcasePiece: (archetypeId = 'gothic_warriors', color = 'w', pieceType = 'king', customMats = null) => {
         const sideTrimMat = customMats?.goldTrimMat || (color === 'w' ? whiteTrimMat : blackTrimMat);
@@ -5851,6 +5900,14 @@ export function initWizardChess() {
             goldTrimMat: sideTrimMat,
             forgedSteelMat: sideBladeMat
           });
+          built.root.userData.proceduralAnim = {
+            animRig: built.animRig,
+            animParts: built.animParts,
+            archetype: archetypeId,
+            pieceType,
+            mode: 'idle',
+            clipTime: 0
+          };
           return built.root;
         }
 
@@ -5877,6 +5934,7 @@ export function initWizardChess() {
               child.receiveShadow = true;
             }
           });
+          root.userData.gltfAnimations = tpl.animations || [];
           return root;
         }
 
@@ -5887,6 +5945,14 @@ export function initWizardChess() {
           goldTrimMat: sideTrimMat,
           forgedSteelMat: sideBladeMat
         });
+        fallback.root.userData.proceduralAnim = {
+          animRig: fallback.animRig,
+          animParts: fallback.animParts,
+          archetype: 'classic_staunton',
+          pieceType,
+          mode: 'idle',
+          clipTime: 0
+        };
         return fallback.root;
       },
       announceSanctumEvent,

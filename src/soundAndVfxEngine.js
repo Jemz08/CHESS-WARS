@@ -82,6 +82,555 @@ export const PIECE_KILL_PROFILES = {
 };
 
 // ============================================================================
+// Archetype-Specific Combat Profiles (Each Chess Piece Set Has Its Own Unique Attack & Effect)
+// ============================================================================
+export const ARCHETYPE_COMBAT_PROFILES = {
+  gothic_warriors: {
+    id: 'gothic_warriors',
+    setName: 'Gothic Sanctum Warriors',
+    attackName: 'CRUSADER RELIC CLEAVE',
+    effectSummary: 'Forged Broadsword Slash, Cathedral Rose Sigil & Iron Cross Shatter',
+    primaryHex: 0xff6b35,
+    secondaryHex: 0xd4af37,
+    coreHex: 0xfff3d1,
+    titles: {
+      pawn:   { title: 'SANCTUM VANGUARD SHIELD-BREAKER', subtitle: 'Heavy Crusader Broadsword Cleave & Iron Buckler Shatter' },
+      rook:   { title: 'CATHEDRAL SIEGE CATACLYSM',       subtitle: 'Gargoyle Warhammer Crush & Stone Battlement Collapse' },
+      knight: { title: 'TEMPLAR LANCE THUNDERSTRIKE',     subtitle: 'Armored Warhorse Charge & Forged Barding Rupture' },
+      bishop: { title: 'INQUISITOR RELIQUARY JUDGEMENT',  subtitle: 'Flanged Sanctum Mace Cleave & Rose-Window Sigil Burst' },
+      queen:  { title: 'SOVEREIGN TWIN-BLADE OBLITERATION', subtitle: 'Cathedral Dual-Greatsword Flurry & Reliquary Collapse' },
+      king:   { title: 'CRUSADER EXECUTION APOCALYPSE',   subtitle: 'Executioner Greatsword Cleave & Tolling Cathedral Bell' }
+    }
+  },
+  classic_staunton: {
+    id: 'classic_staunton',
+    setName: 'Classic Staunton Tournament',
+    attackName: 'GRANDMASTER TELEKINETIC SLAM',
+    effectSummary: '360° Levitation Spin, Imperial Meteor Drop & Golden Compass Star Shockwave',
+    primaryHex: 0xffd166,
+    secondaryHex: 0xe09f3e,
+    coreHex: 0xffffff,
+    titles: {
+      pawn:   { title: 'GRANDMASTER GAMBIT CRUSH',        subtitle: 'Telekinetic Boxwood Lunge & Golden Compass Burst' },
+      rook:   { title: 'CASTLE TURRET METEOR SLAM',       subtitle: 'Levitating Tower Drop & Turned Brass Ring Shockwave' },
+      knight: { title: 'ROYAL CAVALRY COMPASS STRIKE',    subtitle: '360° Carved Warhorse Leap & Ivory Splinter Detonation' },
+      bishop: { title: 'GRANDMASTER DIAGONAL DECREE',     subtitle: 'Slotted Mitre Ascent & 8-Pointed Golden Star Impact' },
+      queen:  { title: 'IMPERIAL CORONET CHECKMATE SLAM', subtitle: '12-Pearl Crown Telekinetic Drop & Astrolabe Ring Nova' },
+      king:   { title: 'SUPREME GRANDMASTER EXECUTION',   subtitle: 'Imperial Crown Meteor Impact & Golden Tournament Burst' }
+    }
+  },
+  arcane_cyber: {
+    id: 'arcane_cyber',
+    setName: 'Arcane Runic & Cyber-Mech',
+    attackName: 'VALKYRIE PLASMA & ORBITAL ION BEAM',
+    effectSummary: 'Overdrive Gyro Dash, Plasma Lance Beam, Hex Holo-Matrix & Orbital Laser Pillar',
+    primaryHex: 0x00f5d4,
+    secondaryHex: 0x9d4edd,
+    coreHex: 0xe0fbfc,
+    titles: {
+      pawn:   { title: 'CYBER-SENTINEL PLASMA BREACH',    subtitle: 'Phase-Shield Dash, Hex Reticle Lock & Neon Crystal Shatter' },
+      rook:   { title: 'ORBITAL PYLON ION CANNON',        subtitle: 'Tectonic EMP Shockwave & Sky-to-Board Laser Obliteration' },
+      knight: { title: 'VALKYRIE THRUSTER HYPER-STRIKE',  subtitle: 'Zero-G Energy Wing Dive & High-Voltage Arc Discharge' },
+      bishop: { title: 'ASTROLABE MATRIX JUDGEMENT',      subtitle: 'Overdrive Gyro Singularity & Hexagonal Runic Laser Beam' },
+      queen:  { title: 'SERAPHIM PLASMA SUPERNOVA',       subtitle: '6-Wing Cyber Overdrive, Twin Ion Blades & EMP Dome Burst' },
+      king:   { title: 'ARCHON ORBITAL APOCALYPSE',       subtitle: 'Sovereign Mech Core Overload & 5-Bolt Plasma Sky Strike' }
+    }
+  },
+  dragon_elemental: {
+    id: 'dragon_elemental',
+    setName: 'Dragon & Elemental Guardians',
+    attackName: 'HELLFIRE BREATH & MAGMA ERUPTION',
+    effectSummary: 'Winged Aerial Pounce, Living Dragonfire Breath Cone & Obsidian Magma Spires',
+    primaryHex: 0xff2a55,
+    secondaryHex: 0xff9e00,
+    coreHex: 0xfff3b0,
+    titles: {
+      pawn:   { title: 'DRAKE-WHELP HELLFIRE MAUL',       subtitle: 'Horned Jaws Lunge, Flame Jet & Scorched Obsidian Shards' },
+      rook:   { title: 'VOLCANIC CITADEL ERUPTION',       subtitle: 'Hellfire Brazier Cataclysm & 10 Magma Crag Spires' },
+      knight: { title: 'WYVERN SKY-DIVE INFERNO',         subtitle: 'Winged Aerial Swoop, Fanged Bite & Firestorm Vortex' },
+      bishop: { title: 'PYROMANCER CHALICE IMMOLATION',   subtitle: 'Ritual Dragonfire Geyser & Swirling Ember Tornado' },
+      queen:  { title: 'DRAGON EMPRESS FIVE-FLIGHT NOVA', subtitle: '4-Wing Aerial Dive, Blazing Diadem Breath & Lava Crater' },
+      king:   { title: 'ELDER DRAGON SOVEREIGN INFERNO',  subtitle: 'Colossal Winged Pounce, Flame Greatsword & Magma Apocalypse' }
+    }
+  }
+};
+
+export function getArchetypeKillProfile(attackerArchetype = 'gothic_warriors', victimType = 'pawn') {
+  const vKey = String(victimType || 'pawn').toLowerCase();
+  const baseProf = PIECE_KILL_PROFILES[vKey] || PIECE_KILL_PROFILES.pawn;
+  const archKey = ARCHETYPE_COMBAT_PROFILES[attackerArchetype] ? attackerArchetype : 'gothic_warriors';
+  const archProf = ARCHETYPE_COMBAT_PROFILES[archKey];
+  const customTitle = archProf.titles[vKey] || { title: baseProf.title, subtitle: baseProf.subtitle };
+
+  return {
+    ...baseProf,
+    archetypeId: archKey,
+    setName: archProf.setName,
+    attackName: archProf.attackName,
+    effectSummary: archProf.effectSummary,
+    title: customTitle.title,
+    subtitle: customTitle.subtitle,
+    primaryHex: archProf.primaryHex,
+    secondaryHex: archProf.secondaryHex,
+    coreHex: archProf.coreHex
+  };
+}
+
+// ============================================================================
+// Unity URP / ShaderGraph / Shuriken-Style 3D Shader VFX Builders
+// Inspired byitch.io Free Unity VFX Packs (https://itch.io/game-assets/free/tag-unity/tag-vfx):
+// 1. Unity URP Dissolve & Fresnel Energy Sphere Shader
+// 2. Unity Shuriken Scrolling Noise Slash Ribbon Shader
+// 3. Unity Procedural Magic Circle & Voronoi Ground Crack Shader
+// 4. Unity Soft-Particle Star-Flare Billboard Sprite Texture
+// ============================================================================
+const GLSL_NOISE_CHUNK = `
+  float hash21(vec2 p) {
+    p = fract(p * vec2(234.34, 435.345));
+    p += dot(p, p + 34.23);
+    return fract(p.x * p.y);
+  }
+  float valueNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+  float fbmNoise(vec2 p) {
+    float v = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 3; i++) {
+      v += amp * valueNoise(p);
+      p *= 2.04;
+      amp *= 0.5;
+    }
+    return v;
+  }
+`;
+
+export function createUnitySlashRibbonShaderMaterial(primaryHex = 0xff6b35, secondaryHex = 0xffd166, coreHex = 0xffffff) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uProgress: { value: 0 },
+      uPrimaryColor: { value: new THREE.Color(primaryHex) },
+      uSecondaryColor: { value: new THREE.Color(secondaryHex) },
+      uCoreColor: { value: new THREE.Color(coreHex) }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uProgress;
+      uniform vec3 uPrimaryColor;
+      uniform vec3 uSecondaryColor;
+      uniform vec3 uCoreColor;
+      varying vec2 vUv;
+      ${GLSL_NOISE_CHUNK}
+      void main() {
+        // Scrolling slash ribbon UV along arc
+        float head = smoothstep(0.0, 0.25, vUv.x) * (1.0 - smoothstep(0.65, 1.0, vUv.x));
+        float radialEdge = 1.0 - abs(vUv.y * 2.0 - 1.0);
+        radialEdge = pow(max(0.0, radialEdge), 1.35);
+
+        float n = fbmNoise(vec2(vUv.x * 6.0 - uTime * 9.0, vUv.y * 4.0 + uTime * 2.0));
+        float mask = head * radialEdge * smoothstep(uProgress * 0.85, 1.0, n + radialEdge * 0.55);
+
+        float coreFactor = smoothstep(0.58, 0.95, radialEdge * (0.7 + 0.3 * n));
+        vec3 col = mix(uSecondaryColor, uPrimaryColor, smoothstep(0.15, 0.65, radialEdge));
+        col = mix(col, uCoreColor, coreFactor);
+
+        float alpha = mask * (1.0 - uProgress * uProgress) * 1.35;
+        if (alpha < 0.01) discard;
+        gl_FragColor = vec4(col * 1.4, min(1.0, alpha));
+      }
+    `
+  });
+}
+
+export function createUnityFresnelDissolveSphereMaterial(primaryHex = 0x00f5d4, secondaryHex = 0x9d4edd, coreHex = 0xffffff) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uDissolve: { value: 0 },
+      uPrimaryColor: { value: new THREE.Color(primaryHex) },
+      uSecondaryColor: { value: new THREE.Color(secondaryHex) },
+      uCoreColor: { value: new THREE.Color(coreHex) }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormalView;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vNormalView = normalize(normalMatrix * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uDissolve;
+      uniform vec3 uPrimaryColor;
+      uniform vec3 uSecondaryColor;
+      uniform vec3 uCoreColor;
+      varying vec2 vUv;
+      varying vec3 vNormalView;
+      varying vec3 vViewDir;
+      ${GLSL_NOISE_CHUNK}
+      void main() {
+        float fresnel = pow(1.0 - abs(dot(normalize(vNormalView), normalize(vViewDir))), 2.1);
+        float n = fbmNoise(vUv * 7.5 + vec2(uTime * 2.2, -uTime * 1.8));
+        float threshold = uDissolve * 1.15;
+        if (n + fresnel * 0.38 < threshold) discard;
+
+        float burnEdge = 1.0 - smoothstep(threshold, threshold + 0.18, n + fresnel * 0.38);
+        vec3 col = mix(uSecondaryColor, uPrimaryColor, fresnel);
+        col = mix(col, uCoreColor, max(burnEdge, pow(fresnel, 3.0)));
+
+        float alpha = (fresnel * 0.85 + burnEdge * 0.95) * (1.0 - uDissolve * 0.92);
+        gl_FragColor = vec4(col * 1.5, min(1.0, alpha));
+      }
+    `
+  });
+}
+
+export function createUnityMagicCircleShaderMaterial(
+  primaryHex = 0xffd166,
+  secondaryHex = 0xe09f3e,
+  coreHex = 0xffffff,
+  styleMode = 0
+) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uProgress: { value: 0 },
+      uStyle: { value: styleMode },
+      uPrimaryColor: { value: new THREE.Color(primaryHex) },
+      uSecondaryColor: { value: new THREE.Color(secondaryHex) },
+      uCoreColor: { value: new THREE.Color(coreHex) }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uProgress;
+      uniform float uStyle;
+      uniform vec3 uPrimaryColor;
+      uniform vec3 uSecondaryColor;
+      uniform vec3 uCoreColor;
+      varying vec2 vUv;
+      ${GLSL_NOISE_CHUNK}
+      void main() {
+        vec2 p = vUv * 2.0 - 1.0;
+        float r = length(p);
+        if (r > 1.0) discard;
+        float a = atan(p.y, p.x);
+
+        // Outer & inner arcane rings
+        float outerRing = smoothstep(0.035, 0.0, abs(r - 0.92)) + smoothstep(0.02, 0.0, abs(r - 0.82));
+        float midRing = smoothstep(0.025, 0.0, abs(r - 0.56));
+        float innerRing = smoothstep(0.03, 0.0, abs(r - 0.28));
+
+        // Style-specific procedural geometry (0=Gothic Rose/Cross, 1=Staunton 8-Star, 2=Cyber Hex Circuit, 3=Dragon Voronoi Magma)
+        float spokes = 0.0;
+        if (uStyle < 0.5) {
+          // 12-petal Gothic Rose Window + 4 Crusader Crosses
+          float rose = abs(cos((a + uTime * 1.2) * 6.0));
+          spokes = smoothstep(0.04, 0.0, abs(r - (0.35 + 0.45 * rose)));
+          spokes += smoothstep(0.92, 0.99, abs(cos(a * 2.0 - uTime * 0.8))) * step(r, 0.88);
+        } else if (uStyle < 1.5) {
+          // 8-Pointed Grandmaster Compass Star & Chrono Ticks
+          float star = abs(cos((a - uTime * 1.5) * 4.0));
+          spokes = smoothstep(0.035, 0.0, abs(r - (0.32 + 0.52 * star)));
+          float ticks = step(0.65, sin(a * 24.0 + uTime * 4.0)) * smoothstep(0.05, 0.0, abs(r - 0.87));
+          spokes += ticks;
+        } else if (uStyle < 2.5) {
+          // 6-Sided Cyber-Arcane Hex Matrix & Data Traces
+          float hexAngle = floor((a + 3.14159) / 1.0472) * 1.0472 - 3.14159 + 0.5236;
+          float hexR = r * cos(a - hexAngle);
+          spokes = smoothstep(0.03, 0.0, abs(hexR - 0.68)) + smoothstep(0.025, 0.0, abs(hexR - 0.42));
+          spokes += step(0.82, sin(a * 6.0 - uTime * 6.0)) * step(r, 0.85);
+        } else {
+          // Volcanic Voronoi / FBM Magma Ground Cracks & Dragon Seal
+          float n = fbmNoise(p * 4.8 + vec2(uTime * 0.9, -uTime * 0.7));
+          float cracks = smoothstep(0.08, 0.0, abs(n - 0.48)) * (1.0 - r * 0.65);
+          float flames = abs(cos((a + uTime * 2.2) * 5.0));
+          spokes = cracks * 1.45 + smoothstep(0.04, 0.0, abs(r - (0.38 + 0.42 * flames)));
+        }
+
+        float pattern = clamp(outerRing + midRing + innerRing + spokes, 0.0, 1.5);
+        float radialGlow = (1.0 - r) * 0.32;
+        vec3 col = mix(uSecondaryColor, uPrimaryColor, clamp(pattern, 0.0, 1.0));
+        col = mix(col, uCoreColor, clamp((pattern - 0.75) * 1.6, 0.0, 1.0));
+
+        float fade = (1.0 - pow(uProgress, 1.45));
+        float alpha = (pattern * 0.95 + radialGlow) * fade;
+        if (alpha < 0.015) discard;
+        gl_FragColor = vec4(col * 1.35, min(1.0, alpha));
+      }
+    `
+  });
+}
+
+let cachedUnityStarFlareTex = null;
+export function getUnityStarFlareTexture() {
+  if (cachedUnityStarFlareTex || typeof document === 'undefined') return cachedUnityStarFlareTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const cx = 64;
+    const cy = 64;
+    const grad = ctx.createRadialGradient(cx, cy, 1, cx, cy, 62);
+    grad.addColorStop(0.0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.22, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(0.55, 'rgba(255,255,255,0.22)');
+    grad.addColorStop(1.0, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+
+    // 4-point Unity Shuriken star flare cross
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 56, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 4.5, 56, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  cachedUnityStarFlareTex = new THREE.CanvasTexture(canvas);
+  cachedUnityStarFlareTex.needsUpdate = true;
+  return cachedUnityStarFlareTex;
+}
+
+let cachedUnityFireFlameTex = null;
+export function getUnityFireFlameTexture() {
+  if (cachedUnityFireFlameTex || typeof document === 'undefined') return cachedUnityFireFlameTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const cx = 64;
+    const cy = 64;
+    // Soft billowing PYROLUX-style flame cloud puff with multi-lobe organic heat core
+    const baseGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, 60);
+    baseGrad.addColorStop(0.0, 'rgba(255,255,255,1.0)');
+    baseGrad.addColorStop(0.28, 'rgba(255,245,210,0.92)');
+    baseGrad.addColorStop(0.58, 'rgba(255,180,90,0.48)');
+    baseGrad.addColorStop(0.82, 'rgba(255,90,30,0.16)');
+    baseGrad.addColorStop(1.0, 'rgba(255,40,0,0.0)');
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, 128, 128);
+
+    // Add 5 organic flame lobes so rotating billboard sprites look like churning fire tongues
+    const lobes = [
+      { ox: -12, oy: -8, r: 34 },
+      { ox: 14, oy: -6, r: 32 },
+      { ox: -8, oy: 14, r: 30 },
+      { ox: 10, oy: 12, r: 34 },
+      { ox: 0, oy: -16, r: 28 }
+    ];
+    for (const lb of lobes) {
+      const lg = ctx.createRadialGradient(cx + lb.ox, cy + lb.oy, 1, cx + lb.ox, cy + lb.oy, lb.r);
+      lg.addColorStop(0.0, 'rgba(255,255,255,0.55)');
+      lg.addColorStop(0.5, 'rgba(255,220,140,0.25)');
+      lg.addColorStop(1.0, 'rgba(255,120,20,0.0)');
+      ctx.fillStyle = lg;
+      ctx.beginPath();
+      ctx.arc(cx + lb.ox, cy + lb.oy, lb.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  cachedUnityFireFlameTex = new THREE.CanvasTexture(canvas);
+  cachedUnityFireFlameTex.needsUpdate = true;
+  return cachedUnityFireFlameTex;
+}
+
+/**
+ * PYROLUX-Style Volumetric 3D Dragon Fire Breath Stream Shader
+ * Streams a roaring, turbulent, swirling jet of living dragonfire from the dragon's jaws to the target.
+ */
+export function createUnityFireBreathShaderMaterial(
+  coreHex = 0xfff8d6,
+  midHex = 0xff9e00,
+  outerHex = 0xff2a00
+) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uProgress: { value: 0 },
+      uCoreColor: { value: new THREE.Color(coreHex) },
+      uMidColor: { value: new THREE.Color(midHex) },
+      uOuterColor: { value: new THREE.Color(outerHex) }
+    },
+    vertexShader: `
+      uniform float uTime;
+      uniform float uProgress;
+      varying vec2 vUv;
+      varying float vAxial;
+      varying vec3 vNormalView;
+      varying vec3 vViewDir;
+
+      void main() {
+        vUv = uv;
+        // uv.y runs from 0 (jaws/throat) to 1 (flame front / target impact)
+        float axial = clamp(1.0 - uv.y, 0.0, 1.0);
+        vAxial = axial;
+
+        vec3 pos = position;
+        float billow = pow(axial, 1.15);
+        float wave1 = sin(axial * 14.0 - uTime * 22.0 + uv.x * 6.28318) * 0.045 * billow;
+        float wave2 = cos(axial * 23.0 - uTime * 31.0 - uv.x * 12.56636) * 0.028 * billow;
+        pos.x += wave1 + wave2;
+        pos.z += wave2 - wave1 * 0.6;
+
+        vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+        vNormalView = normalize(normalMatrix * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uProgress;
+      uniform vec3 uCoreColor;
+      uniform vec3 uMidColor;
+      uniform vec3 uOuterColor;
+      varying vec2 vUv;
+      varying float vAxial;
+      varying vec3 vNormalView;
+      varying vec3 vViewDir;
+      ${GLSL_NOISE_CHUNK}
+
+      void main() {
+        // Stream advances from jaws (vAxial = 0) to target (vAxial = 1) rapidly, then dissipates
+        float reach = smoothstep(0.0, 0.22, uProgress);
+        float axialMask = 1.0 - smoothstep(reach * 0.82, reach + 0.18, vAxial);
+        float throatSoft = smoothstep(0.0, 0.12, vAxial);
+
+        // Fast scrolling multi-octave flame turbulence along the breath jet
+        vec2 flowUv1 = vec2(vUv.x * 5.0 + sin(vAxial * 6.0 - uTime * 8.0) * 0.25, vAxial * 4.5 - uTime * 6.8);
+        vec2 flowUv2 = vec2(vUv.x * 9.0 - cos(vAxial * 9.0 - uTime * 11.0) * 0.20, vAxial * 8.5 - uTime * 10.5);
+        float n1 = fbmNoise(flowUv1);
+        float n2 = fbmNoise(flowUv2);
+        float turb = mix(n1, n2, 0.48);
+
+        float facing = abs(dot(normalize(vNormalView), normalize(vViewDir)));
+        float softCylinder = pow(clamp(facing, 0.0, 1.0), 0.55);
+
+        float flameDensity = clamp((turb * 1.25 - vAxial * 0.32) * softCylinder, 0.0, 1.0);
+        float tailErode = smoothstep(Math.max(0.0, uProgress - 0.35) * 1.1, 1.0, turb + (1.0 - vAxial) * 0.45);
+
+        vec3 col = mix(uOuterColor, uMidColor, smoothstep(0.18, 0.58, flameDensity));
+        col = mix(col, uCoreColor, smoothstep(0.58, 0.92, flameDensity + (1.0 - vAxial) * 0.35));
+
+        float fadeOut = 1.0 - pow(clamp((uProgress - 0.55) / 0.45, 0.0, 1.0), 1.6);
+        float alpha = flameDensity * axialMask * throatSoft * tailErode * fadeOut * 1.55;
+        if (alpha < 0.015) discard;
+        gl_FragColor = vec4(col * 1.65, min(1.0, alpha));
+      }
+    `.replace('Math.max', 'max')
+  });
+}
+
+/**
+ * Arcane VFX / Sci-Fi Overcharged Plasma Beam & Ion Cannon Shader
+ */
+export function createUnityPlasmaBeamShaderMaterial(
+  primaryHex = 0x00f5d4,
+  secondaryHex = 0x9d4edd,
+  coreHex = 0xffffff
+) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uProgress: { value: 0 },
+      uPrimaryColor: { value: new THREE.Color(primaryHex) },
+      uSecondaryColor: { value: new THREE.Color(secondaryHex) },
+      uCoreColor: { value: new THREE.Color(coreHex) }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormalView;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vNormalView = normalize(normalMatrix * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uProgress;
+      uniform vec3 uPrimaryColor;
+      uniform vec3 uSecondaryColor;
+      uniform vec3 uCoreColor;
+      varying vec2 vUv;
+      varying vec3 vNormalView;
+      varying vec3 vViewDir;
+      ${GLSL_NOISE_CHUNK}
+
+      void main() {
+        float facing = pow(clamp(abs(dot(normalize(vNormalView), normalize(vViewDir))), 0.0, 1.0), 0.75);
+        float helix1 = sin(vUv.y * 28.0 - uTime * 38.0 + vUv.x * 6.28318) * 0.5 + 0.5;
+        float helix2 = cos(vUv.y * 19.0 - uTime * 26.0 - vUv.x * 6.28318) * 0.5 + 0.5;
+        float n = fbmNoise(vec2(vUv.x * 4.0, vUv.y * 8.0 - uTime * 14.0));
+
+        float energy = clamp(facing * 0.85 + pow(helix1 * helix2, 1.5) * 0.65 + n * 0.35, 0.0, 1.4);
+        vec3 col = mix(uSecondaryColor, uPrimaryColor, smoothstep(0.2, 0.65, energy));
+        col = mix(col, uCoreColor, smoothstep(0.68, 1.05, energy));
+
+        float endFade = smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.92, 1.0, vUv.y));
+        float lifeFade = 1.0 - pow(uProgress, 1.5);
+        float alpha = energy * endFade * lifeFade * 1.4;
+        if (alpha < 0.015) discard;
+        gl_FragColor = vec4(col * 1.7, min(1.0, alpha));
+      }
+    `
+  });
+}
+
+// ============================================================================
 // Mixkit Sound Effects (SFX) Engine
 // Sourced from https://mixkit.co/free-sound-effects/discover/slash/
 // and Mixkit Sword, Battle, Armor, Rock & Fantasy Sound Libraries
@@ -929,20 +1478,236 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
   }
 
   // ==========================================================================
-  // Multi-Stage Medieval Duel SFX: Stage 1 (Blade Draw) & Stage 2 (Air Slash)
-  // Core Mixkit /discover/slash/ #1476 "Sword slash swoosh" + Sword Slide #2798
+  // Unity-Style Procedural WebAudio SFX Synthesizer Layer
+  // Adds real-time sub-bass drops, FM laser sweeps, harmonic crystal chimes & flame-jets
   // ==========================================================================
-  function playAttackChargeAndSwingSfx(attackerType = 'queen', victimType = 'pawn') {
+  function playUnityProceduralLayerSfx(arch = 'gothic_warriors', stage = 'charge', weight = 1.0) {
+    const ctx = getAudioCtx();
+    if (!ctx || !sfxEnabled) return;
+    try {
+      const now = ctx.currentTime;
+      const bus = getMasterBus(ctx);
+
+      if (arch === 'arcane_cyber') {
+        // Sci-Fi FM Plasma Sweep / Sub-Bass EMP Drop
+        const osc = ctx.createOscillator();
+        const mod = ctx.createOscillator();
+        const modGain = ctx.createGain();
+        const gain = ctx.createGain();
+
+        osc.type = stage === 'kill' ? 'sawtooth' : 'sine';
+        mod.type = 'triangle';
+        mod.frequency.setValueAtTime(stage === 'kill' ? 68 : 140, now);
+        modGain.gain.setValueAtTime(stage === 'kill' ? 320 : 180, now);
+        modGain.gain.exponentialRampToValueAtTime(8, now + 0.42);
+
+        if (stage === 'charge') {
+          osc.frequency.setValueAtTime(220, now);
+          osc.frequency.exponentialRampToValueAtTime(1180, now + 0.28);
+        } else if (stage === 'contact') {
+          osc.frequency.setValueAtTime(1450, now);
+          osc.frequency.exponentialRampToValueAtTime(160, now + 0.24);
+        } else {
+          // Orbital Ion Beam Sub-Bass Drop
+          osc.frequency.setValueAtTime(420, now);
+          osc.frequency.exponentialRampToValueAtTime(38, now + 0.65);
+        }
+
+        const dur = stage === 'kill' ? 0.68 : 0.30;
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(stage === 'kill' ? 0.34 : 0.22, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+        mod.connect(modGain);
+        modGain.connect(osc.frequency);
+        osc.connect(gain);
+        gain.connect(bus);
+        mod.start(now);
+        osc.start(now);
+        mod.stop(now + dur + 0.02);
+        osc.stop(now + dur + 0.02);
+      } else if (arch === 'dragon_elemental') {
+        // Volcanic Sub-Bass Rumble + Roaring Flame-Jet Filter Sweep
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+
+        if (stage === 'charge') {
+          osc.frequency.setValueAtTime(85, now);
+          osc.frequency.linearRampToValueAtTime(155, now + 0.35);
+          filter.frequency.setValueAtTime(320, now);
+          filter.frequency.exponentialRampToValueAtTime(1250, now + 0.35);
+        } else {
+          osc.frequency.setValueAtTime(130, now);
+          osc.frequency.exponentialRampToValueAtTime(32, now + 0.62);
+          filter.frequency.setValueAtTime(980, now);
+          filter.frequency.exponentialRampToValueAtTime(140, now + 0.62);
+        }
+
+        const dur = stage === 'kill' ? 0.65 : 0.36;
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(stage === 'kill' ? 0.36 : 0.24, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(bus);
+        osc.start(now);
+        osc.stop(now + dur + 0.02);
+      } else if (arch === 'classic_staunton') {
+        // Grandmaster Harmonic Golden Chord + Telekinetic Sub-Drop
+        const freqs = stage === 'kill' ? [523.25, 659.25, 783.99, 1046.5] : [440, 659.25, 880];
+        const dur = stage === 'kill' ? 0.58 : 0.28;
+        freqs.forEach((f, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f / Math.sqrt(weight), now + idx * 0.018);
+          gain.gain.setValueAtTime(0.001, now + idx * 0.018);
+          gain.gain.linearRampToValueAtTime(0.11, now + idx * 0.018 + 0.012);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+          osc.connect(gain);
+          gain.connect(bus);
+          osc.start(now + idx * 0.018);
+          osc.stop(now + dur + 0.03);
+        });
+      } else {
+        // Gothic Sanctum Warriors: Heavy Forged Anvil Harmonic & Cathedral Sub-Drop
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(stage === 'kill' ? 145 : 260, now);
+        osc.frequency.exponentialRampToValueAtTime(stage === 'kill' ? 42 : 95, now + 0.45);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(stage === 'kill' ? 0.32 : 0.18, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.46);
+        osc.connect(gain);
+        gain.connect(bus);
+        osc.start(now);
+        osc.stop(now + 0.48);
+      }
+    } catch (e) {}
+  }
+
+  // ==========================================================================
+  // Multi-Stage Duel SFX: Stage 1 (Charge/Draw) & Stage 2 (Set-Specific Strike)
+  // Customized per Chess Piece Set (gothic_warriors, classic_staunton, arcane_cyber, dragon_elemental)
+  // ==========================================================================
+  function playAttackChargeAndSwingSfx(attackerType = 'queen', victimType = 'pawn', attackerArchetype = 'gothic_warriors') {
     if (!sfxEnabled) return;
     const aType = String(attackerType || 'queen').toLowerCase();
     const vType = String(victimType || 'pawn').toLowerCase();
+    const arch = String(attackerArchetype || 'gothic_warriors').toLowerCase();
     const atkWeight = PIECE_WEAPON_WEIGHT[aType] || 1.05;
     const isRoyalOrHeavyDuel =
       vType === 'king' || vType === 'queen' || vType === 'rook' || aType === 'king' || aType === 'queen';
-
     const pitchScale = 1.04 / Math.sqrt(atkWeight);
+    playUnityProceduralLayerSfx(arch, 'charge', atkWeight);
 
-    // STAGE 1 (t = 0.00s): Metallic Blade Draw from Scabbard (Mixkit #2798 "Fantasy sword slide" + #2799 "Metallic sword scrape")
+    if (arch === 'classic_staunton') {
+      // CLASSIC STAUNTON: Telekinetic Levitation Chime + 360° Spin Whoosh + Imperial Meteor Drop
+      playMixkitClip('loading_magic_ring_2344', {
+        delay: 0,
+        volume: 0.68,
+        rate: 1.16 * pitchScale,
+        maxDuration: 0.48,
+        fadeOut: 0.12
+      });
+      playMixkitClip('select_metallic_2609', {
+        delay: 0.03,
+        volume: 0.62,
+        rate: 1.08 * pitchScale,
+        maxDuration: 0.42,
+        fadeOut: 0.10
+      });
+      playMixkitClip('metal_hit_woosh_1485', {
+        delay: 0.22,
+        volume: 0.94,
+        rate: 0.96 * pitchScale,
+        maxDuration: 0.58,
+        fadeOut: 0.12
+      });
+      playMixkitClip('fast_sword_whoosh_2792', {
+        delay: 0.25,
+        volume: 0.76,
+        rate: 1.18 * pitchScale,
+        maxDuration: 0.44,
+        fadeOut: 0.09
+      });
+      return;
+    }
+
+    if (arch === 'arcane_cyber') {
+      // ARCANE CYBER-MECH: Overcharged Reactor Sweep + Gyro Spin Lock + Twin Plasma Blade Dash
+      playMixkitClip('loading_magic_sweep_2638', {
+        delay: 0,
+        volume: 0.78,
+        rate: 1.32 * pitchScale,
+        maxDuration: 0.52,
+        fadeOut: 0.12
+      });
+      playMixkitClip('magic_sword_slice_2793', {
+        delay: 0.04,
+        volume: 0.74,
+        rate: 1.24 * pitchScale,
+        maxDuration: 0.46,
+        fadeOut: 0.10
+      });
+      playMixkitClip('fast_sword_whoosh_2792', {
+        delay: 0.22,
+        volume: 0.95,
+        rate: 1.28 * pitchScale,
+        maxDuration: 0.52,
+        fadeOut: 0.10
+      });
+      playMixkitClip('slash_swoosh_1476', {
+        delay: 0.24,
+        volume: 0.88,
+        rate: 1.22,
+        highpassFreq: 420,
+        maxDuration: 0.55,
+        fadeOut: 0.10
+      });
+      return;
+    }
+
+    if (arch === 'dragon_elemental') {
+      // DRAGON & ELEMENTAL: Primordial War-Drum Roar + Wing Beat + Hellfire Breath Surge
+      playMixkitClip('drums_of_war_2780', {
+        delay: 0,
+        volume: 0.86,
+        rate: 0.92 * pitchScale,
+        maxDuration: 0.62,
+        fadeOut: 0.16
+      });
+      playMixkitClip('metal_hit_woosh_1485', {
+        delay: 0.08,
+        volume: 0.78,
+        rate: 0.76 * pitchScale,
+        maxDuration: 0.48,
+        fadeOut: 0.12
+      });
+      playMixkitClip('rock_explosion_debris_1703', {
+        delay: 0.22,
+        volume: 0.84,
+        rate: 1.18,
+        lowpassFreq: 1800,
+        maxDuration: 0.68,
+        fadeOut: 0.18
+      });
+      playMixkitClip('slash_swoosh_1476', {
+        delay: 0.24,
+        volume: 0.92,
+        rate: 0.84 * pitchScale,
+        maxDuration: 0.62,
+        fadeOut: 0.12
+      });
+      return;
+    }
+
+    // DEFAULT: GOTHIC SANCTUM WARRIORS (Forged Medieval Broadsword Draw & Steel Slash)
     playMixkitClip('sword_slide_2798', {
       delay: 0,
       volume: isRoyalOrHeavyDuel ? 0.78 : 0.68,
@@ -958,7 +1723,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       fadeOut: 0.08
     });
 
-    // Optional Windup Flourish Swish for multi-blade / cavalry attackers (Queen, Knight, King, Bishop)
     if (aType === 'queen' || aType === 'knight' || aType === 'king' || aType === 'bishop') {
       const flourishKey =
         aType === 'bishop' ? 'magic_sword_slice_2793' : aType === 'queen' ? 'fast_sword_whoosh_2792' : 'sword_swish_1506';
@@ -971,9 +1735,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       });
     }
 
-    // STAGE 2 (t = 0.24s, locked to SWING_START_CLIP_TIME):
-    // Primary High-Velocity Sword Slash Swoosh from https://mixkit.co/free-sound-effects/discover/slash/ (#1476)
-    // layered with #1485 ("Metal hit woosh") or #2792 ("Fast sword whoosh")
     playMixkitClip('slash_swoosh_1476', {
       delay: 0.23,
       volume: 0.92,
@@ -991,18 +1752,97 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
   }
 
   // ==========================================================================
-  // Multi-Stage Medieval Duel SFX: Stage 3 (Heavy Steel-on-Steel Parry Clash)
-  // Core Mixkit /discover/slash/ #2763 "Sword slashes in battle" + #2160 & #2762
+  // Multi-Stage Duel SFX: Stage 3 (Contact Impact & Set-Specific Clash)
   // ==========================================================================
-  function playWeaponContactClashSfx(attackerType = 'queen', victimType = 'pawn') {
+  function playWeaponContactClashSfx(attackerType = 'queen', victimType = 'pawn', attackerArchetype = 'gothic_warriors') {
     if (!sfxEnabled) return;
     const aType = String(attackerType || 'queen').toLowerCase();
     const vType = String(victimType || 'pawn').toLowerCase();
+    const arch = String(attackerArchetype || 'gothic_warriors').toLowerCase();
     const atkWeight = PIECE_WEAPON_WEIGHT[aType] || 1.05;
     const vicWeight = PIECE_WEAPON_WEIGHT[vType] || 1.0;
     const clashPitch = 1.05 / Math.sqrt(atkWeight * vicWeight);
+    playUnityProceduralLayerSfx(arch, 'contact', atkWeight);
 
-    // Parry Clash #1 (t = 0.00s): Mixkit /discover/slash/ #2763 "Sword slashes in battle"
+    if (arch === 'classic_staunton') {
+      // Grandmaster Hardwood & Brass Meteor Impact + Golden Chime
+      playMixkitClip('move_land_thud_2150', {
+        delay: 0,
+        volume: 0.96,
+        rate: 0.92 * clashPitch,
+        maxDuration: 0.48,
+        fadeOut: 0.12
+      });
+      playMixkitClip('achievement_bell_600', {
+        delay: 0.01,
+        volume: 0.72,
+        rate: 1.25 * clashPitch,
+        maxDuration: 0.68,
+        fadeOut: 0.18
+      });
+      playMixkitClip('sword_hits_metal_2797', {
+        delay: 0.04,
+        volume: 0.78,
+        rate: 1.08 * clashPitch,
+        maxDuration: 0.52,
+        fadeOut: 0.12
+      });
+      return;
+    }
+
+    if (arch === 'arcane_cyber') {
+      // Cyber-Arcane Plasma Lance Discharge & Crystal Resonance Clash
+      playMixkitClip('magic_sword_slice_2793', {
+        delay: 0,
+        volume: 0.96,
+        rate: 1.18 * clashPitch,
+        maxDuration: 0.65,
+        fadeOut: 0.14
+      });
+      playMixkitClip('samurai_impact_2789', {
+        delay: 0.01,
+        volume: 0.90,
+        rate: 1.22 * clashPitch,
+        maxDuration: 0.58,
+        fadeOut: 0.12
+      });
+      playMixkitClip('loading_magic_ring_2344', {
+        delay: 0.03,
+        volume: 0.74,
+        rate: 1.35 * clashPitch,
+        maxDuration: 0.62,
+        fadeOut: 0.16
+      });
+      return;
+    }
+
+    if (arch === 'dragon_elemental') {
+      // Dragon Jaws Maul & Explosive Hellfire Detonation
+      playMixkitClip('cinematic_impact_788', {
+        delay: 0,
+        volume: 0.95,
+        rate: 1.02 * clashPitch,
+        maxDuration: 0.78,
+        fadeOut: 0.18
+      });
+      playMixkitClip('axe_plate_hit_2774', {
+        delay: 0.015,
+        volume: 0.92,
+        rate: 0.88 * clashPitch,
+        maxDuration: 0.68,
+        fadeOut: 0.14
+      });
+      playMixkitClip('heavy_sword_smash_2795', {
+        delay: 0.04,
+        volume: 0.86,
+        rate: 0.85 * clashPitch,
+        maxDuration: 0.65,
+        fadeOut: 0.15
+      });
+      return;
+    }
+
+    // DEFAULT: GOTHIC SANCTUM WARRIORS (Forged Steel-on-Steel Parry Clash)
     playMixkitClip('battle_slashes_2763', {
       delay: 0,
       volume: 0.94,
@@ -1011,7 +1851,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       fadeOut: 0.14
     });
 
-    // Simultaneous hard forged-steel strike ring (Mixkit #2160 "Metallic sword strike")
     playMixkitClip('metallic_strike_2160', {
       delay: 0.01,
       volume: 0.82,
@@ -1020,7 +1859,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       fadeOut: 0.12
     });
 
-    // Parry Clash #2 (t = 0.065s): Counter-parry blade clash in battle (Mixkit #2762 / #2764)
     playMixkitClip('battle_blade_attack_2762', {
       delay: 0.065,
       volume: 0.78,
@@ -1029,7 +1867,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       fadeOut: 0.12
     });
 
-    // Heavy/Royal Duel 3rd Guard-Break Steel Impact right before the fatal cleave (Mixkit #2797 "Sword hits heavy metal")
     if (vType === 'king' || vType === 'queen' || vType === 'knight' || vType === 'rook' || aType === 'queen' || aType === 'king') {
       playMixkitClip('sword_hits_metal_2797', {
         delay: 0.115,
@@ -1042,19 +1879,67 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
   }
 
   // ==========================================================================
-  // Stage 4: 6 Distinct Piece-Specific Kill SFX Using Mixkit Slash/Sword/Rock Audio
-  // Core Mixkit /discover/slash/ #2796 "Sword gore slash hit" + Piece-Specific Layers
+  // Stage 4: Piece-Specific & Set-Specific Kill SFX
   // ==========================================================================
-  function playPieceKillSfx(victimType = 'pawn', attackerType = 'queen') {
+  function playPieceKillSfx(victimType = 'pawn', attackerType = 'queen', attackerArchetype = 'gothic_warriors') {
     if (!sfxEnabled) return;
     const type = String(victimType || 'pawn').toLowerCase();
     const aType = String(attackerType || 'queen').toLowerCase();
+    const arch = String(attackerArchetype || 'gothic_warriors').toLowerCase();
     const atkWeight = PIECE_WEAPON_WEIGHT[aType] || 1.05;
     const atkPitch = 1.02 / Math.sqrt(atkWeight);
+    playUnityProceduralLayerSfx(arch, 'kill', atkWeight);
+
+    // Layer Set-Specific Signature Detonation Audio
+    if (arch === 'classic_staunton') {
+      playMixkitClip('achievement_bell_600', {
+        delay: 0,
+        volume: 0.78,
+        rate: 1.12,
+        maxDuration: 1.25,
+        fadeOut: 0.28
+      });
+      playMixkitClip('cinematic_impact_788', {
+        delay: 0.01,
+        volume: 0.82,
+        rate: 1.08,
+        maxDuration: 1.15,
+        fadeOut: 0.25
+      });
+    } else if (arch === 'arcane_cyber') {
+      playMixkitClip('loading_magic_sweep_2638', {
+        delay: 0,
+        volume: 0.86,
+        rate: 1.18,
+        maxDuration: 1.35,
+        fadeOut: 0.28
+      });
+      playMixkitClip('magic_sword_slice_2793', {
+        delay: 0.02,
+        volume: 0.92,
+        rate: 0.94,
+        maxDuration: 1.10,
+        fadeOut: 0.22
+      });
+    } else if (arch === 'dragon_elemental') {
+      playMixkitClip('rock_explosion_debris_1703', {
+        delay: 0,
+        volume: 0.96,
+        rate: 0.88,
+        maxDuration: 1.75,
+        fadeOut: 0.35
+      });
+      playMixkitClip('drums_of_war_2780', {
+        delay: 0.02,
+        volume: 0.84,
+        rate: 0.82,
+        maxDuration: 1.45,
+        fadeOut: 0.30
+      });
+    }
 
     if (type === 'pawn') {
       // 1. PAWN: VANGUARD SHIELD-BREAKER
-      // Fatal slash hit (Mixkit #2796) + buckler armor strike (#2765) + chainmail split (#2790) + stone fragments (#400)
       playMixkitClip('slash_hit_2796', {
         delay: 0,
         volume: 0.92,
@@ -1086,7 +1971,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       });
     } else if (type === 'rook') {
       // 2. ROOK: CITADEL SEISMIC CATACLYSM
-      // Colossal siege smash (Mixkit #2795 + #2774 Axe Plate Hit) + slash hit (#2796) + Rock Explosion Debris (#1703) + Stone Debris (#403)
       playMixkitClip('heavy_sword_smash_2795', {
         delay: 0,
         volume: 1.0,
@@ -1124,7 +2008,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       });
     } else if (type === 'knight') {
       // 3. KNIGHT: TEMPEST VALKYRIE THUNDERSTRIKE
-      // Rapid cavalry slash-and-pierce combo: Mixkit #1476 + #2763 + #2789 (Samurai Sword Impact) + #2761 (Sword Pierces Armor) + #2776 (Chainmail Lash)
       playMixkitClip('slash_swoosh_1476', {
         delay: 0,
         volume: 0.88,
@@ -1163,7 +2046,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       });
     } else if (type === 'bishop') {
       // 4. BISHOP: SANCTUM RELIQUARY JUDGEMENT
-      // Arcane sanctum sword slice (#2793) + Heavy Sword Hit (#2794) + Slash Hit (#2796) + Cinematic Church Bell (#619) + Stone Debris (#403)
       playMixkitClip('magic_sword_slice_2793', {
         delay: 0,
         volume: 0.94,
@@ -1201,7 +2083,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       });
     } else if (type === 'queen') {
       // 5. QUEEN: ROYAL BLADESTORM OBLITERATION
-      // Vicious 3-hit royal twin-blade slash flurry: Fast Whoosh (#2792) -> Battle Slashes (#2763) -> Slash Swoosh (#1476) -> Fatal Slash Hit (#2796) + Samurai Impact (#2789) + Heavy Smash (#2795) + Rock Explosion (#1703)
       playMixkitClip('fast_sword_whoosh_2792', {
         delay: 0,
         volume: 0.90,
@@ -1253,7 +2134,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       });
     } else {
       // 6. KING: SOVEREIGN EXECUTION APOCALYPSE
-      // Executioner Greatsword Slash Swoosh (#1476) + Fatal Gore Slash Hit (#2796) + Heavy Sword Smashes Metal (#2795) + Sword Pierces Armor (#2761) + Tolling Cathedral Bell (#619) + Big Cinematic Impact (#788) + Rock Explosion Debris (#1703)
       playMixkitClip('slash_swoosh_1476', {
         delay: 0,
         volume: 0.98,
@@ -1307,7 +2187,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
   }
 
   // ==========================================================================
-  // 3D Visual Effects (VFX) System & Piece-Specific Kill Choreography
+  // 3D Visual Effects (VFX) System & Piece-Specific + Set-Specific Choreography
   // ==========================================================================
   const activeVfxupdaters = [];
   let cameraShakeState = {
@@ -1323,6 +2203,12 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
   const sharedThinRingGeo = new THREE.RingGeometry(0.88, 1.0, 48);
   sharedThinRingGeo.rotateX(-Math.PI / 2);
 
+  const sharedHexRingGeo = new THREE.RingGeometry(0.82, 1.0, 6);
+  sharedHexRingGeo.rotateX(-Math.PI / 2);
+
+  const sharedStarRingGeo = new THREE.RingGeometry(0.68, 1.0, 8);
+  sharedStarRingGeo.rotateX(-Math.PI / 2);
+
   const sharedDiscGeo = new THREE.CircleGeometry(1.0, 40);
   sharedDiscGeo.rotateX(-Math.PI / 2);
 
@@ -1331,6 +2217,14 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
   const sharedConeSpireGeo = new THREE.ConeGeometry(0.12, 0.65, 6);
   sharedConeSpireGeo.translate(0, 0.325, 0);
+
+  const sharedBreathConeGeo = new THREE.ConeGeometry(0.24, 0.62, 20, 1, true);
+  sharedBreathConeGeo.rotateX(Math.PI / 2);
+  sharedBreathConeGeo.translate(0, 0, -0.26);
+
+  const sharedLaserLanceGeo = new THREE.CylinderGeometry(0.032, 0.055, 0.58, 16, 1, true);
+  sharedLaserLanceGeo.rotateX(Math.PI / 2);
+  sharedLaserLanceGeo.translate(0, 0, -0.24);
 
   const sharedOctaGeo = new THREE.OctahedronGeometry(1.0, 0);
   const sharedSphereGeo = new THREE.SphereGeometry(1.0, 24, 18);
@@ -1408,72 +2302,530 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     );
   }
 
-  // Pre-shatter weapon contact spark & parry ring burst
-  function spawnWeaponContactVfx(worldPos, dirX = 0, dirZ = 1, victimType = 'pawn') {
-    const prof = PIECE_KILL_PROFILES[victimType] || PIECE_KILL_PROFILES.pawn;
-    const group = new THREE.Group();
-    group.position.set(worldPos.x - dirX * 0.06, boardSurfaceY + 0.24, worldPos.z - dirZ * 0.06);
+  const sharedMagicPlaneGeo = new THREE.PlaneGeometry(1.0, 1.0);
+  sharedMagicPlaneGeo.rotateX(-Math.PI / 2);
 
-    const slashMat = new THREE.MeshBasicMaterial({
+  const sharedSlashRibbonGeo = new THREE.RingGeometry(0.22, 0.44, 32, 2, -Math.PI * 0.55, Math.PI * 1.1);
+
+  // ==========================================================================
+  // Set-Specific Pre-Shatter Weapon Contact & Directional Attack VFX
+  // Inspired by itch.io Free VFX Packs (PYROLUX Lite, EDGEFLUX Lite, Arcane VFX Free):
+  // - dragon_elemental: Actual Roaring Volumetric Dragon Fire Breath Stream pouring from the dragon's jaws
+  //   onto the enemy piece (dual GLSL turbulent flame cones + 48 billowing flame/ember/smoke particles + fireball core + lava splash)
+  // - arcane_cyber: Overcharged GLSL Plasma Cannon Beam + 4 Snapping 3D Lightning Arcs + Triple Holo Target Lock
+  // - gothic_warriors: EDGEFLUX Triple Staggered GLSL Sword-Wave Slash Ribbons + Sanctum Cross Flash + 36 Anvil Hit-Sparks
+  // - classic_staunton: Grandmaster 6-Comet Telekinetic Barrage + 3 Brass Astrolabe Gravity Rings + 8-Point Compass Burst
+  // ==========================================================================
+  const sharedFireBreathJetGeo = new THREE.ConeGeometry(0.28, 0.76, 28, 18, true);
+  // Orient cone so tip is at the dragon's jaws (z = -0.58) and wide roaring mouth engulfs the victim (z = +0.18)
+  sharedFireBreathJetGeo.translate(0, -0.38, 0);
+  sharedFireBreathJetGeo.rotateX(-Math.PI / 2);
+  sharedFireBreathJetGeo.translate(0, 0, -0.58);
+
+  const sharedPlasmaBeamGeo = new THREE.CylinderGeometry(0.055, 0.032, 0.72, 20, 12, true);
+  sharedPlasmaBeamGeo.rotateX(Math.PI / 2);
+  sharedPlasmaBeamGeo.translate(0, 0, -0.26);
+
+  function spawnWeaponContactVfx(worldPos, dirX = 0, dirZ = 1, victimType = 'pawn', attackerArchetype = 'gothic_warriors') {
+    const prof = getArchetypeKillProfile(attackerArchetype, victimType);
+    const arch = prof.archetypeId;
+    const group = new THREE.Group();
+    group.position.set(worldPos.x, boardSurfaceY + 0.22, worldPos.z);
+
+    const headingY = Math.atan2(dirX, dirZ);
+    const disposableMats = [];
+    const disposableGeos = [];
+
+    const primaryMat = new THREE.MeshBasicMaterial({
       color: prof.primaryHex,
       transparent: true,
-      opacity: 0.95,
+      opacity: 0.96,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
-    const slashMesh = new THREE.Mesh(sharedSlashArcGeo, slashMat);
-    slashMesh.rotation.x = Math.PI * 0.38;
-    slashMesh.rotation.y = Math.atan2(dirX, dirZ);
-    group.add(slashMesh);
-
-    const flashMat = new THREE.MeshBasicMaterial({
-      color: prof.coreHex,
+    const secondaryMat = new THREE.MeshBasicMaterial({
+      color: prof.secondaryHex,
       transparent: true,
-      opacity: 0.95,
+      opacity: 0.92,
+      side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: prof.coreHex,
+      transparent: true,
+      opacity: 0.98,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    disposableMats.push(primaryMat, secondaryMat, flashMat);
+
+    // Soft-Particle Star-Flare Billboard at Impact Point
+    const starTex = getUnityStarFlareTexture();
+    const flareSpriteMat = new THREE.SpriteMaterial({
+      map: starTex,
+      color: prof.coreHex,
+      transparent: true,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    disposableMats.push(flareSpriteMat);
+    const flareSprite = new THREE.Sprite(flareSpriteMat);
+    flareSprite.scale.setScalar(0.48);
+    group.add(flareSprite);
+
     const flashSphere = new THREE.Mesh(sharedSphereGeo, flashMat);
-    flashSphere.scale.setScalar(0.05);
+    flashSphere.scale.setScalar(0.07);
     group.add(flashSphere);
 
-    // 14 directional parry sparks
+    // ========================================================================
+    // 1. DRAGON & ELEMENTAL GUARDIANS: ACTUAL ROARING DRAGON FIRE BREATH STREAM
+    // ========================================================================
+    if (arch === 'dragon_elemental') {
+      const breathRig = new THREE.Group();
+      breathRig.rotation.y = headingY;
+      // Tilt slightly downward from the dragon's elevated jaws (+0.18 Y at z = -0.52) into the victim's chest (y = 0, z = 0)
+      breathRig.rotation.x = 0.26;
+      group.add(breathRig);
+
+      // A. Outer Roaring Crimson-Orange Volumetric Flame Jet Shader Cone
+      const outerFireShaderMat = createUnityFireBreathShaderMaterial(0xfff3b0, 0xff6d00, 0xd90429);
+      // B. Inner White-Hot / Solar-Gold Volumetric Core Flame Jet Shader Cone
+      const innerFireShaderMat = createUnityFireBreathShaderMaterial(0xffffff, 0xffd166, 0xff5400);
+      disposableMats.push(outerFireShaderMat, innerFireShaderMat);
+
+      const outerBreathJet = new THREE.Mesh(sharedFireBreathJetGeo, outerFireShaderMat);
+      breathRig.add(outerBreathJet);
+
+      const innerBreathJet = new THREE.Mesh(sharedFireBreathJetGeo, innerFireShaderMat);
+      innerBreathJet.scale.set(0.62, 0.62, 0.94);
+      breathRig.add(innerBreathJet);
+
+      // C. Rolling Draconic Fireball Core hurtling down the breath stream from jaws to victim
+      const fireballMat = createUnityFresnelDissolveSphereMaterial(0xff9e00, 0xff2a00, 0xffffff);
+      disposableMats.push(fireballMat);
+      const fireballCore = new THREE.Mesh(sharedSphereGeo, fireballMat);
+      fireballCore.scale.setScalar(0.11);
+      breathRig.add(fireballCore);
+
+      // D. 48 Billowing PYROLUX Soft-Particle Flame, Ember & Smoke Billboards streaming from the Dragon's Jaws
+      const flameTex = getUnityFireFlameTexture();
+      const flameParticles = [];
+      for (let i = 0; i < 48; i++) {
+        const pMat = new THREE.SpriteMaterial({
+          map: flameTex,
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.95,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          rotation: Math.random() * Math.PI * 2
+        });
+        disposableMats.push(pMat);
+        const sp = new THREE.Sprite(pMat);
+        breathRig.add(sp);
+        flameParticles.push({
+          sprite: sp,
+          mat: pMat,
+          phase: i / 48,
+          speed: 2.1 + (i % 5) * 0.32,
+          swirlAngle: (i / 48) * Math.PI * 2 * 3.0,
+          swirlRadius: 0.03 + (i % 7) * 0.032,
+          rotSpeed: (i % 2 === 0 ? 1 : -1) * (2.5 + (i % 4) * 0.8),
+          baseScale: 0.14 + (i % 4) * 0.055
+        });
+      }
+
+      // E. 20 Splashing Molten Lava Droplets & Scorched Cinders erupting at the target's feet
+      const lavaDrops = [];
+      for (let i = 0; i < 20; i++) {
+        const dMesh = new THREE.Mesh(
+          sharedSparkGeo,
+          i % 3 === 0 ? flashMat : i % 2 === 0 ? primaryMat : secondaryMat
+        );
+        const ang = (i / 20) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
+        const spd = 0.65 + Math.random() * 1.15;
+        dMesh.scale.setScalar(1.35);
+        group.add(dMesh);
+        lavaDrops.push({
+          mesh: dMesh,
+          vx: Math.cos(ang) * spd + dirX * 0.55,
+          vy: 0.55 + Math.random() * 1.15,
+          vz: Math.sin(ang) * spd + dirZ * 0.55
+        });
+      }
+
+      const cWhite = new THREE.Color(0xfff8d6);
+      const cGold = new THREE.Color(0xffbe0b);
+      const cOrange = new THREE.Color(0xff4d00);
+      const cCrimson = new THREE.Color(0x9b0014);
+
+      addVfxUpdater(
+        group,
+        0.58,
+        (u, elapsed, dt) => {
+          outerFireShaderMat.uniforms.uTime.value = elapsed;
+          outerFireShaderMat.uniforms.uProgress.value = u;
+          innerFireShaderMat.uniforms.uTime.value = elapsed;
+          innerFireShaderMat.uniforms.uProgress.value = u;
+
+          const jetSwell = 0.85 + Math.sin(u * Math.PI) * 0.55;
+          outerBreathJet.scale.set(jetSwell, jetSwell, 0.85 + Math.min(1, u * 1.8) * 0.45);
+          outerBreathJet.rotation.z += dt * 11.0;
+          innerBreathJet.scale.set(jetSwell * 0.62, jetSwell * 0.62, 0.82 + Math.min(1, u * 1.9) * 0.42);
+          innerBreathJet.rotation.z -= dt * 15.0;
+
+          // Fireball hurtles from dragon jaws (z = -0.54) to target (z = +0.06) and expands on impact
+          const fbTravel = Math.min(1, u * 2.1);
+          fireballCore.position.set(0, 0, -0.54 + fbTravel * 0.60);
+          fireballCore.scale.setScalar(0.08 + fbTravel * 0.14 + Math.sin(u * Math.PI) * 0.08);
+          fireballMat.uniforms.uTime.value = elapsed;
+          fireballMat.uniforms.uDissolve.value = Math.max(0, (u - 0.25) / 0.75);
+
+          // Update 48 billowing dragonfire breath particles
+          const lifeFade = 1.0 - Math.pow(u, 1.45);
+          for (let i = 0; i < flameParticles.length; i++) {
+            const fp = flameParticles[i];
+            const p = (elapsed * fp.speed + fp.phase) % 1.0;
+            // Stream from z = -0.56 (dragon jaws) to z = +0.22 (past victim)
+            const zPos = -0.56 + p * 0.78;
+            const coneSpread = Math.pow(p, 1.1) * fp.swirlRadius * (1.1 + u * 0.6);
+            const swirlA = fp.swirlAngle + elapsed * 9.5 + p * 4.0;
+            const buoyantLift = Math.pow(p, 1.6) * 0.14;
+            fp.sprite.position.set(
+              Math.cos(swirlA) * coneSpread,
+              Math.sin(swirlA) * coneSpread + buoyantLift,
+              zPos
+            );
+            // Expand as flame billows outward from the snout
+            const s = fp.baseScale * (0.38 + p * 1.65) * (0.75 + 0.45 * Math.sin(u * Math.PI));
+            fp.sprite.scale.setScalar(s);
+            fp.mat.rotation += fp.rotSpeed * dt;
+
+            // Color evolution along the breath stream: white-hot throat -> solar gold -> roaring orange -> crimson smoke
+            if (p < 0.28) {
+              fp.mat.color.lerpColors(cWhite, cGold, p / 0.28);
+            } else if (p < 0.68) {
+              fp.mat.color.lerpColors(cGold, cOrange, (p - 0.28) / 0.40);
+            } else {
+              fp.mat.color.lerpColors(cOrange, cCrimson, (p - 0.68) / 0.32);
+            }
+            const particleAlpha = Math.sin(p * Math.PI) * lifeFade * 0.95;
+            fp.mat.opacity = Math.max(0, particleAlpha);
+          }
+
+          flareSprite.scale.setScalar(0.38 + Math.sin(u * Math.PI) * 0.52);
+          flareSpriteMat.opacity = 1.0 - u * u;
+          flashSphere.scale.setScalar(0.08 + Math.sin(u * Math.PI) * 0.22);
+          flashMat.opacity = 0.98 * (1 - u * u);
+          primaryMat.opacity = 0.96 * (1 - u);
+          secondaryMat.opacity = 0.92 * (1 - u);
+
+          for (const ld of lavaDrops) {
+            ld.mesh.position.x += ld.vx * dt;
+            ld.mesh.position.y += ld.vy * dt;
+            ld.mesh.position.z += ld.vz * dt;
+            ld.vy -= 4.6 * dt;
+            ld.mesh.scale.setScalar(Math.max(0.05, (1 - u) * 1.35));
+          }
+        },
+        disposableMats,
+        disposableGeos
+      );
+      return;
+    }
+
+    // ========================================================================
+    // 2. ARCANE RUNIC & CYBER-MECH: OVERCHARGED PLASMA CANNON & ARC LIGHTNING
+    // ========================================================================
+    if (arch === 'arcane_cyber') {
+      const cyberRig = new THREE.Group();
+      cyberRig.rotation.y = headingY;
+      group.add(cyberRig);
+
+      // A. Scrolling GLSL Plasma Beam Core & Outer Ion Sheath
+      const plasmaCoreMat = createUnityPlasmaBeamShaderMaterial(0x00f5d4, 0x9d4edd, 0xffffff);
+      const plasmaSheathMat = createUnityPlasmaBeamShaderMaterial(0x7209b7, 0x00bbf9, 0x00f5d4);
+      disposableMats.push(plasmaCoreMat, plasmaSheathMat);
+
+      const coreBeam = new THREE.Mesh(sharedPlasmaBeamGeo, plasmaCoreMat);
+      cyberRig.add(coreBeam);
+
+      const sheathBeam = new THREE.Mesh(sharedPlasmaBeamGeo, plasmaSheathMat);
+      sheathBeam.scale.set(1.85, 1.85, 1.04);
+      cyberRig.add(sheathBeam);
+
+      // B. 4 Snapping 3D Jagged Electric Arc Lightning Bolts bridging Attacker -> Target
+      const arcBolts = [];
+      for (let i = 0; i < 4; i++) {
+        const boltGeo = buildJaggedLightningGeometry(0.68, 12, 0.085, i === 0 ? 0.016 : 0.011);
+        boltGeo.rotateX(Math.PI / 2);
+        boltGeo.translate(0, 0, -0.62);
+        disposableGeos.push(boltGeo);
+        const boltMesh = new THREE.Mesh(boltGeo, i % 2 === 0 ? flashMat : primaryMat);
+        boltMesh.rotation.z = (i / 4) * Math.PI * 2;
+        cyberRig.add(boltMesh);
+        arcBolts.push(boltMesh);
+      }
+
+      // C. Triple Counter-Rotating Holographic Hex Target-Lock Reticle on the Victim
+      const reticleRings = [];
+      for (let r = 0; r < 3; r++) {
+        const rMesh = new THREE.Mesh(sharedHexRingGeo, r === 0 ? flashMat : r === 1 ? primaryMat : secondaryMat);
+        rMesh.rotation.x = Math.PI / 2;
+        rMesh.position.z = -0.10 + r * 0.09;
+        cyberRig.add(rMesh);
+        reticleRings.push({ mesh: rMesh, idx: r });
+      }
+
+      // D. 26 High-Velocity Cyan/Violet Plasma Ion Particles
+      const ions = [];
+      for (let i = 0; i < 26; i++) {
+        const spMesh = new THREE.Mesh(
+          sharedSparkGeo,
+          i % 3 === 0 ? flashMat : i % 2 === 0 ? primaryMat : secondaryMat
+        );
+        const ang = (i / 26) * Math.PI * 2;
+        ions.push({
+          mesh: spMesh,
+          vx: Math.cos(ang) * (0.85 + Math.random() * 1.1) + dirX * 0.65,
+          vy: (Math.random() - 0.25) * 1.4,
+          vz: Math.sin(ang) * (0.85 + Math.random() * 1.1) + dirZ * 0.65
+        });
+        group.add(spMesh);
+      }
+
+      addVfxUpdater(
+        group,
+        0.48,
+        (u, elapsed, dt) => {
+          plasmaCoreMat.uniforms.uTime.value = elapsed;
+          plasmaCoreMat.uniforms.uProgress.value = u;
+          plasmaSheathMat.uniforms.uTime.value = elapsed;
+          plasmaSheathMat.uniforms.uProgress.value = u;
+
+          const pulse = 1.0 + Math.sin(elapsed * 65.0) * 0.35;
+          coreBeam.scale.set(pulse, pulse, 0.85 + u * 0.45);
+          sheathBeam.scale.set(pulse * 1.85, pulse * 1.85, 0.88 + u * 0.48);
+          sheathBeam.rotation.z -= dt * 16.0;
+
+          for (let i = 0; i < arcBolts.length; i++) {
+            const b = arcBolts[i];
+            b.rotation.z += dt * (i % 2 === 0 ? 22.0 : -22.0);
+            const flicker = 0.6 + 0.6 * Math.sin(elapsed * 80.0 + i * 2.1);
+            b.scale.set(flicker, flicker, 1.0);
+          }
+
+          for (const rt of reticleRings) {
+            const s = (0.14 + rt.idx * 0.06) + u * (0.34 + rt.idx * 0.12);
+            rt.mesh.scale.setScalar(s);
+            rt.mesh.rotation.z += dt * (rt.idx % 2 === 0 ? 14.0 : -14.0);
+          }
+
+          flareSprite.scale.setScalar(0.36 + Math.sin(u * Math.PI) * 0.48);
+          flareSpriteMat.opacity = 1.0 - u * u;
+          flashSphere.scale.setScalar(0.08 + Math.sin(u * Math.PI) * 0.18);
+          flashMat.opacity = 0.98 * (1 - u * u);
+          primaryMat.opacity = 0.96 * (1 - u);
+          secondaryMat.opacity = 0.92 * (1 - u);
+
+          for (const ion of ions) {
+            ion.mesh.position.x += ion.vx * dt;
+            ion.mesh.position.y += ion.vy * dt;
+            ion.mesh.position.z += ion.vz * dt;
+            ion.mesh.scale.setScalar(Math.max(0.04, (1 - u) * 1.25));
+          }
+        },
+        disposableMats,
+        disposableGeos
+      );
+      return;
+    }
+
+    // ========================================================================
+    // 3. CLASSIC STAUNTON TOURNAMENT: GRANDMASTER TELEKINETIC COMET BARRAGE
+    // ========================================================================
+    if (arch === 'classic_staunton') {
+      // A. 6 Streaking Golden Arcane Comets diving from a levitating crown halo into the victim
+      const comets = [];
+      for (let i = 0; i < 6; i++) {
+        const cometPivot = new THREE.Group();
+        const headSpriteMat = new THREE.SpriteMaterial({
+          map: starTex,
+          color: i % 2 === 0 ? 0xffffff : 0xffd166,
+          transparent: true,
+          opacity: 1.0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        });
+        disposableMats.push(headSpriteMat);
+        const headSprite = new THREE.Sprite(headSpriteMat);
+        headSprite.scale.setScalar(0.24);
+        cometPivot.add(headSprite);
+
+        const tailMesh = new THREE.Mesh(sharedConeSpireGeo, i % 2 === 0 ? primaryMat : secondaryMat);
+        tailMesh.scale.set(0.35, 0.55, 0.35);
+        tailMesh.rotation.x = -Math.PI / 2;
+        cometPivot.add(tailMesh);
+
+        const ang = (i / 6) * Math.PI * 2;
+        const startPos = new THREE.Vector3(
+          -dirX * 0.32 + Math.cos(ang) * 0.28,
+          0.48 + (i % 2) * 0.14,
+          -dirZ * 0.32 + Math.sin(ang) * 0.28
+        );
+        const endPos = new THREE.Vector3(
+          Math.cos(ang + 0.5) * 0.06,
+          -0.06,
+          Math.sin(ang + 0.5) * 0.06
+        );
+        cometPivot.position.copy(startPos);
+        cometPivot.lookAt(endPos);
+        group.add(cometPivot);
+        comets.push({
+          pivot: cometPivot,
+          mat: headSpriteMat,
+          startPos,
+          endPos,
+          delay: i * 0.045
+        });
+      }
+
+      // B. 8-Pointed Grandmaster Compass Star & 2 Gyroscopic Brass Astrolabe Rings
+      const compassStar = new THREE.Mesh(sharedStarRingGeo, primaryMat);
+      compassStar.position.y = -0.18;
+      group.add(compassStar);
+
+      const gyro1 = new THREE.Mesh(sharedThinRingGeo, secondaryMat);
+      gyro1.rotation.x = Math.PI * 0.35;
+      gyro1.rotation.y = headingY;
+      group.add(gyro1);
+
+      const gyro2 = new THREE.Mesh(sharedThinRingGeo, flashMat);
+      gyro2.rotation.x = -Math.PI * 0.35;
+      gyro2.rotation.y = headingY + Math.PI * 0.25;
+      group.add(gyro2);
+
+      addVfxUpdater(
+        group,
+        0.48,
+        (u, elapsed, dt) => {
+          for (const cm of comets) {
+            const localU = Math.max(0, Math.min(1, (u - cm.delay) / Math.max(0.2, 0.72 - cm.delay)));
+            const ease = localU * localU * (3 - 2 * localU);
+            cm.pivot.position.lerpVectors(cm.startPos, cm.endPos, ease);
+            const cScale = Math.sin(localU * Math.PI) * 1.15;
+            cm.pivot.scale.setScalar(Math.max(0.01, cScale));
+            cm.mat.opacity = Math.sin(localU * Math.PI);
+          }
+
+          compassStar.scale.setScalar(0.14 + u * 0.62);
+          compassStar.rotation.z += dt * 10.0;
+          gyro1.scale.setScalar(0.16 + u * 0.52);
+          gyro1.rotation.z += dt * 12.0;
+          gyro2.scale.setScalar(0.14 + u * 0.46);
+          gyro2.rotation.z -= dt * 14.0;
+
+          flareSprite.scale.setScalar(0.35 + Math.sin(u * Math.PI) * 0.45);
+          flareSpriteMat.opacity = 1.0 - u * u;
+          flashSphere.scale.setScalar(0.07 + Math.sin(u * Math.PI) * 0.18);
+          flashMat.opacity = 0.98 * (1 - u * u);
+          primaryMat.opacity = 0.96 * (1 - u);
+          secondaryMat.opacity = 0.92 * (1 - u);
+        },
+        disposableMats,
+        disposableGeos
+      );
+      return;
+    }
+
+    // ========================================================================
+    // 4. GOTHIC SANCTUM WARRIORS: EDGEFLUX TRIPLE SWORD-SLASH WAVES & ANVIL SPARKS
+    // ========================================================================
+    const slashWaves = [];
+    const slashConfigs = [
+      { tiltX: Math.PI * 0.34, tiltZ: 0.42, scaleMul: 1.05, speed: 14.0, pHex: 0xff6b35, sHex: 0xffd166 },
+      { tiltX: -Math.PI * 0.34, tiltZ: -0.42, scaleMul: 0.96, speed: -15.0, pHex: 0xff2a55, sHex: 0xffb703 },
+      { tiltX: Math.PI * 0.48, tiltZ: 0.0, scaleMul: 1.18, speed: 17.0, pHex: 0xffd166, sHex: 0xffffff }
+    ];
+    for (const cfg of slashConfigs) {
+      const sMat = createUnitySlashRibbonShaderMaterial(cfg.pHex, cfg.sHex, prof.coreHex);
+      disposableMats.push(sMat);
+      const sMesh = new THREE.Mesh(sharedSlashRibbonGeo, sMat);
+      sMesh.rotation.set(cfg.tiltX, headingY, cfg.tiltZ);
+      group.add(sMesh);
+      slashWaves.push({ mesh: sMesh, mat: sMat, cfg });
+    }
+
+    // Consecrated Golden Sanctum Cross Flash at the blade intersection
+    const sanctumCrossGroup = new THREE.Group();
+    sanctumCrossGroup.rotation.y = headingY;
+    const vBarGeo = new THREE.BoxGeometry(0.028, 0.38, 0.028);
+    const hBarGeo = new THREE.BoxGeometry(0.26, 0.028, 0.028);
+    disposableGeos.push(vBarGeo, hBarGeo);
+    const vBar = new THREE.Mesh(vBarGeo, flashMat);
+    const hBar = new THREE.Mesh(hBarGeo, secondaryMat);
+    hBar.position.y = 0.05;
+    sanctumCrossGroup.add(vBar, hBar);
+    group.add(sanctumCrossGroup);
+
+    // 32 High-Velocity Forged-Steel Anvil Hit-Sparks spraying outward
     const sparks = [];
-    for (let i = 0; i < 14; i++) {
-      const spMesh = new THREE.Mesh(sharedSparkGeo, i % 2 === 0 ? flashMat : slashMat);
-      const ang = (i / 14) * Math.PI * 2;
+    for (let i = 0; i < 32; i++) {
+      const spMesh = new THREE.Mesh(
+        sharedSparkGeo,
+        i % 3 === 0 ? flashMat : i % 2 === 0 ? primaryMat : secondaryMat
+      );
+      const ang = (i / 32) * Math.PI * 2;
+      spMesh.scale.set(0.65, 2.2, 0.65);
       sparks.push({
         mesh: spMesh,
-        vx: Math.cos(ang) * (0.65 + Math.random() * 0.85) + dirX * 0.35,
-        vy: 0.35 + Math.random() * 0.95,
-        vz: Math.sin(ang) * (0.65 + Math.random() * 0.85) + dirZ * 0.35
+        vx: Math.cos(ang) * (0.85 + Math.random() * 1.15) + dirX * 0.55,
+        vy: 0.48 + Math.random() * 1.25,
+        vz: Math.sin(ang) * (0.85 + Math.random() * 1.15) + dirZ * 0.55
       });
       group.add(spMesh);
     }
 
     addVfxUpdater(
       group,
-      0.32,
+      0.44,
       (u, elapsed, dt) => {
-        const s = 0.45 + u * 1.15;
-        slashMesh.scale.set(s, s, s);
-        slashMesh.rotation.z += dt * 14.0;
-        slashMat.opacity = 0.95 * (1 - u);
+        for (const sw of slashWaves) {
+          sw.mat.uniforms.uTime.value = elapsed;
+          sw.mat.uniforms.uProgress.value = u;
+          sw.mesh.scale.setScalar((0.78 + u * 1.12) * sw.cfg.scaleMul);
+          sw.mesh.rotation.z += dt * sw.cfg.speed;
+        }
 
-        const coreS = 0.06 + Math.sin(u * Math.PI) * 0.14;
+        const crossPulse = Math.sin(u * Math.PI) * 1.25;
+        sanctumCrossGroup.scale.setScalar(Math.max(0.01, crossPulse));
+
+        flareSprite.scale.setScalar(0.38 + Math.sin(u * Math.PI) * 0.46);
+        flareSpriteMat.opacity = 1.0 - u * u;
+
+        const coreS = 0.07 + Math.sin(u * Math.PI) * 0.18;
         flashSphere.scale.setScalar(coreS);
-        flashMat.opacity = 0.95 * (1 - u * u);
+        flashMat.opacity = 0.98 * (1 - u * u);
+        primaryMat.opacity = 0.96 * (1 - u);
+        secondaryMat.opacity = 0.92 * (1 - u);
 
         for (const sp of sparks) {
           sp.mesh.position.x += sp.vx * dt;
           sp.mesh.position.y += sp.vy * dt;
           sp.mesh.position.z += sp.vz * dt;
           sp.vy -= 4.5 * dt;
-          sp.mesh.scale.setScalar(Math.max(0.05, 1 - u));
+          sp.mesh.rotation.x += dt * 12.0;
+          sp.mesh.rotation.z += dt * 12.0;
+          const s = Math.max(0.04, 1 - u);
+          sp.mesh.scale.set(0.65 * s, 2.2 * s, 0.65 * s);
         }
       },
-      [slashMat, flashMat]
+      disposableMats,
+      disposableGeos
     );
   }
 
@@ -1492,13 +2844,355 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
   }
 
   // ==========================================================================
-  // Master Piece-Specific 3D Kill Spectacle Spawner
+  // Set-Specific Signature 3D Kill Effect Spawner (Unity URP ShaderGraph + Shuriken VFX)
+  // Combines:
+  // 1. Unity Procedural Magic Circle / Voronoi Magma Crack Ground Decal Shader
+  // 2. Unity URP Fresnel & Noise-Dissolve Energy Sphere Shader
+  // 3. Unity Soft-Particle Star-Flare Billboards & Set-Specific 3D Meshes
   // ==========================================================================
-  function spawnPieceKillVfx(worldPos, victimType = 'pawn', victimColor = 'b', attackerType = 'queen', dirX = 0, dirZ = 1) {
+  function spawnArchetypeSignatureKillVfx(worldPos, attackerArchetype = 'gothic_warriors', victimType = 'pawn') {
+    const prof = getArchetypeKillProfile(attackerArchetype, victimType);
+    const arch = prof.archetypeId;
+
+    const group = new THREE.Group();
+    group.position.set(worldPos.x, boardSurfaceY, worldPos.z);
+
+    const mats = [];
+    const geos = [];
+
+    const pMat = new THREE.MeshBasicMaterial({
+      color: prof.primaryHex,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const sMat = new THREE.MeshBasicMaterial({
+      color: prof.secondaryHex,
+      transparent: true,
+      opacity: 0.90,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const cMat = new THREE.MeshBasicMaterial({
+      color: prof.coreHex,
+      transparent: true,
+      opacity: 0.98,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const styleIndex =
+      arch === 'classic_staunton' ? 1 : arch === 'arcane_cyber' ? 2 : arch === 'dragon_elemental' ? 3 : 0;
+
+    // 1. Unity Procedural Magic Circle / Voronoi Ground Crack Shader Decal
+    const magicCircleShaderMat = createUnityMagicCircleShaderMaterial(
+      prof.primaryHex,
+      prof.secondaryHex,
+      prof.coreHex,
+      styleIndex
+    );
+    const magicCircleMesh = new THREE.Mesh(sharedMagicPlaneGeo, magicCircleShaderMat);
+    magicCircleMesh.position.y = 0.016;
+    group.add(magicCircleMesh);
+
+    // 2. Unity URP Fresnel & Noise-Dissolve Energy Sphere
+    const fresnelSphereShaderMat = createUnityFresnelDissolveSphereMaterial(
+      prof.primaryHex,
+      prof.secondaryHex,
+      prof.coreHex
+    );
+    const fresnelSphereMesh = new THREE.Mesh(sharedSphereGeo, fresnelSphereShaderMat);
+    fresnelSphereMesh.position.y = 0.24;
+    fresnelSphereMesh.scale.setScalar(0.12);
+    group.add(fresnelSphereMesh);
+
+    // 3. Unity Shuriken Star-Flare Billboards
+    const starTex = getUnityStarFlareTexture();
+    const starSprites = [];
+    for (let i = 0; i < 8; i++) {
+      const spMat = new THREE.SpriteMaterial({
+        map: starTex,
+        color: i % 2 === 0 ? prof.coreHex : prof.primaryHex,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      mats.push(spMat);
+      const sp = new THREE.Sprite(spMat);
+      const ang = (i / 8) * Math.PI * 2;
+      sp.position.set(Math.cos(ang) * 0.14, 0.14 + (i % 3) * 0.08, Math.sin(ang) * 0.14);
+      sp.scale.setScalar(0.16);
+      group.add(sp);
+      starSprites.push({ sprite: sp, mat: spMat, ang, vy: 0.55 + (i % 3) * 0.28 });
+    }
+
+    mats.push(pMat, sMat, cMat, magicCircleShaderMat, fresnelSphereShaderMat);
+
+    const stepCommonUnityShaders = (u, elapsed, dt, ease) => {
+      magicCircleShaderMat.uniforms.uTime.value = elapsed;
+      magicCircleShaderMat.uniforms.uProgress.value = u;
+      magicCircleMesh.scale.setScalar(0.28 + ease * 0.72);
+      magicCircleMesh.rotation.z += dt * (styleIndex === 2 ? 2.4 : 1.4);
+
+      fresnelSphereShaderMat.uniforms.uTime.value = elapsed;
+      fresnelSphereShaderMat.uniforms.uDissolve.value = Math.min(1, u * 1.12);
+      fresnelSphereMesh.scale.setScalar(0.12 + ease * 0.44);
+      fresnelSphereMesh.rotation.y += dt * 3.2;
+
+      for (const st of starSprites) {
+        const r = 0.14 + ease * 0.34;
+        st.sprite.position.x = Math.cos(st.ang + elapsed * 2.5) * r;
+        st.sprite.position.z = Math.sin(st.ang + elapsed * 2.5) * r;
+        st.sprite.position.y += st.vy * dt;
+        st.sprite.scale.setScalar(0.18 * Math.max(0.02, 1 - u));
+        st.mat.opacity = 0.95 * (1 - u);
+      }
+    };
+
+    if (arch === 'arcane_cyber') {
+      // ARCANE CYBER-MECH SIGNATURE: Sky-to-Board Orbital Ion Laser + Counter-Rotating Hex Holo-Grids + Cyber EMP Dome
+      const ionLaser = new THREE.Mesh(sharedPillarGeo, cMat);
+      ionLaser.scale.set(0.08, 4.4, 0.08);
+      group.add(ionLaser);
+
+      const outerIonSheath = new THREE.Mesh(sharedPillarGeo, pMat);
+      outerIonSheath.scale.set(0.18, 4.4, 0.18);
+      group.add(outerIonSheath);
+
+      const empDome = new THREE.Mesh(sharedDomeGeo, sMat);
+      empDome.scale.setScalar(0.12);
+      group.add(empDome);
+
+      const hexGrid1 = new THREE.Mesh(sharedHexRingGeo, pMat);
+      hexGrid1.position.y = 0.024;
+      group.add(hexGrid1);
+
+      const hexGrid2 = new THREE.Mesh(sharedHexRingGeo, sMat);
+      hexGrid2.position.y = 0.18;
+      group.add(hexGrid2);
+
+      const plasmaArcs = [];
+      for (let i = 0; i < 3; i++) {
+        const bGeo = buildJaggedLightningGeometry(2.8, 14, 0.18, 0.018);
+        geos.push(bGeo);
+        const bMesh = new THREE.Mesh(bGeo, i === 0 ? cMat : pMat);
+        bMesh.rotation.y = (i * Math.PI * 2) / 3;
+        group.add(bMesh);
+        plasmaArcs.push(bMesh);
+      }
+
+      addVfxUpdater(
+        group,
+        1.45,
+        (u, elapsed, dt) => {
+          const ease = 1 - Math.pow(1 - u, 3);
+          stepCommonUnityShaders(u, elapsed, dt, ease);
+          const laserEnv = u < 0.22 ? u / 0.22 : Math.max(0, 1 - (u - 0.22) / 0.78);
+          ionLaser.scale.set(Math.max(0.004, 0.11 * laserEnv), 4.4, Math.max(0.004, 0.11 * laserEnv));
+          outerIonSheath.scale.set(Math.max(0.008, 0.24 * laserEnv), 4.4, Math.max(0.008, 0.24 * laserEnv));
+
+          empDome.scale.setScalar(0.14 + ease * 0.78);
+          empDome.rotation.y += dt * 3.5;
+
+          hexGrid1.scale.setScalar(0.16 + ease * 0.85);
+          hexGrid1.rotation.z += dt * 4.5;
+          hexGrid2.scale.setScalar(0.12 + ease * 0.62);
+          hexGrid2.position.y = 0.12 + ease * 0.55;
+          hexGrid2.rotation.z -= dt * 5.5;
+
+          for (let i = 0; i < plasmaArcs.length; i++) {
+            const pa = plasmaArcs[i];
+            pa.visible = u < 0.68;
+            pa.rotation.y += dt * (i % 2 === 0 ? 9 : -9);
+          }
+
+          pMat.opacity = 0.95 * Math.pow(1 - u, 1.3);
+          sMat.opacity = 0.72 * Math.pow(1 - u, 1.4);
+          cMat.opacity = 0.98 * Math.pow(1 - u, 1.5);
+        },
+        mats,
+        geos
+      );
+      return;
+    }
+
+    if (arch === 'dragon_elemental') {
+      // DRAGON & ELEMENTAL SIGNATURE: Volcanic Magma Geyser + 10 Erupting Obsidian Crag Spikes + Swirling Fire Tornado
+      const fireGeyser = new THREE.Mesh(sharedPillarGeo, pMat);
+      fireGeyser.scale.set(0.18, 0.1, 0.18);
+      group.add(fireGeyser);
+
+      const crags = [];
+      for (let i = 0; i < 10; i++) {
+        const ang = (i / 10) * Math.PI * 2;
+        const crag = new THREE.Mesh(sharedConeSpireGeo, i % 2 === 0 ? pMat : sMat);
+        const rad = 0.15 + (i % 2) * 0.08;
+        crag.position.set(Math.cos(ang) * rad, -0.24, Math.sin(ang) * rad);
+        crag.rotation.z = -Math.cos(ang) * 0.42;
+        crag.rotation.x = Math.sin(ang) * 0.42;
+        group.add(crag);
+        crags.push({ mesh: crag, peakH: 0.45 + (i % 3) * 0.15 });
+      }
+
+      const vortexRings = [];
+      for (let v = 0; v < 4; v++) {
+        const vr = new THREE.Mesh(sharedRingGeo, v % 2 === 0 ? sMat : cMat);
+        vr.position.y = 0.08 + v * 0.16;
+        group.add(vr);
+        vortexRings.push({ mesh: vr, idx: v });
+      }
+
+      addVfxUpdater(
+        group,
+        1.55,
+        (u, elapsed, dt) => {
+          const ease = 1 - Math.pow(1 - u, 3);
+          stepCommonUnityShaders(u, elapsed, dt, ease);
+          const geyserH = Math.sin(Math.min(1, u * 1.45) * Math.PI) * 1.65;
+          const geyserR = 0.15 + ease * 0.24;
+          fireGeyser.scale.set(geyserR, Math.max(0.02, geyserH), geyserR);
+          fireGeyser.rotation.y += dt * 6.5;
+
+          const cragEnv = u < 0.26 ? ease / 0.26 : Math.max(0, 1 - (u - 0.26) / 0.74);
+          for (const cr of crags) {
+            cr.mesh.position.y = -0.22 + cragEnv * cr.peakH;
+          }
+
+          for (const vr of vortexRings) {
+            vr.mesh.position.y = 0.06 + vr.idx * 0.18 + u * 0.68;
+            const rS = (0.14 + vr.idx * 0.06) * (1 + ease * 1.35);
+            vr.mesh.scale.set(rS, 1, rS);
+            vr.mesh.rotation.z += dt * (8 + vr.idx * 2);
+          }
+
+          pMat.opacity = 0.95 * Math.pow(1 - u, 1.25);
+          sMat.opacity = 0.92 * Math.pow(1 - u, 1.35);
+          cMat.opacity = 0.98 * Math.pow(1 - u, 1.5);
+        },
+        mats,
+        geos
+      );
+      return;
+    }
+
+    if (arch === 'classic_staunton') {
+      // CLASSIC STAUNTON SIGNATURE: Imperial Golden Compass Star + 3 Brass Astrolabe Rings + 8 Ascending Crown Orbs
+      const starSigil1 = new THREE.Mesh(sharedStarRingGeo, pMat);
+      starSigil1.position.y = 0.022;
+      group.add(starSigil1);
+
+      const starSigil2 = new THREE.Mesh(sharedStarRingGeo, cMat);
+      starSigil2.position.y = 0.026;
+      starSigil2.rotation.z = Math.PI / 8;
+      group.add(starSigil2);
+
+      const astrolabeRings = [];
+      for (let a = 0; a < 3; a++) {
+        const ar = new THREE.Mesh(sharedThinRingGeo, a === 0 ? cMat : pMat);
+        ar.position.y = 0.26;
+        ar.rotation.x = (a * Math.PI) / 3 + 0.35;
+        group.add(ar);
+        astrolabeRings.push(ar);
+      }
+
+      const crownOrbs = [];
+      for (let o = 0; o < 8; o++) {
+        const orb = new THREE.Mesh(sharedSphereGeo, o % 2 === 0 ? cMat : pMat);
+        orb.scale.setScalar(0.036);
+        group.add(orb);
+        crownOrbs.push({ mesh: orb, baseAng: (o / 8) * Math.PI * 2 });
+      }
+
+      addVfxUpdater(
+        group,
+        1.38,
+        (u, elapsed, dt) => {
+          const ease = 1 - Math.pow(1 - u, 3);
+          stepCommonUnityShaders(u, elapsed, dt, ease);
+          starSigil1.scale.setScalar(0.16 + ease * 0.88);
+          starSigil1.rotation.z += dt * 2.8;
+          starSigil2.scale.setScalar(0.12 + ease * 0.68);
+          starSigil2.rotation.z -= dt * 3.4;
+
+          for (let i = 0; i < astrolabeRings.length; i++) {
+            const ar = astrolabeRings[i];
+            ar.scale.setScalar(0.12 + ease * (0.58 + i * 0.14));
+            ar.rotation.x += dt * (4 + i);
+            ar.rotation.y += dt * (5 - i);
+          }
+
+          for (const co of crownOrbs) {
+            const ang = co.baseAng + elapsed * 4.5;
+            const rad = 0.16 + ease * 0.42;
+            co.mesh.position.set(Math.cos(ang) * rad, 0.10 + ease * 0.85, Math.sin(ang) * rad);
+            co.mesh.scale.setScalar(0.038 * Math.max(0.05, 1 - u));
+          }
+
+          pMat.opacity = 0.95 * Math.pow(1 - u, 1.3);
+          sMat.opacity = 0.90 * Math.pow(1 - u, 1.4);
+          cMat.opacity = 0.98 * Math.pow(1 - u, 1.5);
+        },
+        mats,
+        geos
+      );
+      return;
+    }
+
+    // DEFAULT: GOTHIC SANCTUM WARRIORS SIGNATURE (Cathedral Rose Sigil + 4 Reliquary Cross Spires)
+    const roseRing = new THREE.Mesh(sharedStarRingGeo, sMat);
+    roseRing.position.y = 0.022;
+    group.add(roseRing);
+
+    const crossSpires = [];
+    for (let i = 0; i < 4; i++) {
+      const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const sp = new THREE.Mesh(sharedOctaGeo, i % 2 === 0 ? pMat : sMat);
+      sp.scale.set(0.045, 0.16, 0.045);
+      sp.position.set(Math.cos(ang) * 0.20, 0.18, Math.sin(ang) * 0.20);
+      group.add(sp);
+      crossSpires.push({ mesh: sp, ang });
+    }
+
+    addVfxUpdater(
+      group,
+      1.25,
+      (u, elapsed, dt) => {
+        const ease = 1 - Math.pow(1 - u, 3);
+        stepCommonUnityShaders(u, elapsed, dt, ease);
+        roseRing.scale.setScalar(0.14 + ease * 0.72);
+        roseRing.rotation.z += dt * 2.2;
+        for (const cs of crossSpires) {
+          const r = 0.18 + ease * 0.34;
+          cs.mesh.position.set(Math.cos(cs.ang) * r, 0.14 + ease * 0.52, Math.sin(cs.ang) * r);
+          cs.mesh.rotation.y += dt * 5.0;
+          const s = Math.max(0.01, 1 - u);
+          cs.mesh.scale.set(0.045 * s, 0.16 * s, 0.045 * s);
+        }
+        pMat.opacity = 0.92 * Math.pow(1 - u, 1.35);
+        sMat.opacity = 0.88 * Math.pow(1 - u, 1.4);
+        cMat.opacity = 0.96 * Math.pow(1 - u, 1.5);
+      },
+      mats,
+      geos
+    );
+  }
+
+  // ==========================================================================
+  // Master Piece-Specific + Set-Specific 3D Kill Spectacle Spawner
+  // ==========================================================================
+  function spawnPieceKillVfx(worldPos, victimType = 'pawn', victimColor = 'b', attackerType = 'queen', dirX = 0, dirZ = 1, attackerArchetype = 'gothic_warriors') {
     const type = String(victimType || 'pawn').toLowerCase();
-    const prof = PIECE_KILL_PROFILES[type] || PIECE_KILL_PROFILES.pawn;
+    const prof = getArchetypeKillProfile(attackerArchetype, type);
 
     triggerCameraShake(prof.shakeAmp, prof.shakeDuration);
+
+    // Spawn the attacking Chess Piece Set's unique 3D Signature Effect alongside the piece spectacle
+    spawnArchetypeSignatureKillVfx(worldPos, attackerArchetype, type);
 
     const group = new THREE.Group();
     group.position.set(worldPos.x, boardSurfaceY, worldPos.z);

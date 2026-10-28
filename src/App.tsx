@@ -213,6 +213,7 @@ export default function App() {
   const [showcasePieceSkinId, setShowcasePieceSkinId] = useState<string>(() => loadEconomyState().activePieceSkin);
   const [showcaseBoardSkinId, setShowcaseBoardSkinId] = useState<string>(() => loadEconomyState().activeBoardSkin);
   const [showcaseSceneryId, setShowcaseSceneryId] = useState<string>(() => loadEconomyState().activeScenery);
+  const [showcaseAttackNonce, setShowcaseAttackNonce] = useState<number>(0);
 
   // Cloud & Firebase Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -250,6 +251,19 @@ export default function App() {
   const [lobbyMusicEnabled, setLobbyMusicEnabled] = useState(true);
   const [uiHidden, setUiHidden] = useState(false);
   const [hasStartedGame, setHasStartedGame] = useState(false);
+  const [hudViewport, setHudViewport] = useState<{
+    orientation: 'portrait' | 'landscape';
+    aspectProfile: 'ultra-tall' | 'portrait' | 'square-fold' | 'standard-landscape' | 'ultrawide';
+    isShortLandscape: boolean;
+    fontScale: number;
+    padScale: number;
+  }>({
+    orientation: 'landscape',
+    aspectProfile: 'standard-landscape',
+    isShortLandscape: false,
+    fontScale: 1,
+    padScale: 1
+  });
 
   // Game Engine State Mirror
   const [gameMode, setGameMode] = useState<'single' | 'pass' | 'multi'>('single');
@@ -569,6 +583,142 @@ export default function App() {
     if (initializedRef.current) return;
     initializedRef.current = true;
     initWizardChess();
+  }, []);
+
+  // Dynamic HUD Font Scaling & Adaptive Padding Engine for Orientation Changes and Non-Standard Aspect Ratios
+  useEffect(() => {
+    let rafId = 0;
+
+    const updateHudResponsiveMetrics = () => {
+      const vv = window.visualViewport;
+      const vw = Math.max(280, Math.round(vv ? vv.width : window.innerWidth));
+      const vh = Math.max(240, Math.round(vv ? vv.height : window.innerHeight));
+      const aspect = vw / vh;
+      const shortSide = Math.min(vw, vh);
+      const longSide = Math.max(vw, vh);
+      const orientation: 'portrait' | 'landscape' = vw >= vh ? 'landscape' : 'portrait';
+      const isShortLandscape = orientation === 'landscape' && vh <= 520;
+
+      let aspectProfile: 'ultra-tall' | 'portrait' | 'square-fold' | 'standard-landscape' | 'ultrawide';
+      if (aspect < 0.52) {
+        aspectProfile = 'ultra-tall';
+      } else if (aspect < 0.85) {
+        aspectProfile = 'portrait';
+      } else if (aspect <= 1.18) {
+        aspectProfile = 'square-fold';
+      } else if (aspect <= 2.05) {
+        aspectProfile = 'standard-landscape';
+      } else {
+        aspectProfile = 'ultrawide';
+      }
+
+      // Compute continuous dynamic font scale based on shortest edge, longest edge, and aspect ratio
+      let fontScale = 1.0;
+      let padScale = 1.0;
+      let edgeX = 12;
+      let edgeY = 10;
+
+      if (aspectProfile === 'ultra-tall') {
+        // 21:9 / 20:9 narrow portrait phones or split-screen columns
+        fontScale = Math.min(0.92, Math.max(0.78, vw / 410));
+        padScale = Math.min(0.88, Math.max(0.72, vw / 430));
+        edgeX = Math.max(6, Math.round(vw * 0.02));
+        edgeY = Math.max(8, Math.round(vh * 0.012));
+      } else if (aspectProfile === 'portrait') {
+        // Standard portrait phones and tablets
+        fontScale = Math.min(1.06, Math.max(0.84, vw / 440));
+        padScale = Math.min(1.04, Math.max(0.80, vw / 460));
+        edgeX = Math.max(8, Math.min(18, Math.round(vw * 0.026)));
+        edgeY = Math.max(8, Math.min(16, Math.round(vh * 0.014)));
+      } else if (aspectProfile === 'square-fold') {
+        // Square viewports, foldable unfolded inner screens, or 4:3 split windows
+        fontScale = Math.min(1.08, Math.max(0.88, shortSide / 680));
+        padScale = Math.min(1.06, Math.max(0.84, shortSide / 700));
+        edgeX = Math.max(10, Math.min(20, Math.round(vw * 0.022)));
+        edgeY = Math.max(8, Math.min(16, Math.round(vh * 0.018)));
+      } else if (aspectProfile === 'ultrawide') {
+        // 21:9 / 32:9 ultrawide desktop monitors OR ultra-wide landscape phones
+        if (isShortLandscape) {
+          fontScale = Math.min(0.94, Math.max(0.80, vh / 440));
+          padScale = Math.min(0.86, Math.max(0.70, vh / 460));
+          edgeX = Math.max(16, Math.min(36, Math.round(vw * 0.032)));
+          edgeY = Math.max(5, Math.min(10, Math.round(vh * 0.018)));
+        } else {
+          fontScale = Math.min(1.22, Math.max(1.02, vh / 900));
+          padScale = Math.min(1.25, Math.max(1.04, vh / 880));
+          edgeX = Math.max(24, Math.min(72, Math.round((vw - Math.min(vw, 1680)) * 0.35 + 24)));
+          edgeY = Math.max(14, Math.min(24, Math.round(vh * 0.018)));
+        }
+      } else {
+        // Standard landscape (16:9, 16:10, 4:3)
+        if (isShortLandscape) {
+          fontScale = Math.min(0.95, Math.max(0.82, vh / 450));
+          padScale = Math.min(0.88, Math.max(0.72, vh / 470));
+          edgeX = Math.max(12, Math.min(24, Math.round(vw * 0.024)));
+          edgeY = Math.max(5, Math.min(10, Math.round(vh * 0.018)));
+        } else {
+          const base = Math.sqrt(shortSide * longSide);
+          fontScale = Math.min(1.16, Math.max(0.92, base / 1060));
+          padScale = Math.min(1.18, Math.max(0.90, base / 1080));
+          edgeX = Math.max(12, Math.min(28, Math.round(vw * 0.016)));
+          edgeY = Math.max(10, Math.min(20, Math.round(vh * 0.016)));
+        }
+      }
+
+      const controlH = Math.round(Math.min(40, Math.max(26, 31 * padScale)));
+      const gapPx = Math.round(Math.min(12, Math.max(4, 6 * padScale)));
+
+      const docEl = document.documentElement;
+      docEl.dataset.orientation = orientation;
+      docEl.dataset.aspectProfile = aspectProfile;
+      docEl.dataset.shortLandscape = isShortLandscape ? 'true' : 'false';
+      docEl.style.setProperty('--hud-font-scale', fontScale.toFixed(3));
+      docEl.style.setProperty('--hud-pad-scale', padScale.toFixed(3));
+      docEl.style.setProperty('--hud-edge-x', `${edgeX}px`);
+      docEl.style.setProperty('--hud-edge-y', `${edgeY}px`);
+      docEl.style.setProperty('--hud-control-h', `${controlH}px`);
+      docEl.style.setProperty('--hud-gap', `${gapPx}px`);
+      docEl.style.setProperty('--hud-aspect-ratio', aspect.toFixed(3));
+
+      setHudViewport((prev) => {
+        if (
+          prev.orientation === orientation &&
+          prev.aspectProfile === aspectProfile &&
+          prev.isShortLandscape === isShortLandscape &&
+          Math.abs(prev.fontScale - fontScale) < 0.02 &&
+          Math.abs(prev.padScale - padScale) < 0.02
+        ) {
+          return prev;
+        }
+        return {
+          orientation,
+          aspectProfile,
+          isShortLandscape,
+          fontScale: Number(fontScale.toFixed(2)),
+          padScale: Number(padScale.toFixed(2))
+        };
+      });
+    };
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateHudResponsiveMetrics);
+    };
+
+    updateHudResponsiveMetrics();
+    window.addEventListener('resize', scheduleUpdate, { passive: true });
+    window.addEventListener('orientationchange', scheduleUpdate, { passive: true });
+    window.visualViewport?.addEventListener('resize', scheduleUpdate, { passive: true });
+    const screenOrientation = (window.screen as Screen & { orientation?: ScreenOrientation })?.orientation;
+    screenOrientation?.addEventListener?.('change', scheduleUpdate);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', scheduleUpdate);
+      window.removeEventListener('orientationchange', scheduleUpdate);
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate);
+      screenOrientation?.removeEventListener?.('change', scheduleUpdate);
+    };
   }, []);
 
   // Apply saved piece archetype, piece material skin, 3D board style & 3D world scenery when engine is ready or when equipped items change
@@ -1041,8 +1191,10 @@ export default function App() {
     itemId: string
   ) => {
     setArmoryTab(category);
-    if (category === 'types') setShowcaseArchetypeId(itemId);
-    else if (category === 'pieces') setShowcasePieceSkinId(itemId);
+    if (category === 'types') {
+      setShowcaseArchetypeId(itemId);
+      setTimeout(() => setShowcaseAttackNonce((n) => n + 1), 90);
+    } else if (category === 'pieces') setShowcasePieceSkinId(itemId);
     else if (category === 'boards') setShowcaseBoardSkinId(itemId);
     else if (category === 'sceneries') setShowcaseSceneryId(itemId);
 
@@ -1418,6 +1570,8 @@ export default function App() {
 
       <div
         id="hud-top"
+        data-orientation={hudViewport.orientation}
+        data-aspect-profile={hudViewport.aspectProfile}
         aria-hidden={uiHidden || activeDialog !== 'none'}
         style={{ display: activeDialog !== 'none' ? 'none' : undefined }}
       >
@@ -1450,7 +1604,7 @@ export default function App() {
               aria-live="assertive"
             >
               <span className="check-indicator-icon" aria-hidden="true">
-                <PlaySwordsVectorIcon size={12} />
+                <PlaySwordsVectorIcon size={Math.round(12 * hudViewport.fontScale)} />
               </span>
               <span className="check-indicator-label">CHECK!</span>
             </div>
@@ -1468,7 +1622,7 @@ export default function App() {
             title="Open Skin Reliquary"
           >
             <span className="gold-coin-glyph" aria-hidden="true">
-              <GoldCoinVectorIcon size={13} />
+              <GoldCoinVectorIcon size={Math.round(13 * hudViewport.fontScale)} />
             </span>
             <span className="gold-wallet-amount">{economy.gold}</span>
           </button>
@@ -2573,6 +2727,7 @@ export default function App() {
                 pieceSkin={showcasePieceSkinObj}
                 boardSkin={showcaseBoardSkinObj}
                 scenery={showcaseSceneryObj}
+                attackPreviewNonce={showcaseAttackNonce}
               />
             </div>
 
@@ -2644,9 +2799,10 @@ export default function App() {
                       <div className="skin-card-title">{arch.name}</div>
                       <p className="skin-card-sub">{arch.subtitle}</p>
                       <div className="skin-meta-line">
-                        <span>Strike: <strong>{arch.strikeStyle}</strong></span>
-                        <span aria-hidden="true">·</span>
-                        <span>Shatter: <strong>{arch.shatterStyle}</strong></span>
+                        <span>⚔ Attack: <strong>{arch.strikeStyle}</strong></span>
+                      </div>
+                      <div className="skin-meta-line">
+                        <span>✦ 3D Effect: <strong>{arch.shatterStyle}</strong></span>
                       </div>
 
                       <div className="skin-card-actions">
@@ -2659,7 +2815,7 @@ export default function App() {
                           }}
                         >
                           <Eye3DPreviewVectorIcon size={15} />
-                          <span>{isInspecting ? 'Showing in 3D' : 'Live 3D Preview'}</span>
+                          <span>{isInspecting ? '⚔ Replay Attack & VFX' : '⚔ Preview Attack & 3D'}</span>
                         </button>
                         <button
                           type="button"

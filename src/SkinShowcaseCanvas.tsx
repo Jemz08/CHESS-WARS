@@ -8,8 +8,18 @@ import type {
 } from './skinCatalog';
 import {
   buildProceduralPieceGroup,
+  updateProceduralPieceAnimation,
   rebuildBoardArchitectureGroup
 } from './customBoardAndPieceModels.js';
+import {
+  createUnitySlashRibbonShaderMaterial,
+  createUnityFresnelDissolveSphereMaterial,
+  createUnityMagicCircleShaderMaterial,
+  createUnityFireBreathShaderMaterial,
+  createUnityPlasmaBeamShaderMaterial,
+  getUnityStarFlareTexture,
+  getUnityFireFlameTexture
+} from './soundAndVfxEngine.js';
 
 interface SkinShowcaseCanvasProps {
   activeTab: 'types' | 'sceneries' | 'boards' | 'pieces';
@@ -17,6 +27,7 @@ interface SkinShowcaseCanvasProps {
   pieceSkin: PieceSkin;
   boardSkin: BoardSkin;
   scenery: WorldScenery;
+  attackPreviewNonce?: number;
 }
 
 /**
@@ -76,26 +87,36 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
   return tex;
 }
 
-function sanitizeCrossContextMaterials(root: THREE.Object3D, fallbackColorHex = 0xff6a00) {
+function sanitizeCrossContextMaterials(root: THREE.Object3D, _fallbackColorHex = 0xff6a00) {
+  const shaderUniformList: Array<Record<string, any>> = [];
   root.traverse((child: any) => {
     if (!child.isMesh) return;
     if (child.geometry) {
       child.geometry = child.geometry.clone();
     }
-    child.castShadow = true;
-    child.receiveShadow = true;
     if (
       child.userData?.isDragonFire ||
       child.material?.isShaderMaterial ||
       child.material?.type === 'ShaderMaterial'
     ) {
-      child.material = new THREE.MeshBasicMaterial({
-        color: fallbackColorHex,
-        transparent: true,
-        opacity: 0.92
-      });
+      child.castShadow = false;
+      child.receiveShadow = false;
+      if (child.material && typeof child.material.clone === 'function') {
+        const clonedShaderMat = child.material.clone();
+        if (child.material.uniforms) {
+          clonedShaderMat.uniforms = THREE.UniformsUtils.clone(child.material.uniforms);
+          shaderUniformList.push(clonedShaderMat.uniforms);
+        }
+        child.material = clonedShaderMat;
+      }
+    } else {
+      child.castShadow = true;
+      child.receiveShadow = true;
     }
   });
+  if (root.userData?.proceduralAnim) {
+    root.userData.proceduralAnim.showcaseShaderUniforms = shaderUniformList;
+  }
 }
 
 function disposeHierarchy(root: THREE.Object3D) {
@@ -119,11 +140,13 @@ export default function SkinShowcaseCanvas({
   archetype,
   pieceSkin,
   boardSkin,
-  scenery
+  scenery,
+  attackPreviewNonce = 0
 }: SkinShowcaseCanvasProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [previewColor, setPreviewColor] = useState<'w' | 'b'>('w');
   const [autoRotate, setAutoRotate] = useState(true);
+  const [isAttackingPreview, setIsAttackingPreview] = useState(false);
   const autoRotateRef = useRef(autoRotate);
   autoRotateRef.current = autoRotate;
 
@@ -133,6 +156,7 @@ export default function SkinShowcaseCanvas({
     renderer: THREE.WebGLRenderer;
     pedestalGroup: THREE.Group;
     subjectGroup: THREE.Group;
+    vfxGroup: THREE.Group;
     baseMesh: THREE.Mesh;
     ringMesh: THREE.Mesh;
     rimLight: THREE.PointLight;
@@ -141,6 +165,11 @@ export default function SkinShowcaseCanvas({
     floatingNodes: Array<{ mesh: THREE.Object3D; baseY: number; phase: number }>;
     weatherPoints: THREE.Points | null;
     weatherVelocities: Float32Array | null;
+    heroPieceRoot: THREE.Object3D | null;
+    heroProceduralAnim: any | null;
+    heroMixer: THREE.AnimationMixer | null;
+    heroActions: Record<string, THREE.AnimationAction>;
+    activeVfxUpdaters: Array<(dt: number) => boolean>;
   } | null>(null);
 
   // 1. Mount-only WebGLRenderer initialization (reused across all Armory clicks so we never exhaust WebGL contexts)
@@ -219,12 +248,16 @@ export default function SkinShowcaseCanvas({
     const subjectGroup = new THREE.Group();
     pedestalGroup.add(subjectGroup);
 
+    const vfxGroup = new THREE.Group();
+    pedestalGroup.add(vfxGroup);
+
     const state = {
       scene,
       camera,
       renderer,
       pedestalGroup,
       subjectGroup,
+      vfxGroup,
       baseMesh,
       ringMesh,
       rimLight,
@@ -232,7 +265,12 @@ export default function SkinShowcaseCanvas({
       dynamicOrbitRings: [] as THREE.Object3D[],
       floatingNodes: [] as Array<{ mesh: THREE.Object3D; baseY: number; phase: number }>,
       weatherPoints: null as THREE.Points | null,
-      weatherVelocities: null as Float32Array | null
+      weatherVelocities: null as Float32Array | null,
+      heroPieceRoot: null as THREE.Object3D | null,
+      heroProceduralAnim: null as any | null,
+      heroMixer: null as THREE.AnimationMixer | null,
+      heroActions: {} as Record<string, THREE.AnimationAction>,
+      activeVfxUpdaters: [] as Array<(dt: number) => boolean>
     };
     stageRef.current = state;
 
@@ -315,6 +353,28 @@ export default function SkinShowcaseCanvas({
         posAttr.needsUpdate = true;
       }
 
+      if (state.heroMixer) {
+        state.heroMixer.update(delta);
+      }
+      if (state.heroProceduralAnim) {
+        updateProceduralPieceAnimation(
+          {
+            type: state.heroProceduralAnim.pieceType || 'king',
+            archetype: state.heroProceduralAnim.archetype || 'classic_staunton',
+            proceduralAnim: state.heroProceduralAnim
+          },
+          delta,
+          elapsed
+        );
+      }
+
+      for (let i = state.activeVfxUpdaters.length - 1; i >= 0; i--) {
+        const alive = state.activeVfxUpdaters[i](delta);
+        if (!alive) {
+          state.activeVfxUpdaters.splice(i, 1);
+        }
+      }
+
       camera.lookAt(state.lookTarget);
       renderer.render(scene, camera);
     };
@@ -371,10 +431,21 @@ export default function SkinShowcaseCanvas({
       subjectGroup.remove(child);
       disposeHierarchy(child);
     }
+    while (st.vfxGroup.children.length > 0) {
+      const child = st.vfxGroup.children[0];
+      st.vfxGroup.remove(child);
+      disposeHierarchy(child);
+    }
     st.dynamicOrbitRings = [];
     st.floatingNodes = [];
     st.weatherPoints = null;
     st.weatherVelocities = null;
+    st.heroPieceRoot = null;
+    st.heroProceduralAnim = null;
+    st.heroMixer = null;
+    st.heroActions = {};
+    st.activeVfxUpdaters = [];
+    setIsAttackingPreview(false);
     pedestalGroup.rotation.x = 0;
 
     const isWhite = previewColor === 'w';
@@ -435,7 +506,17 @@ export default function SkinShowcaseCanvas({
       if (!pieceModel) {
         const fallbackArch = archId === 'gothic_warriors' ? 'classic_staunton' : archId;
         const built = buildProceduralPieceGroup(fallbackArch, 'king', colorCode, customMats);
-        pieceModel = built?.root || null;
+        if (built?.root) {
+          built.root.userData.proceduralAnim = {
+            animRig: built.animRig,
+            animParts: built.animParts,
+            archetype: fallbackArch,
+            pieceType: 'king',
+            mode: 'idle',
+            clipTime: 0
+          };
+          pieceModel = built.root;
+        }
       }
       if (!pieceModel) return null;
 
@@ -443,8 +524,41 @@ export default function SkinShowcaseCanvas({
 
       const wrapper = new THREE.Group();
       wrapper.add(pieceModel);
+      const hiddenForBounds: Array<{ obj: THREE.Object3D; vis: boolean }> = [];
+      pieceModel.traverse((child: any) => {
+        if (child.userData?.excludeFromBounds) {
+          hiddenForBounds.push({ obj: child, vis: child.visible });
+          child.visible = false;
+        }
+      });
       wrapper.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(pieceModel);
+      const box = new THREE.Box3();
+      pieceModel.traverse((child: any) => {
+        if (!child.isMesh || !child.visible) return;
+        let p: any = child;
+        let excluded = false;
+        while (p) {
+          if (p.userData?.excludeFromBounds || p.visible === false) {
+            excluded = true;
+            break;
+          }
+          p = p.parent;
+        }
+        if (!excluded && child.geometry) {
+          child.geometry.computeBoundingBox();
+          if (child.geometry.boundingBox) {
+            const childBox = child.geometry.boundingBox.clone();
+            childBox.applyMatrix4(child.matrixWorld);
+            box.union(childBox);
+          }
+        }
+      });
+      for (const item of hiddenForBounds) {
+        item.obj.visible = item.vis;
+      }
+      if (box.isEmpty()) {
+        box.setFromObject(pieceModel);
+      }
       const size = new THREE.Vector3();
       const center = new THREE.Vector3();
       box.getSize(size);
@@ -458,6 +572,7 @@ export default function SkinShowcaseCanvas({
         -box.min.y * normScale,
         -center.z * normScale
       );
+      wrapper.userData.pieceModel = pieceModel;
       return wrapper;
     };
 
@@ -471,6 +586,24 @@ export default function SkinShowcaseCanvas({
       if (heroPiece) {
         heroPiece.position.set(0, 0.0, 0);
         subjectGroup.add(heroPiece);
+        const innerModel = heroPiece.userData.pieceModel as THREE.Object3D | undefined;
+        if (innerModel) {
+          st.heroPieceRoot = innerModel;
+          if (innerModel.userData?.proceduralAnim) {
+            st.heroProceduralAnim = innerModel.userData.proceduralAnim;
+          } else if (Array.isArray(innerModel.userData?.gltfAnimations) && innerModel.userData.gltfAnimations.length > 0) {
+            const mixer = new THREE.AnimationMixer(innerModel);
+            const actions: Record<string, THREE.AnimationAction> = {};
+            for (const clip of innerModel.userData.gltfAnimations) {
+              actions[clip.name] = mixer.clipAction(clip);
+            }
+            st.heroMixer = mixer;
+            st.heroActions = actions;
+            if (actions.Idle) {
+              actions.Idle.reset().fadeIn(0.15).play();
+            }
+          }
+        }
       }
 
       camera.position.set(0, 1.22, 3.05);
@@ -762,6 +895,637 @@ export default function SkinShowcaseCanvas({
     }
   }, [activeTab, archetype, pieceSkin, boardSkin, scenery, previewColor]);
 
+  // Trigger set-specific 3D Attack choreography + 3D VFX burst in the Showcase
+  const triggerShowcaseAttackAndVfx = () => {
+    const st = stageRef.current;
+    if (!st) return;
+
+    setIsAttackingPreview(true);
+    if (typeof (window as any).wizardChess?.playShowcaseAttackSfx === 'function') {
+      (window as any).wizardChess.playShowcaseAttackSfx(archetype.id, 'king');
+    }
+
+    // 1. Trigger 3D Piece Attack Animation
+    if (st.heroProceduralAnim) {
+      st.heroProceduralAnim.mode = 'attack';
+      st.heroProceduralAnim.clipTime = 0;
+      setTimeout(() => {
+        if (st.heroProceduralAnim) {
+          st.heroProceduralAnim.mode = 'idle';
+          st.heroProceduralAnim.clipTime = 0;
+        }
+        setIsAttackingPreview(false);
+      }, 1250);
+    } else if (st.heroMixer && st.heroActions.Attack) {
+      const atk = st.heroActions.Attack;
+      if (st.heroActions.Idle) st.heroActions.Idle.fadeOut(0.08);
+      atk.reset();
+      atk.setLoop(THREE.LoopOnce, 1);
+      atk.clampWhenFinished = true;
+      atk.fadeIn(0.08).play();
+      setTimeout(() => {
+        if (st.heroActions.Idle) {
+          atk.fadeOut(0.2);
+          st.heroActions.Idle.reset().fadeIn(0.2).play();
+        }
+        setIsAttackingPreview(false);
+      }, 1250);
+    } else {
+      setTimeout(() => setIsAttackingPreview(false), 1100);
+    }
+
+    // 2. Spawn Set-Specific 3D Weapon Contact & Signature Kill VFX on the Pedestal
+    const vfxGroup = st.vfxGroup;
+    while (vfxGroup.children.length > 0) {
+      const c = vfxGroup.children[0];
+      vfxGroup.remove(c);
+      disposeHierarchy(c);
+    }
+    st.activeVfxUpdaters = [];
+
+    const archId = archetype.id;
+    const styleIdx =
+      archId === 'classic_staunton' ? 1 : archId === 'arcane_cyber' ? 2 : archId === 'dragon_elemental' ? 3 : 0;
+    const primaryHex =
+      archId === 'classic_staunton'
+        ? 0xffd166
+        : archId === 'arcane_cyber'
+          ? 0x00f5d4
+          : archId === 'dragon_elemental'
+            ? 0xff2a55
+            : 0xff6b35;
+    const secondaryHex =
+      archId === 'classic_staunton'
+        ? 0xe09f3e
+        : archId === 'arcane_cyber'
+          ? 0x9d4edd
+          : archId === 'dragon_elemental'
+            ? 0xff9e00
+            : 0xd4af37;
+    const coreHex = 0xffffff;
+
+    // Shared Unity URP / ShaderGraph Shader VFX Layers on the Showcase Pedestal:
+    // A. Unity Procedural Magic Circle / Voronoi Ground Crack Shader Decal
+    const magicCircleMat = createUnityMagicCircleShaderMaterial(primaryHex, secondaryHex, coreHex, styleIdx);
+    const magicCirclePlane = new THREE.Mesh(new THREE.PlaneGeometry(2.15, 2.15), magicCircleMat);
+    magicCirclePlane.rotation.x = -Math.PI / 2;
+    magicCirclePlane.position.y = 0.024;
+    vfxGroup.add(magicCirclePlane);
+
+    // B. Unity URP Fresnel & Noise-Dissolve Energy Sphere
+    const fresnelMat = createUnityFresnelDissolveSphereMaterial(primaryHex, secondaryHex, coreHex);
+    const fresnelSphere = new THREE.Mesh(new THREE.SphereGeometry(0.65, 24, 18), fresnelMat);
+    fresnelSphere.position.y = 0.65;
+    vfxGroup.add(fresnelSphere);
+
+    // C. Unity Shuriken Scrolling Noise Slash Ribbon Shader (only for melee Gothic Warriors)
+    const slashRibbonMat = createUnitySlashRibbonShaderMaterial(primaryHex, secondaryHex, coreHex);
+    const slashRibbonMesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.45, 0.85, 32, 2, -Math.PI * 0.55, Math.PI * 1.1),
+      slashRibbonMat
+    );
+    slashRibbonMesh.position.set(0, 0.72, 0.35);
+    slashRibbonMesh.rotation.set(0.38, 0, 0.32);
+    slashRibbonMesh.visible = archId === 'gothic_warriors';
+    vfxGroup.add(slashRibbonMesh);
+
+    // D. Unity Soft-Particle Star-Flare Billboards
+    const starTex = getUnityStarFlareTexture();
+    const starSprites: Array<{ sprite: THREE.Sprite; mat: THREE.SpriteMaterial; ang: number; vy: number }> = [];
+    for (let i = 0; i < 8; i++) {
+      const spMat = new THREE.SpriteMaterial({
+        map: starTex,
+        color: i % 2 === 0 ? coreHex : primaryHex,
+        transparent: true,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const sp = new THREE.Sprite(spMat);
+      const ang = (i / 8) * Math.PI * 2;
+      sp.position.set(Math.cos(ang) * 0.45, 0.25 + (i % 3) * 0.18, Math.sin(ang) * 0.45);
+      sp.scale.setScalar(0.32);
+      vfxGroup.add(sp);
+      starSprites.push({ sprite: sp, mat: spMat, ang, vy: 0.65 + (i % 3) * 0.3 });
+    }
+
+    let uElapsed = 0;
+    st.activeVfxUpdaters.push((dt) => {
+      uElapsed += dt;
+      const p = Math.min(1, uElapsed / 1.2);
+      const ease = 1 - Math.pow(1 - p, 3);
+
+      magicCircleMat.uniforms.uTime.value = uElapsed;
+      magicCircleMat.uniforms.uProgress.value = p;
+      magicCirclePlane.scale.setScalar(0.45 + ease * 0.75);
+      magicCirclePlane.rotation.z += dt * 1.6;
+
+      fresnelMat.uniforms.uTime.value = uElapsed;
+      fresnelMat.uniforms.uDissolve.value = Math.min(1, p * 1.1);
+      fresnelSphere.scale.setScalar(0.4 + ease * 0.85);
+      fresnelSphere.rotation.y += dt * 3.0;
+
+      slashRibbonMat.uniforms.uTime.value = uElapsed;
+      slashRibbonMat.uniforms.uProgress.value = Math.min(1, p * 1.35);
+      slashRibbonMesh.scale.setScalar(0.75 + ease * 0.65);
+      slashRibbonMesh.rotation.z += dt * 9.5;
+
+      for (const stSp of starSprites) {
+        const rad = 0.45 + ease * 0.55;
+        stSp.sprite.position.x = Math.cos(stSp.ang + uElapsed * 2.4) * rad;
+        stSp.sprite.position.z = Math.sin(stSp.ang + uElapsed * 2.4) * rad;
+        stSp.sprite.position.y += stSp.vy * dt;
+        stSp.sprite.scale.setScalar(0.34 * Math.max(0.02, 1 - p));
+        stSp.mat.opacity = 0.95 * (1 - p);
+      }
+      return p < 1;
+    });
+
+    if (archId === 'gothic_warriors') {
+      // EDGEFLUX Triple Staggered GLSL Sword-Wave Slash Ribbons + Cathedral Rose Sigil + 28 Forged Anvil Sparks + Reliquary Crosses
+      const slashWaves: Array<{ mesh: THREE.Mesh; mat: THREE.ShaderMaterial; speed: number; scaleMul: number }> = [];
+      const waveCfgs = [
+        { tiltX: 0.36, tiltZ: 0.48, scaleMul: 1.08, speed: 12.0, pHex: 0xff6b35, sHex: 0xffd166 },
+        { tiltX: 0.36, tiltZ: -0.48, scaleMul: 1.0, speed: -13.0, pHex: 0xff2a55, sHex: 0xffb703 },
+        { tiltX: 1.35, tiltZ: 0.0, scaleMul: 1.22, speed: 15.0, pHex: 0xffd166, sHex: 0xffffff }
+      ];
+      for (const wc of waveCfgs) {
+        const wMat = createUnitySlashRibbonShaderMaterial(wc.pHex, wc.sHex, 0xffffff);
+        const wMesh = new THREE.Mesh(
+          new THREE.RingGeometry(0.42, 0.88, 32, 2, -Math.PI * 0.55, Math.PI * 1.1),
+          wMat
+        );
+        wMesh.position.set(0, 0.72, 0.42);
+        wMesh.rotation.set(wc.tiltX, 0, wc.tiltZ);
+        vfxGroup.add(wMesh);
+        slashWaves.push({ mesh: wMesh, mat: wMat, speed: wc.speed, scaleMul: wc.scaleMul });
+      }
+
+      const roseRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.35, 1.08, 12),
+        new THREE.MeshBasicMaterial({
+          color: 0xffb703,
+          transparent: true,
+          opacity: 0.9,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      roseRing.rotation.x = -Math.PI / 2;
+      roseRing.position.y = 0.03;
+      vfxGroup.add(roseRing);
+
+      // 28 High-Velocity Forged-Steel Anvil Sparks
+      const anvilSparks: Array<{ mesh: THREE.Mesh; vx: number; vy: number; vz: number }> = [];
+      const sparkGeo = new THREE.OctahedronGeometry(0.028, 0);
+      sparkGeo.scale(0.6, 2.3, 0.6);
+      const sparkMat = new THREE.MeshBasicMaterial({
+        color: 0xffe8a3,
+        transparent: true,
+        opacity: 0.98,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      for (let i = 0; i < 28; i++) {
+        const sm = new THREE.Mesh(sparkGeo, sparkMat);
+        sm.position.set(0, 0.72, 0.42);
+        const ang = (i / 28) * Math.PI * 2;
+        anvilSparks.push({
+          mesh: sm,
+          vx: Math.cos(ang) * (1.1 + Math.random() * 1.2),
+          vy: 0.65 + Math.random() * 1.4,
+          vz: Math.sin(ang) * (1.1 + Math.random() * 1.2) + 0.6
+        });
+        vfxGroup.add(sm);
+      }
+
+      const crosses: THREE.Group[] = [];
+      for (let i = 0; i < 6; i++) {
+        const cg = new THREE.Group();
+        const cMat = new THREE.MeshBasicMaterial({
+          color: i % 2 === 0 ? 0xffea9f : 0xffb703,
+          transparent: true,
+          opacity: 0.95,
+          blending: THREE.AdditiveBlending
+        });
+        cg.add(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.24, 0.04), cMat));
+        const hBar = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.04, 0.04), cMat);
+        hBar.position.y = 0.04;
+        cg.add(hBar);
+        const ang = (i / 6) * Math.PI * 2;
+        cg.position.set(Math.cos(ang) * 0.72, 0.22, Math.sin(ang) * 0.72);
+        vfxGroup.add(cg);
+        crosses.push(cg);
+      }
+
+      let t = 0;
+      st.activeVfxUpdaters.push((dt) => {
+        t += dt;
+        const p = Math.min(1, t / 1.15);
+        for (const sw of slashWaves) {
+          sw.mat.uniforms.uTime.value = t;
+          sw.mat.uniforms.uProgress.value = Math.min(1, p * 1.25);
+          sw.mesh.scale.setScalar((0.75 + p * 1.15) * sw.scaleMul);
+          sw.mesh.rotation.z += dt * sw.speed;
+        }
+        roseRing.scale.setScalar(0.5 + p * 1.15);
+        roseRing.rotation.z += dt * 1.8;
+        (roseRing.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1 - p) * 0.9);
+        sparkMat.opacity = Math.max(0, (1 - p) * 0.98);
+        for (const sp of anvilSparks) {
+          sp.mesh.position.x += sp.vx * dt;
+          sp.mesh.position.y += sp.vy * dt;
+          sp.mesh.position.z += sp.vz * dt;
+          sp.vy -= 4.8 * dt;
+          sp.mesh.scale.setScalar(Math.max(0.02, 1 - p));
+        }
+        crosses.forEach((c, idx) => {
+          c.position.y = 0.22 + p * 0.95;
+          c.rotation.y += dt * (3.2 + idx * 0.4);
+          c.scale.setScalar(Math.max(0.01, 1 - p * 0.75));
+        });
+        if (p >= 1) {
+          disposeHierarchy(vfxGroup);
+          vfxGroup.clear();
+          return false;
+        }
+        return true;
+      });
+    } else if (archId === 'classic_staunton') {
+      // Grandmaster 6-Comet Telekinetic Barrage + 8-Point Compass Star + Gyroscopic Brass Astrolabe Rings
+      const starGroup = new THREE.Group();
+      starGroup.position.y = 0.03;
+      const starMatA = new THREE.MeshBasicMaterial({
+        color: 0xffe082,
+        transparent: true,
+        opacity: 0.92,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const starMatB = new THREE.MeshBasicMaterial({
+        color: 0xffb300,
+        transparent: true,
+        opacity: 0.88,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const sqA = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.98, 4), starMatA);
+      sqA.rotation.x = -Math.PI / 2;
+      const sqB = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.98, 4), starMatB);
+      sqB.rotation.x = -Math.PI / 2;
+      sqB.rotation.z = Math.PI / 4;
+      starGroup.add(sqA, sqB);
+      vfxGroup.add(starGroup);
+
+      const chronoRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.75, 0.025, 12, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0xfff8e1,
+          transparent: true,
+          opacity: 0.92,
+          blending: THREE.AdditiveBlending
+        })
+      );
+      chronoRing.position.y = 0.65;
+      vfxGroup.add(chronoRing);
+
+      // 6 Streaking Golden Arcane Comet Projectiles diving onto the pedestal
+      const comets: Array<{
+        pivot: THREE.Group;
+        mat: THREE.SpriteMaterial;
+        startPos: THREE.Vector3;
+        endPos: THREE.Vector3;
+        delay: number;
+      }> = [];
+      const tailGeo = new THREE.ConeGeometry(0.065, 0.45, 8);
+      tailGeo.translate(0, 0.225, 0);
+      tailGeo.rotateX(-Math.PI / 2);
+
+      for (let i = 0; i < 6; i++) {
+        const cPivot = new THREE.Group();
+        const cMat = new THREE.SpriteMaterial({
+          map: starTex,
+          color: i % 2 === 0 ? 0xffffff : 0xffd166,
+          transparent: true,
+          opacity: 1.0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        });
+        const headSp = new THREE.Sprite(cMat);
+        headSp.scale.setScalar(0.38);
+        cPivot.add(headSp);
+
+        const tailM = new THREE.Mesh(tailGeo, i % 2 === 0 ? starMatA : starMatB);
+        cPivot.add(tailM);
+
+        const ang = (i / 6) * Math.PI * 2;
+        const startPos = new THREE.Vector3(Math.cos(ang) * 0.85, 1.55 + (i % 2) * 0.25, Math.sin(ang) * 0.85);
+        const endPos = new THREE.Vector3(Math.cos(ang + 0.6) * 0.35, 0.08, Math.sin(ang + 0.6) * 0.35 + 0.32);
+        cPivot.position.copy(startPos);
+        cPivot.lookAt(endPos);
+        vfxGroup.add(cPivot);
+        comets.push({ pivot: cPivot, mat: cMat, startPos, endPos, delay: i * 0.05 });
+      }
+
+      let t = 0;
+      st.activeVfxUpdaters.push((dt) => {
+        t += dt;
+        const p = Math.min(1, t / 1.2);
+        starGroup.scale.setScalar(0.45 + p * 1.2);
+        starGroup.rotation.y += dt * 2.5;
+        starMatA.opacity = Math.max(0, (1 - p) * 0.92);
+        starMatB.opacity = Math.max(0, (1 - p) * 0.88);
+        chronoRing.rotation.x += dt * 4.2;
+        chronoRing.rotation.y += dt * 3.1;
+        (chronoRing.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1 - p) * 0.92);
+
+        for (const cm of comets) {
+          const localU = Math.max(0, Math.min(1, (p - cm.delay) / Math.max(0.25, 0.78 - cm.delay)));
+          const ease = localU * localU * (3 - 2 * localU);
+          cm.pivot.position.lerpVectors(cm.startPos, cm.endPos, ease);
+          const s = Math.sin(localU * Math.PI) * 1.25;
+          cm.pivot.scale.setScalar(Math.max(0.01, s));
+          cm.mat.opacity = Math.sin(localU * Math.PI);
+        }
+
+        if (p >= 1) {
+          disposeHierarchy(vfxGroup);
+          vfxGroup.clear();
+          return false;
+        }
+        return true;
+      });
+    } else if (archId === 'arcane_cyber') {
+      // Overcharged GLSL Plasma Cannon Beam + 4 Snapping 3D Lightning Arcs + Sky Orbital Laser + Hex Holo-Grids
+      const plasmaCoreMat = createUnityPlasmaBeamShaderMaterial(0x00f5d4, 0x9d4edd, 0xffffff);
+      const plasmaSheathMat = createUnityPlasmaBeamShaderMaterial(0x7209b7, 0x00bbf9, 0x00f5d4);
+
+      const ionBeam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.18, 2.6, 20, 8, true),
+        plasmaSheathMat
+      );
+      ionBeam.position.y = 1.3;
+      vfxGroup.add(ionBeam);
+
+      const lanceBeam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.095, 0.05, 1.45, 20, 10, true),
+        plasmaCoreMat
+      );
+      lanceBeam.rotation.x = Math.PI / 2;
+      lanceBeam.position.set(0, 0.74, 0.62);
+      vfxGroup.add(lanceBeam);
+
+      // 4 Snapping 3D Jagged Electric Lightning Bolts shooting forward from the Mech
+      const lightningBolts: THREE.Mesh[] = [];
+      for (let b = 0; b < 4; b++) {
+        const pts: THREE.Vector3[] = [];
+        for (let s = 0; s <= 12; s++) {
+          const u = s / 12;
+          const fade = Math.sin(u * Math.PI);
+          pts.push(
+            new THREE.Vector3(
+              (Math.random() - 0.5) * 0.24 * fade,
+              0.74 - u * 0.22 + (Math.random() - 0.5) * 0.22 * fade,
+              0.12 + u * 1.15
+            )
+          );
+        }
+        const curve = new THREE.CatmullRomCurve3(pts);
+        const tubeGeo = new THREE.TubeGeometry(curve, 24, b === 0 ? 0.022 : 0.014, 6, false);
+        const boltMesh = new THREE.Mesh(
+          tubeGeo,
+          new THREE.MeshBasicMaterial({
+            color: b % 2 === 0 ? 0xffffff : 0x00f5d4,
+            transparent: true,
+            opacity: 0.95,
+            blending: THREE.AdditiveBlending
+          })
+        );
+        vfxGroup.add(boltMesh);
+        lightningBolts.push(boltMesh);
+      }
+
+      const hexGrids: THREE.Mesh[] = [];
+      for (let i = 0; i < 3; i++) {
+        const hex = new THREE.Mesh(
+          new THREE.RingGeometry(0.32 + i * 0.14, 0.42 + i * 0.14, 6),
+          new THREE.MeshBasicMaterial({
+            color: i % 2 === 0 ? 0x00f5d4 : 0x7209b7,
+            transparent: true,
+            opacity: 0.92,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          })
+        );
+        hex.rotation.x = -Math.PI / 2;
+        hex.position.y = 0.08 + i * 0.25;
+        vfxGroup.add(hex);
+        hexGrids.push(hex);
+      }
+
+      const empDome = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.55, 1),
+        new THREE.MeshBasicMaterial({
+          color: 0x00f5d4,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.75,
+          blending: THREE.AdditiveBlending
+        })
+      );
+      empDome.position.y = 0.62;
+      vfxGroup.add(empDome);
+
+      let t = 0;
+      st.activeVfxUpdaters.push((dt) => {
+        t += dt;
+        const p = Math.min(1, t / 1.2);
+        plasmaCoreMat.uniforms.uTime.value = t;
+        plasmaCoreMat.uniforms.uProgress.value = p;
+        plasmaSheathMat.uniforms.uTime.value = t;
+        plasmaSheathMat.uniforms.uProgress.value = p;
+
+        const beamScale = p < 0.2 ? p / 0.2 : Math.max(0.01, 1 - (p - 0.2) / 0.8);
+        ionBeam.scale.set(beamScale * 1.35, 1, beamScale * 1.35);
+        ionBeam.rotation.y += dt * 8.0;
+        lanceBeam.scale.set(beamScale * 1.2, 1 + p * 0.45, beamScale * 1.2);
+        lanceBeam.rotation.y -= dt * 14.0;
+
+        lightningBolts.forEach((bm, idx) => {
+          const flicker = 0.5 + 0.5 * Math.sin(t * 75.0 + idx * 1.9);
+          bm.visible = p < 0.78 && flicker > 0.25;
+          (bm.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1 - p * 1.25) * flicker);
+        });
+
+        hexGrids.forEach((h, idx) => {
+          h.position.y = 0.08 + idx * 0.24 + p * 0.85;
+          h.rotation.z += dt * (idx % 2 === 0 ? 3.8 : -3.8);
+          h.scale.setScalar(0.65 + p * 1.1);
+          (h.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1 - p) * 0.92);
+        });
+        empDome.scale.setScalar(0.5 + p * 1.45);
+        empDome.rotation.y += dt * 3.2;
+        (empDome.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1 - p) * 0.75);
+        if (p >= 1) {
+          disposeHierarchy(vfxGroup);
+          vfxGroup.clear();
+          return false;
+        }
+        return true;
+      });
+    } else {
+      // DRAGON & ELEMENTAL GUARDIANS: Actual Roaring Volumetric Dragon Fire Breath Stream from the Jaws +
+      // 44 Billowing PYROLUX Flame/Ember/Smoke Particles + Erupting Obsidian Crags
+      const breathRig = new THREE.Group();
+      // Anchor at the Dragon Sovereign's open jaws (y = 0.96, z = 0.14) and angle downward across the pedestal
+      breathRig.position.set(0, 0.96, 0.14);
+      breathRig.rotation.x = 0.44;
+      vfxGroup.add(breathRig);
+
+      const jetConeGeo = new THREE.ConeGeometry(0.46, 1.48, 28, 18, true);
+      // Tip at origin (jaws), wide flame front extending along +Z
+      jetConeGeo.translate(0, -0.74, 0);
+      jetConeGeo.rotateX(-Math.PI / 2);
+
+      const outerFireMat = createUnityFireBreathShaderMaterial(0xfff3b0, 0xff6d00, 0xd90429);
+      const innerFireMat = createUnityFireBreathShaderMaterial(0xffffff, 0xffd166, 0xff5400);
+
+      const outerBreathCone = new THREE.Mesh(jetConeGeo, outerFireMat);
+      breathRig.add(outerBreathCone);
+
+      const innerBreathCone = new THREE.Mesh(jetConeGeo, innerFireMat);
+      innerBreathCone.scale.set(0.62, 0.62, 0.95);
+      breathRig.add(innerBreathCone);
+
+      // 44 Billowing Soft-Particle Flame, Ember & Smoke Billboards pouring out of the Dragon's Jaws
+      const flameTex = getUnityFireFlameTexture();
+      const flameParticles: Array<{
+        sprite: THREE.Sprite;
+        mat: THREE.SpriteMaterial;
+        phase: number;
+        speed: number;
+        swirlAngle: number;
+        swirlRadius: number;
+        rotSpeed: number;
+        baseScale: number;
+      }> = [];
+      for (let i = 0; i < 44; i++) {
+        const fMat = new THREE.SpriteMaterial({
+          map: flameTex,
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.95,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          rotation: Math.random() * Math.PI * 2
+        });
+        const fSp = new THREE.Sprite(fMat);
+        breathRig.add(fSp);
+        flameParticles.push({
+          sprite: fSp,
+          mat: fMat,
+          phase: i / 44,
+          speed: 1.85 + (i % 5) * 0.28,
+          swirlAngle: (i / 44) * Math.PI * 2 * 3.0,
+          swirlRadius: 0.06 + (i % 7) * 0.048,
+          rotSpeed: (i % 2 === 0 ? 1 : -1) * (2.4 + (i % 4) * 0.75),
+          baseScale: 0.24 + (i % 4) * 0.095
+        });
+      }
+
+      const crags: Array<{ mesh: THREE.Mesh; maxH: number }> = [];
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        const rad = 0.55 + (i % 2) * 0.22;
+        const maxH = 0.42 + (i % 3) * 0.14;
+        const crag = new THREE.Mesh(
+          new THREE.ConeGeometry(0.085, maxH, 5),
+          new THREE.MeshBasicMaterial({
+            color: i % 2 === 0 ? 0xff4d00 : 0xffbe0b,
+            transparent: true,
+            opacity: 0.95,
+            blending: THREE.AdditiveBlending
+          })
+        );
+        crag.position.set(Math.cos(ang) * rad, 0.02, Math.sin(ang) * rad);
+        crag.rotation.z = -Math.cos(ang) * 0.28;
+        crag.rotation.x = Math.sin(ang) * 0.28;
+        vfxGroup.add(crag);
+        crags.push({ mesh: crag, maxH });
+      }
+
+      const cWhite = new THREE.Color(0xfff8d6);
+      const cGold = new THREE.Color(0xffbe0b);
+      const cOrange = new THREE.Color(0xff4d00);
+      const cCrimson = new THREE.Color(0x9b0014);
+
+      let t = 0;
+      st.activeVfxUpdaters.push((dt) => {
+        t += dt;
+        const p = Math.min(1, t / 1.25);
+        outerFireMat.uniforms.uTime.value = t;
+        outerFireMat.uniforms.uProgress.value = p;
+        innerFireMat.uniforms.uTime.value = t;
+        innerFireMat.uniforms.uProgress.value = p;
+
+        const swell = 0.75 + Math.sin(p * Math.PI) * 0.65;
+        outerBreathCone.scale.set(swell, swell, 0.8 + Math.min(1, p * 1.8) * 0.45);
+        outerBreathCone.rotation.z += dt * 9.5;
+        innerBreathCone.scale.set(swell * 0.62, swell * 0.62, 0.78 + Math.min(1, p * 1.9) * 0.42);
+        innerBreathCone.rotation.z -= dt * 13.5;
+
+        const lifeFade = 1.0 - Math.pow(p, 1.45);
+        for (const fp of flameParticles) {
+          const prog = (t * fp.speed + fp.phase) % 1.0;
+          const zDist = prog * 1.45;
+          const spread = Math.pow(prog, 1.1) * fp.swirlRadius * (1.0 + p * 0.55);
+          const swAng = fp.swirlAngle + t * 8.5 + prog * 3.8;
+          const lift = Math.pow(prog, 1.7) * 0.22;
+          fp.sprite.position.set(
+            Math.cos(swAng) * spread,
+            Math.sin(swAng) * spread + lift,
+            zDist
+          );
+          const s = fp.baseScale * (0.35 + prog * 1.75) * (0.75 + 0.45 * Math.sin(p * Math.PI));
+          fp.sprite.scale.setScalar(s);
+          fp.mat.rotation += fp.rotSpeed * dt;
+
+          if (prog < 0.28) {
+            fp.mat.color.lerpColors(cWhite, cGold, prog / 0.28);
+          } else if (prog < 0.68) {
+            fp.mat.color.lerpColors(cGold, cOrange, (prog - 0.28) / 0.40);
+          } else {
+            fp.mat.color.lerpColors(cOrange, cCrimson, (prog - 0.68) / 0.32);
+          }
+          fp.mat.opacity = Math.max(0, Math.sin(prog * Math.PI) * lifeFade * 0.95);
+        }
+
+        const erupt = p < 0.35 ? p / 0.35 : Math.max(0, 1 - (p - 0.35) / 0.65);
+        crags.forEach((c) => {
+          c.mesh.scale.set(1, Math.max(0.01, erupt), 1);
+          c.mesh.position.y = (c.maxH * erupt) * 0.45;
+          (c.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1 - p * 0.85) * 0.95);
+        });
+        if (p >= 1) {
+          disposeHierarchy(vfxGroup);
+          vfxGroup.clear();
+          return false;
+        }
+        return true;
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (attackPreviewNonce > 0 && (activeTab === 'types' || activeTab === 'pieces')) {
+      triggerShowcaseAttackAndVfx();
+    }
+  }, [attackPreviewNonce]);
+
   return (
     <div className="showcase-viewport-container">
       <div className="showcase-3d-mount" ref={mountRef}></div>
@@ -783,14 +1547,24 @@ export default function SkinShowcaseCanvas({
 
         <div className="showcase-btn-group">
           {(activeTab === 'types' || activeTab === 'pieces') && (
-            <button
-              type="button"
-              className={`showcase-toggle-btn ${previewColor === 'w' ? 'active' : ''}`}
-              onClick={() => setPreviewColor((prev) => (prev === 'w' ? 'b' : 'w'))}
-              title="Toggle between White and Black variant of this set"
-            >
-              {previewColor === 'w' ? '♔ White' : '♚ Black'}
-            </button>
+            <>
+              <button
+                type="button"
+                className={`showcase-toggle-btn ${isAttackingPreview ? 'active' : ''}`}
+                onClick={triggerShowcaseAttackAndVfx}
+                title={`Preview ${archetype.name} Unique Attack & 3D Effect`}
+              >
+                ⚔ Attack &amp; VFX
+              </button>
+              <button
+                type="button"
+                className={`showcase-toggle-btn ${previewColor === 'w' ? 'active' : ''}`}
+                onClick={() => setPreviewColor((prev) => (prev === 'w' ? 'b' : 'w'))}
+                title="Toggle between White and Black variant of this set"
+              >
+                {previewColor === 'w' ? '♔ White' : '♚ Black'}
+              </button>
+            </>
           )}
 
           <button
@@ -805,7 +1579,11 @@ export default function SkinShowcaseCanvas({
       </div>
 
       <div className="showcase-drag-hint">
-        <span>Drag to orbit 360° · Scroll to zoom · Live 3D Showcase</span>
+        <span>
+          {activeTab === 'types'
+            ? `${archetype.strikeStyle} · ${archetype.shatterStyle}`
+            : 'Drag to orbit 360° · Scroll to zoom · Live 3D Showcase'}
+        </span>
       </div>
     </div>
   );

@@ -8,6 +8,13 @@
   --muted: #9aa0a6;
   --accent-blue: #4ea8de;
   --danger: #e63946;
+  /* Dynamic HUD Font Scaling & Adaptive Padding Tokens */
+  --hud-font-scale: 1;
+  --hud-pad-scale: 1;
+  --hud-edge-x: 12px;
+  --hud-edge-y: 10px;
+  --hud-control-h: 32px;
+  --hud-gap: 6px;
 }
 
 * {
@@ -238,28 +245,29 @@ html, body, #root {
   color: var(--gold-bright);
 }
 
-/* Bottom HUD */
+/* Bottom HUD — Adaptive Padding & Dynamic Font Scaling */
 #hud-bottom {
   position: fixed;
-  bottom: 16px;
-  left: 20px;
-  right: 20px;
+  bottom: max(var(--hud-edge-y, 12px), env(safe-area-inset-bottom, 12px));
+  left: max(var(--hud-edge-x, 16px), env(safe-area-inset-left, 16px));
+  right: max(var(--hud-edge-x, 16px), env(safe-area-inset-right, 16px));
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   pointer-events: none;
-  gap: 12px;
+  gap: var(--hud-gap, 10px);
   flex-wrap: wrap;
+  transition: padding 0.18s ease, bottom 0.18s ease, left 0.18s ease, right 0.18s ease;
 }
 
 .hint-pill {
   background: rgba(10, 12, 18, 0.76);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(212, 175, 55, 0.22);
-  padding: 7px 15px;
+  padding: calc(6px * var(--hud-pad-scale, 1)) calc(14px * var(--hud-pad-scale, 1));
   border-radius: 3px;
-  font-size: 0.75rem;
+  font-size: calc(clamp(0.66rem, 0.62rem + 0.22vw, 0.78rem) * var(--hud-font-scale, 1));
   color: var(--muted);
   letter-spacing: 0.02em;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
@@ -276,13 +284,13 @@ html, body, #root {
   background: rgba(10, 12, 18, 0.76);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(212, 175, 55, 0.2);
-  padding: 6px 14px;
+  padding: calc(5px * var(--hud-pad-scale, 1)) calc(12px * var(--hud-pad-scale, 1));
   border-radius: 3px;
-  font-size: 0.78rem;
+  font-size: calc(clamp(0.68rem, 0.64rem + 0.25vw, 0.82rem) * var(--hud-font-scale, 1));
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: calc(10px * var(--hud-pad-scale, 1));
 }
 
 .captured-pill:empty {
@@ -4527,32 +4535,33 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 /* ========================================================================== */
 
 #hud-top {
-  top: max(6px, env(safe-area-inset-top, 6px)) !important;
-  left: 6px !important;
-  right: 6px !important;
-  gap: 4px !important;
+  top: max(var(--hud-edge-y, 8px), env(safe-area-inset-top, 8px)) !important;
+  left: max(var(--hud-edge-x, 8px), env(safe-area-inset-left, 8px)) !important;
+  right: max(var(--hud-edge-x, 8px), env(safe-area-inset-right, 8px)) !important;
+  gap: var(--hud-gap, 6px) !important;
   z-index: 30 !important;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: nowrap !important;
+  transition: top 0.18s ease, left 0.18s ease, right 0.18s ease, gap 0.18s ease;
 }
 
 #hud-left {
   display: flex;
   align-items: center;
   flex-wrap: nowrap !important;
-  gap: 4px !important;
+  gap: var(--hud-gap, 5px) !important;
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
 }
 
 .hud-lobby-back-btn {
-  height: 28px !important;
-  min-height: 28px !important;
-  padding: 2px 8px !important;
-  font-size: 0.64rem !important;
+  height: var(--hud-control-h, 30px) !important;
+  min-height: var(--hud-control-h, 30px) !important;
+  padding: calc(3px * var(--hud-pad-scale, 1)) calc(10px * var(--hud-pad-scale, 1)) !important;
+  font-size: calc(clamp(0.6rem, 0.56rem + 0.2vw, 0.74rem) * var(--hud-font-scale, 1)) !important;
   font-weight: 700 !important;
   letter-spacing: 0.04em !important;
   border-radius: 4px !important;
@@ -4561,15 +4570,20 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 }
 
 .status-pill {
-  padding: 2px 7px !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  font-size: 0.64rem !important;
-  gap: 4px !important;
+  padding: calc(3px * var(--hud-pad-scale, 1)) calc(9px * var(--hud-pad-scale, 1)) !important;
+  height: var(--hud-control-h, 30px) !important;
+  min-height: var(--hud-control-h, 30px) !important;
+  font-size: calc(clamp(0.62rem, 0.58rem + 0.22vw, 0.76rem) * var(--hud-font-scale, 1)) !important;
+  gap: calc(5px * var(--hud-pad-scale, 1)) !important;
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.status-pill .turn-dot {
+  width: calc(8px * var(--hud-font-scale, 1));
+  height: calc(8px * var(--hud-font-scale, 1));
 }
 
 .status-pill #turn-text {
@@ -4579,8 +4593,8 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 }
 
 .status-pill .mode-badge {
-  font-size: 0.54rem !important;
-  padding: 1px 5px !important;
+  font-size: calc(clamp(0.52rem, 0.48rem + 0.16vw, 0.64rem) * var(--hud-font-scale, 1)) !important;
+  padding: calc(1.5px * var(--hud-pad-scale, 1)) calc(6px * var(--hud-pad-scale, 1)) !important;
 }
 
 @media (max-width: 560px) {
@@ -4594,26 +4608,27 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 }
 
 .check-indicator-badge.active {
-  padding: 2px 6px !important;
-  height: 28px !important;
-  font-size: 0.58rem !important;
-  gap: 3px !important;
+  padding: calc(3px * var(--hud-pad-scale, 1)) calc(8px * var(--hud-pad-scale, 1)) !important;
+  height: var(--hud-control-h, 30px) !important;
+  min-height: var(--hud-control-h, 30px) !important;
+  font-size: calc(clamp(0.56rem, 0.52rem + 0.18vw, 0.68rem) * var(--hud-font-scale, 1)) !important;
+  gap: calc(4px * var(--hud-pad-scale, 1)) !important;
   flex-shrink: 0;
 }
 
 .gold-wallet-btn {
-  padding: 2px 7px !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  font-size: 0.66rem !important;
-  gap: 3px !important;
+  padding: calc(3px * var(--hud-pad-scale, 1)) calc(9px * var(--hud-pad-scale, 1)) !important;
+  height: var(--hud-control-h, 30px) !important;
+  min-height: var(--hud-control-h, 30px) !important;
+  font-size: calc(clamp(0.64rem, 0.6rem + 0.2vw, 0.78rem) * var(--hud-font-scale, 1)) !important;
+  gap: calc(4px * var(--hud-pad-scale, 1)) !important;
   flex-shrink: 0;
 }
 
 .hud-compact-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--hud-gap, 5px);
   flex-shrink: 0;
   pointer-events: auto;
 }
@@ -4622,10 +4637,10 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  height: 28px !important;
-  min-height: 28px !important;
-  padding: 2px 7px !important;
-  font-size: 0.62rem !important;
+  height: var(--hud-control-h, 30px) !important;
+  min-height: var(--hud-control-h, 30px) !important;
+  padding: calc(3px * var(--hud-pad-scale, 1)) calc(8px * var(--hud-pad-scale, 1)) !important;
+  font-size: calc(clamp(0.58rem, 0.54rem + 0.18vw, 0.72rem) * var(--hud-font-scale, 1)) !important;
   font-weight: 700 !important;
   letter-spacing: 0.04em !important;
   border-radius: 4px !important;
@@ -4638,13 +4653,13 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: calc(4px * var(--hud-pad-scale, 1));
   pointer-events: auto;
   flex-shrink: 0;
-  height: 28px !important;
-  min-height: 28px !important;
-  padding: 2px 8px !important;
-  font-size: 0.64rem !important;
+  height: var(--hud-control-h, 30px) !important;
+  min-height: var(--hud-control-h, 30px) !important;
+  padding: calc(3px * var(--hud-pad-scale, 1)) calc(10px * var(--hud-pad-scale, 1)) !important;
+  font-size: calc(clamp(0.6rem, 0.56rem + 0.2vw, 0.74rem) * var(--hud-font-scale, 1)) !important;
   font-weight: 700;
   letter-spacing: 0.04em;
   border-radius: 4px;
@@ -4677,25 +4692,25 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   pointer-events: auto;
 }
 
-/* Ultra-Compact Floating Toggles Popover (#hud-right) */
+/* Adaptive Floating Toggles Popover (#hud-right) */
 #hud-right {
   position: fixed !important;
-  top: calc(max(6px, env(safe-area-inset-top, 6px)) + 32px) !important;
-  right: 6px !important;
+  top: calc(max(var(--hud-edge-y, 8px), env(safe-area-inset-top, 8px)) + var(--hud-control-h, 30px) + 6px) !important;
+  right: max(var(--hud-edge-x, 8px), env(safe-area-inset-right, 8px)) !important;
   left: auto !important;
   bottom: auto !important;
-  width: min(256px, calc(100vw - 12px)) !important;
-  max-height: calc(100dvh - 48px) !important;
+  width: min(calc(268px * var(--hud-pad-scale, 1)), calc(100vw - 16px)) !important;
+  max-height: calc(100dvh - var(--hud-control-h, 30px) - 24px) !important;
   z-index: 29 !important;
   background: linear-gradient(180deg, rgba(14, 18, 28, 0.98) 0%, rgba(8, 10, 16, 0.99) 100%) !important;
   backdrop-filter: blur(16px);
   border: 1px solid rgba(212, 175, 55, 0.52) !important;
   border-radius: 6px !important;
-  padding: 7px 8px 8px !important;
+  padding: calc(8px * var(--hud-pad-scale, 1)) calc(9px * var(--hud-pad-scale, 1)) calc(9px * var(--hud-pad-scale, 1)) !important;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.88) !important;
   display: grid !important;
   grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
-  gap: 4px !important;
+  gap: calc(5px * var(--hud-pad-scale, 1)) !important;
   overflow-x: hidden;
   overflow-y: auto;
   pointer-events: none !important;
@@ -4721,21 +4736,21 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   display: flex !important;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 4px !important;
+  padding-bottom: calc(4px * var(--hud-pad-scale, 1)) !important;
   margin-bottom: 1px !important;
   border-bottom: 1px solid rgba(212, 175, 55, 0.18);
 }
 
 #hud-right .mobile-sheet-title {
-  font-size: 0.66rem !important;
+  font-size: calc(0.68rem * var(--hud-font-scale, 1)) !important;
   letter-spacing: 0.08em;
   color: var(--gold);
 }
 
 #hud-right .mobile-sheet-close {
-  min-height: 20px !important;
-  padding: 1px 6px !important;
-  font-size: 0.6rem !important;
+  min-height: calc(22px * var(--hud-pad-scale, 1)) !important;
+  padding: calc(2px * var(--hud-pad-scale, 1)) calc(7px * var(--hud-pad-scale, 1)) !important;
+  font-size: calc(0.62rem * var(--hud-font-scale, 1)) !important;
 }
 
 #hud-right .mobile-sheet-section-label {
@@ -4743,22 +4758,22 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   display: flex !important;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.54rem !important;
+  font-size: calc(0.56rem * var(--hud-font-scale, 1)) !important;
   letter-spacing: 0.06em;
   color: var(--muted);
-  padding: 2px 1px 0 !important;
+  padding: calc(2px * var(--hud-pad-scale, 1)) 1px 0 !important;
 }
 
 #hud-right .hud-btn {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  min-height: 26px !important;
-  height: 26px !important;
-  padding: 2px 5px !important;
+  gap: calc(3px * var(--hud-pad-scale, 1));
+  min-height: calc(28px * var(--hud-pad-scale, 1)) !important;
+  height: calc(28px * var(--hud-pad-scale, 1)) !important;
+  padding: calc(3px * var(--hud-pad-scale, 1)) calc(6px * var(--hud-pad-scale, 1)) !important;
   border-radius: 4px !important;
-  font-size: 0.6rem !important;
+  font-size: calc(0.62rem * var(--hud-font-scale, 1)) !important;
   width: 100%;
   min-width: 0;
   white-space: nowrap;
@@ -4789,6 +4804,213 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 #btn-arena-hub,
 #btn-skin-shop {
   grid-column: span 3 !important;
+}
+
+/* ========================================================================== */
+/* Orientation Changes & Non-Standard Aspect Ratio HUD Adaptations            */
+/* ========================================================================== */
+
+/* 1. Ultra-Tall / Narrow Portrait Aspect Ratios (e.g., 20:9 / 21:9 phones, split-screen < 0.55) */
+:root[data-aspect-profile="ultra-tall"] #hud-top {
+  gap: 3px !important;
+}
+:root[data-aspect-profile="ultra-tall"] #hud-left {
+  gap: 3px !important;
+}
+:root[data-aspect-profile="ultra-tall"] .hud-lobby-back-btn,
+:root[data-aspect-profile="ultra-tall"] .status-pill,
+:root[data-aspect-profile="ultra-tall"] .gold-wallet-btn,
+:root[data-aspect-profile="ultra-tall"] .hud-micro-btn,
+:root[data-aspect-profile="ultra-tall"] #btn-mobile-controls.mobile-controls-trigger {
+  padding-inline: calc(6px * var(--hud-pad-scale, 0.8)) !important;
+}
+:root[data-aspect-profile="ultra-tall"] .status-pill .mode-badge {
+  display: none !important;
+}
+
+@media (max-aspect-ratio: 11/20) {
+  #hud-top {
+    gap: 3px !important;
+  }
+  #hud-left {
+    gap: 3px !important;
+  }
+  .hud-lobby-back-btn,
+  .status-pill,
+  .gold-wallet-btn,
+  .hud-micro-btn,
+  #btn-mobile-controls.mobile-controls-trigger {
+    padding-inline: calc(6px * var(--hud-pad-scale, 0.8)) !important;
+  }
+  .status-pill .mode-badge {
+    display: none !important;
+  }
+}
+
+/* 2. Short-Landscape Orientation (e.g., rotated mobile phones with limited vertical height <= 520px) */
+:root[data-short-landscape="true"] #hud-top {
+  top: max(4px, env(safe-area-inset-top, 4px)) !important;
+  left: max(14px, env(safe-area-inset-left, 14px)) !important;
+  right: max(14px, env(safe-area-inset-right, 14px)) !important;
+}
+
+:root[data-short-landscape="true"] #hud-bottom {
+  bottom: max(6px, env(safe-area-inset-bottom, 6px)) !important;
+  left: max(14px, env(safe-area-inset-left, 14px)) !important;
+  right: max(14px, env(safe-area-inset-right, 14px)) !important;
+}
+
+:root[data-short-landscape="true"] #hud-right {
+  width: min(460px, calc(100vw - 28px)) !important;
+  grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+  max-height: calc(100dvh - 42px) !important;
+  padding: 6px 10px !important;
+  gap: 4px !important;
+}
+
+:root[data-short-landscape="true"] #hud-right .mobile-sheet-header,
+:root[data-short-landscape="true"] #hud-right .mobile-sheet-section-label {
+  grid-column: span 12 !important;
+}
+
+:root[data-short-landscape="true"] #btn-cam-player,
+:root[data-short-landscape="true"] #btn-cam-top,
+:root[data-short-landscape="true"] #btn-cam-side,
+:root[data-short-landscape="true"] #btn-cam-wide {
+  grid-column: span 3 !important;
+}
+
+:root[data-short-landscape="true"] #btn-side-toggle,
+:root[data-short-landscape="true"] #btn-ai-move,
+:root[data-short-landscape="true"] #btn-reset {
+  grid-column: span 4 !important;
+}
+
+:root[data-short-landscape="true"] #btn-sfx-toggle,
+:root[data-short-landscape="true"] #btn-music-toggle,
+:root[data-short-landscape="true"] #btn-voice-toggle,
+:root[data-short-landscape="true"] #btn-hide-ui {
+  grid-column: span 3 !important;
+}
+
+:root[data-short-landscape="true"] #btn-arena-hub,
+:root[data-short-landscape="true"] #btn-skin-shop {
+  grid-column: span 6 !important;
+}
+
+:root[data-short-landscape="true"] .gold-bounty-toast,
+:root[data-short-landscape="true"] .turn-handoff-toast {
+  top: 42px !important;
+  padding: 5px 12px !important;
+}
+
+:root[data-short-landscape="true"] #checkmate-overlay {
+  padding-top: 38px !important;
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  #hud-top {
+    top: max(4px, env(safe-area-inset-top, 4px)) !important;
+    left: max(14px, env(safe-area-inset-left, 14px)) !important;
+    right: max(14px, env(safe-area-inset-right, 14px)) !important;
+  }
+
+  #hud-bottom {
+    bottom: max(6px, env(safe-area-inset-bottom, 6px)) !important;
+    left: max(14px, env(safe-area-inset-left, 14px)) !important;
+    right: max(14px, env(safe-area-inset-right, 14px)) !important;
+  }
+
+  #hud-right {
+    width: min(460px, calc(100vw - 28px)) !important;
+    grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+    max-height: calc(100dvh - 42px) !important;
+    padding: 6px 10px !important;
+    gap: 4px !important;
+  }
+
+  #hud-right .mobile-sheet-header,
+  #hud-right .mobile-sheet-section-label {
+    grid-column: span 12 !important;
+  }
+
+  #btn-cam-player,
+  #btn-cam-top,
+  #btn-cam-side,
+  #btn-cam-wide {
+    grid-column: span 3 !important;
+  }
+
+  #btn-side-toggle,
+  #btn-ai-move,
+  #btn-reset {
+    grid-column: span 4 !important;
+  }
+
+  #btn-sfx-toggle,
+  #btn-music-toggle,
+  #btn-voice-toggle,
+  #btn-hide-ui {
+    grid-column: span 3 !important;
+  }
+
+  #btn-arena-hub,
+  #btn-skin-shop {
+    grid-column: span 6 !important;
+  }
+
+  .gold-bounty-toast,
+  .turn-handoff-toast {
+    top: 42px !important;
+    padding: 5px 12px !important;
+  }
+
+  #checkmate-overlay {
+    padding-top: 38px !important;
+  }
+}
+
+/* 3. Square / Foldable Aspect Ratios (0.85 <= aspect <= 1.18, e.g., Galaxy Fold inner screen, iPad split view) */
+:root[data-aspect-profile="square-fold"] #hud-top {
+  left: max(12px, env(safe-area-inset-left, 12px)) !important;
+  right: max(12px, env(safe-area-inset-right, 12px)) !important;
+}
+:root[data-aspect-profile="square-fold"] #hud-right {
+  width: min(300px, calc(100vw - 24px)) !important;
+}
+
+@media (min-aspect-ratio: 17/20) and (max-aspect-ratio: 6/5) {
+  #hud-top {
+    left: max(12px, env(safe-area-inset-left, 12px)) !important;
+    right: max(12px, env(safe-area-inset-right, 12px)) !important;
+  }
+  #hud-right {
+    width: min(300px, calc(100vw - 24px)) !important;
+  }
+}
+
+/* 4. Ultrawide Aspect Ratios (21:9 & 32:9 monitors, aspect > 2.05) */
+:root[data-aspect-profile="ultrawide"]:not([data-short-landscape="true"]) #hud-top,
+:root[data-aspect-profile="ultrawide"]:not([data-short-landscape="true"]) #hud-bottom {
+  max-width: min(1680px, 92vw);
+  margin-inline: auto;
+}
+:root[data-aspect-profile="ultrawide"]:not([data-short-landscape="true"]) #hud-right {
+  right: max(var(--hud-edge-x, 28px), calc((100vw - min(1680px, 92vw)) / 2)) !important;
+  width: min(320px, calc(100vw - 32px)) !important;
+}
+
+@media (min-aspect-ratio: 21/10) and (min-height: 521px) {
+  #hud-top,
+  #hud-bottom {
+    max-width: min(1680px, 92vw);
+    margin-inline: auto;
+  }
+
+  #hud-right {
+    right: max(var(--hud-edge-x, 28px), calc((100vw - min(1680px, 92vw)) / 2)) !important;
+    width: min(320px, calc(100vw - 32px)) !important;
+  }
 }
 
 /* Profile Photo Upload Card inside Settings Modal */

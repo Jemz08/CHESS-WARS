@@ -90,8 +90,8 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
     subtitle: 'Hand-sculpted medieval stone knights, broadsword kings, mace bishops & armored rooks',
     badge: 'Sculpted Statues',
     price: 0,
-    strikeStyle: 'Heavy Melee Weapon Cleave',
-    shatterStyle: 'Carved Cathedral Stone Shards',
+    strikeStyle: 'Crusader Broadsword Cross-Slash',
+    shatterStyle: 'Cathedral Rose Sigil & Reliquary Crosses',
     flashColorHex: '#ffb74d'
   },
   {
@@ -100,28 +100,28 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
     subtitle: 'Fluted spline-lathed grandmaster chessmen with carved bridled warhorses, slotted mitres & arched crowns',
     badge: 'Tournament Set',
     price: 120,
-    strikeStyle: 'Grandmaster Kinetic Lunge & Slam',
-    shatterStyle: 'Turned Hardwood & Brass Fragments',
+    strikeStyle: 'Telekinetic Vertical Ascension, 720° Spin & Gravity Anvil Crush',
+    shatterStyle: '8-Point Grandmaster Compass & Astrolabe Orbs',
     flashColorHex: '#ffe082'
   },
   {
     id: 'arcane_cyber',
     name: 'Arcane Runic & Cyber-Mech',
-    subtitle: 'Articulated paladin automatons with feathered Valkyrie energy wings, kite shields, runic greatswords & gyro astrolabes',
+    subtitle: 'Articulated cyber-mechs with dual shoulder railgun pods, heavy pulse-laser cannons, holographic hex optics & Valkyrie wings',
     badge: 'Cyber-Arcane Set',
     price: 240,
-    strikeStyle: 'Overcharged Plasma Lunge & Pulse',
-    shatterStyle: 'Glowing Cyber-Crystal & Core Shards',
+    strikeStyle: 'Target-Lock Hex Lenses, Articulated Railgun Recoil & Coherent Multi-Stage Laser Beam',
+    shatterStyle: 'Orbital Ion Laser Beam & Hex Holo-Matrix',
     flashColorHex: '#00f5d4'
   },
   {
     id: 'dragon_elemental',
     name: 'Dragon & Elemental Guardians',
-    subtitle: 'Sinuous S-curved dragons with roaring dragonfire crowns, fanged flame-breath jets, ribbed bat-wings & hellfire braziers',
+    subtitle: 'Sinuous S-curved mythic dragons with rearing fore-talons, molten dragon-heart cores, ribbed bat-wings & fanged fire-breath maws',
     badge: 'Mythic Beasts',
     price: 360,
-    strikeStyle: 'Ferocious Drake-Claw & Flame Strike',
-    shatterStyle: 'Molten Obsidian & Dragonfire Embers',
+    strikeStyle: 'Mid-Air Winged Hover, Unhinged Fanged Jaws & Helical Volumetric Fire-Breath Torrent',
+    shatterStyle: 'Volcanic Magma Geyser & Erupting Crag Spikes',
     flashColorHex: '#ff4d6d'
   }
 ];
