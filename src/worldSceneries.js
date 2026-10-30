@@ -1,5 +1,11 @@
 import * as THREE_NS from 'three';
 import { mountHalloweenModel, preloadHalloween3DAssets } from './halloweenAssetLoader.js';
+import {
+  mountCyberCityModel,
+  mountFullCyberCityScene,
+  preloadCyberCity3DAssets,
+  getCyberCityMaterials
+} from './cyberCityAssetLoader.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -377,237 +383,160 @@ function createHorizonSeaMaterial() {
 }
 
 // ============================================================================
-// Realm 1 Builder: Celestial Astral Observatory
+// Realm 1 Builder: Futuristic Cyber Metropolis (Niko's Low-Poly Futuristic City 3D Assets)
 // ============================================================================
 function buildCelestialObservatoryGroup() {
+  preloadCyberCity3DAssets();
+
   const group = new THREE.Group();
   group.name = 'Realm_CelestialObservatory';
 
-  const astralMarbleMat = new THREE.MeshStandardMaterial({
-    color: 0xded9ee,
-    roughness: 0.24,
-    metalness: 0.18
-  });
-  const voidSlateMat = new THREE.MeshStandardMaterial({
-    color: 0x140e26,
-    roughness: 0.22,
-    metalness: 0.48
-  });
-  const celestialBrassMat = new THREE.MeshStandardMaterial({
-    color: 0xe6be5a,
-    roughness: 0.20,
-    metalness: 0.90,
-    emissive: 0x3b2604,
-    emissiveIntensity: 0.22
-  });
-  const cyanRuneMat = new THREE.MeshStandardMaterial({
-    color: 0x80ffea,
-    roughness: 0.12,
-    metalness: 0.35,
-    emissive: 0x00f5d4,
-    emissiveIntensity: 1.85
-  });
-  const violetCrystalMat = new THREE.MeshStandardMaterial({
-    color: 0xd8b4fe,
-    roughness: 0.12,
-    metalness: 0.28,
-    emissive: 0x9333ea,
-    emissiveIntensity: 1.45,
-    transparent: true,
-    opacity: 0.88
-  });
+  const cyberMats = getCyberCityMaterials();
+  const darkGunmetalMat = cyberMats['metalic dark gray'];
+  const lightTitaniumMat = cyberMats['metalic light gray'];
+  const cyanNeonMat = cyberMats.lights;
+  const greenNeonMat = cyberMats.green;
 
-  // 1. Grand Circular Stepped Observatory Platform (flush at y = 0.0 so altar & braziers sit on it)
-  const mainDisc = new THREE.Mesh(new THREE.CylinderGeometry(10.8, 11.6, 0.48, 48), voidSlateMat);
+  // 1. Central Cyber Landing Plaza Deck (flush at y = 0.0 so altar & braziers sit cleanly on it)
+  const mainDisc = new THREE.Mesh(new THREE.CylinderGeometry(10.8, 11.5, 0.48, 32), darkGunmetalMat);
   mainDisc.position.set(0, -0.24, 0);
   mainDisc.receiveShadow = true;
   group.add(mainDisc);
 
-  const innerMarbleDisc = new THREE.Mesh(new THREE.CylinderGeometry(8.6, 8.8, 0.08, 48), astralMarbleMat);
-  innerMarbleDisc.position.set(0, -0.02, 0);
-  innerMarbleDisc.receiveShadow = true;
-  group.add(innerMarbleDisc);
+  const innerTitaniumDeck = new THREE.Mesh(new THREE.CylinderGeometry(8.8, 9.0, 0.06, 32), lightTitaniumMat);
+  innerTitaniumDeck.position.set(0, -0.02, 0);
+  innerTitaniumDeck.receiveShadow = true;
+  group.add(innerTitaniumDeck);
 
-  // Concentric inlaid brass & glowing cyan astrolabe rings on the observatory floor
-  for (const [idx, rad] of [4.8, 6.8, 8.75, 10.65].entries()) {
+  // Concentric glowing cyan & neon-green cyber landing-pad rings on the plaza deck
+  for (const [idx, rad] of [5.0, 7.1, 8.95, 10.65].entries()) {
     const ringMesh = new THREE.Mesh(
-      new THREE.TorusGeometry(rad, idx % 2 === 0 ? 0.07 : 0.045, 12, 72),
-      idx % 2 === 0 ? celestialBrassMat : cyanRuneMat
+      new THREE.TorusGeometry(rad, idx % 2 === 0 ? 0.055 : 0.04, 10, 64),
+      idx === 2 ? greenNeonMat : cyanNeonMat
     );
     ringMesh.rotation.x = Math.PI / 2;
     ringMesh.position.y = 0.01;
     group.add(ringMesh);
   }
 
-  // 12 Perimeter Observatory Colonnade Pillars + Levitating Armillary Orbs
+  // 2. Mount the Complete 81-Mesh Low-Poly Futuristic City Scene from futuristic_city.fbx
+  // Surrounds the central plaza with the actual 3D neon skyscrapers, overpass bridge, roads & landing pads
+  mountFullCyberCityScene(group, {
+    cityScale: 0.0042,
+    plazaCenterFBX: [-576, 79, 4332],
+    yOffset: -0.52,
+    minClearanceRadius: 11.5
+  });
+
+  // 3. Perimeter Cyber Plaza Sectors (R = 10.0m) with Actual Loaded 3D Futuristic City Landmarks:
+  //    - 4 Cardinal Holographic Forcefield Checkpoint Gates (`forcefield_gate`: Cube018 + Cube046)
+  //    - 4 Diagonal Ribbed Reactor Spire Towers (`reactor_spire_twin`: Cube065 & `neon_beacon_spire`: Cube009)
+  //    - Actual 3D Neon Cyber Tables (`Cube037`), Consoles (`Cube038`), Hourglass Pedestals (`Circle001`) & Hover-Ships
   const floatingNodes = [];
-  const pillarCount = 12;
-  for (let i = 0; i < pillarCount; i++) {
-    const ang = (i / pillarCount) * Math.PI * 2 + Math.PI / 12;
-    const px = Math.cos(ang) * 10.2;
-    const pz = Math.sin(ang) * 10.2;
-
-    const colGroup = new THREE.Group();
-    colGroup.position.set(px, 0, pz);
-    colGroup.rotation.y = -ang;
-
-    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.56, 0.42, 8), voidSlateMat);
-    plinth.position.y = 0.21;
-    colGroup.add(plinth);
-
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 2.8, 12), astralMarbleMat);
-    shaft.position.y = 1.82;
-    colGroup.add(shaft);
-
-    const trimBand1 = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.045, 10, 24), celestialBrassMat);
-    trimBand1.rotation.x = Math.PI / 2;
-    trimBand1.position.y = 0.65;
-    colGroup.add(trimBand1);
-
-    const trimBand2 = new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.045, 10, 24), celestialBrassMat);
-    trimBand2.rotation.x = Math.PI / 2;
-    trimBand2.position.y = 3.15;
-    colGroup.add(trimBand2);
-
-    const capital = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.30, 0.32, 8), celestialBrassMat);
-    capital.position.y = 3.38;
-    colGroup.add(capital);
-
-    // Levitating crystal star-core & brass mini-ring above each pillar
-    const orbNode = new THREE.Group();
-    orbNode.position.set(0, 4.15, 0);
-    const coreCrystal = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.28, 0),
-      i % 2 === 0 ? cyanRuneMat : violetCrystalMat
-    );
-    orbNode.add(coreCrystal);
-    const miniRing = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.028, 8, 24), celestialBrassMat);
-    miniRing.rotation.x = Math.PI * 0.35;
-    orbNode.add(miniRing);
-    colGroup.add(orbNode);
-
-    floatingNodes.push({ mesh: orbNode, baseY: 4.15, phase: i * 0.75, speed: 1.4 });
-    group.add(colGroup);
-  }
-
-  // 2. Three Colossal Gyroscopic Armillary Astrolabe Rings Encircling the Arena
-  const armillaryRings = [];
-  const ringConfigs = [
-    { r: 15.2, tube: 0.14, tiltX: 0.38, tiltZ: 0.12, speedX: 0.09, speedY: 0.16, mat: celestialBrassMat },
-    { r: 17.4, tube: 0.11, tiltX: -0.52, tiltZ: 0.28, speedX: -0.12, speedY: 0.11, mat: cyanRuneMat },
-    { r: 19.6, tube: 0.16, tiltX: 0.22, tiltZ: -0.45, speedX: 0.07, speedY: -0.14, mat: celestialBrassMat }
+  const hoverShipModels = [
+    'hover_cruiser',
+    'hover_interceptor',
+    'hover_shuttle',
+    'hover_gunship',
+    'hover_recon'
   ];
 
-  for (const cfg of ringConfigs) {
-    const rGroup = new THREE.Group();
-    rGroup.rotation.set(cfg.tiltX, 0, cfg.tiltZ);
-    const mainTorus = new THREE.Mesh(new THREE.TorusGeometry(cfg.r, cfg.tube, 14, 96), cfg.mat);
-    rGroup.add(mainTorus);
+  const sectorCount = 8;
+  for (let i = 0; i < sectorCount; i++) {
+    const ang = (i / sectorCount) * Math.PI * 2;
+    const r = 9.95;
+    const sectorGroup = new THREE.Group();
+    sectorGroup.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
+    sectorGroup.rotation.y = -ang - Math.PI / 2;
 
-    // Stud the armillary ring with 8 celestial degree pointers & star nodes
-    for (let k = 0; k < 8; k++) {
-      const a = (k / 8) * Math.PI * 2;
-      const pointer = new THREE.Mesh(new THREE.OctahedronGeometry(0.36, 0), cyanRuneMat);
-      pointer.position.set(Math.cos(a) * cfg.r, Math.sin(a) * cfg.r, 0);
-      rGroup.add(pointer);
+    if (i % 2 === 0) {
+      // Cardinal Approach: Actual 3D Holographic Forcefield Checkpoint Gate (`Cube018` + `Cube046`)
+      mountCyberCityModel(sectorGroup, 'forcefield_gate', {
+        scale: 2.15,
+        position: [0, 0, 0]
+      });
+
+      // Flanking Actual 3D Hourglass Cyber Pedestals (`Circle001`) & Copper Reactor Cells (`Cylinder006`)
+      for (const side of [-1, 1]) {
+        mountCyberCityModel(sectorGroup, 'cyber_pedestal', {
+          scale: 0.92,
+          position: [side * 2.45, 0, 0.25]
+        });
+        mountCyberCityModel(sectorGroup, 'copper_cell_cyl', {
+          scale: 0.48,
+          position: [side * 2.45, 0.92, 0.25]
+        });
+      }
+    } else {
+      // Diagonal Sector: Actual 3D Ribbed Futuristic Reactor Spire (`Cube065`) + Neon Cyber Console (`Cube038`)
+      mountCyberCityModel(sectorGroup, 'reactor_spire_twin', {
+        scale: 4.35,
+        position: [0, 0, -0.45]
+      });
+
+      mountCyberCityModel(sectorGroup, 'neon_cyber_console', {
+        scale: 1.28,
+        position: [-1.65, 0, 0.55],
+        rotationY: 0.35
+      });
+
+      mountCyberCityModel(sectorGroup, 'neon_cyber_table', {
+        scale: 1.35,
+        position: [1.65, 0, 0.55],
+        rotationY: -0.35
+      });
+
+      mountCyberCityModel(sectorGroup, 'cyber_pedestal', {
+        scale: 0.68,
+        position: [1.65, 0, 1.25]
+      });
     }
 
-    group.add(rGroup);
-    armillaryRings.push({ group: rGroup, speedX: cfg.speedX, speedY: cfg.speedY });
+    // Hovering 3D Futuristic Ship / Drone stationed above each perimeter sector
+    const hoverStation = new THREE.Group();
+    const baseY = 3.25 + (i % 2) * 1.15;
+    hoverStation.position.set(0, baseY, 0.35);
+    mountCyberCityModel(hoverStation, hoverShipModels[i % hoverShipModels.length], {
+      scale: 2.15,
+      position: [0, 0, 0],
+      rotationY: Math.PI / 2
+    });
+    sectorGroup.add(hoverStation);
+
+    floatingNodes.push({
+      mesh: hoverStation,
+      baseY,
+      phase: i * 0.85,
+      speed: 1.45 + (i % 3) * 0.2
+    });
+
+    group.add(sectorGroup);
   }
 
-  // 3. Distant Levitating Star-Monolith Islands (8 Composite Obelisks in Orbit)
+  // 4. Eight Patrolling 3D Futuristic Hover-Ships Cruising Through the Aerial Sky-Lanes
+  const patrollingShips = [];
   for (let i = 0; i < 8; i++) {
-    const ang = (i / 8) * Math.PI * 2;
-    const dist = 25.5 + (i % 2) * 4.5;
-    const baseY = 2.5 + (i % 3) * 2.2;
+    const shipHolder = new THREE.Group();
+    const modelName = hoverShipModels[i % hoverShipModels.length];
+    mountCyberCityModel(shipHolder, modelName, {
+      scale: 2.95 + (i % 3) * 0.45,
+      position: [0, 0, 0]
+    });
+    group.add(shipHolder);
 
-    const monoGroup = new THREE.Group();
-    monoGroup.position.set(Math.cos(ang) * dist, baseY, Math.sin(ang) * dist);
-    monoGroup.rotation.y = -ang;
-
-    const rockBase = new THREE.Mesh(new THREE.ConeGeometry(1.85, 3.8, 7), voidSlateMat);
-    rockBase.rotation.x = Math.PI;
-    rockBase.position.y = -1.9;
-    monoGroup.add(rockBase);
-
-    const obeliskBody = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.15, 5.2, 6), astralMarbleMat);
-    obeliskBody.position.y = 2.6;
-    monoGroup.add(obeliskBody);
-
-    const obeliskTip = new THREE.Mesh(
-      new THREE.ConeGeometry(0.65, 1.6, 6),
-      i % 2 === 0 ? cyanRuneMat : violetCrystalMat
-    );
-    obeliskTip.position.y = 6.0;
-    monoGroup.add(obeliskTip);
-
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.06, 8, 32), celestialBrassMat);
-    halo.rotation.x = Math.PI / 2;
-    halo.position.y = 4.2;
-    monoGroup.add(halo);
-
-    group.add(monoGroup);
-    floatingNodes.push({ mesh: monoGroup, baseY, phase: i * 1.1, speed: 0.75 });
+    patrollingShips.push({
+      mesh: shipHolder,
+      orbitR: 15.5 + (i % 4) * 4.2,
+      baseY: 4.8 + (i % 4) * 2.4,
+      speed: (i % 2 === 0 ? 1 : -1) * (0.22 + (i % 3) * 0.05),
+      phase: (i / 8) * Math.PI * 2
+    });
   }
-
-  // 4. Colossal Ringed Gas-Giant Planet & Crescent Moons on the Horizon
-  const planetGroup = new THREE.Group();
-  planetGroup.position.set(-28, 21, -52);
-  planetGroup.rotation.set(0.28, 0.35, -0.32);
-
-  const planetMat = new THREE.MeshStandardMaterial({
-    color: 0x6d28d9,
-    roughness: 0.55,
-    metalness: 0.12,
-    emissive: 0x2e1065,
-    emissiveIntensity: 0.65
-  });
-  const planetSphere = new THREE.Mesh(new THREE.SphereGeometry(8.6, 36, 28), planetMat);
-  planetGroup.add(planetSphere);
-
-  const ringInner = new THREE.Mesh(
-    new THREE.RingGeometry(11.2, 15.6, 64),
-    new THREE.MeshBasicMaterial({
-      color: 0xe9d5ff,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.62
-    })
-  );
-  ringInner.rotation.x = Math.PI / 2;
-  planetGroup.add(ringInner);
-
-  const ringOuter = new THREE.Mesh(
-    new THREE.RingGeometry(16.4, 19.2, 64),
-    new THREE.MeshBasicMaterial({
-      color: 0x00f5d4,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.42
-    })
-  );
-  ringOuter.rotation.x = Math.PI / 2;
-  planetGroup.add(ringOuter);
-
-  const moonMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(2.1, 24, 20),
-    new THREE.MeshStandardMaterial({
-      color: 0xfef08a,
-      roughness: 0.35,
-      emissive: 0xf59e0b,
-      emissiveIntensity: 0.45
-    })
-  );
-  moonMesh.position.set(22, 4.5, 6);
-  planetGroup.add(moonMesh);
-
-  group.add(planetGroup);
 
   group.userData = {
     floatingNodes,
-    armillaryRings,
-    planetGroup
+    armillaryRings: [],
+    patrollingShips
   };
 
   return group;
@@ -1436,19 +1365,28 @@ export function createWorldSceneryManager(scene) {
     skyDomeMat.uniforms.uTime.value = elapsedTotal;
     horizonSeaMat.uniforms.uTime.value = elapsedTotal;
 
-    // 1. Animate Celestial Astral Observatory
+    // 1. Animate Futuristic Cyber Metropolis (Hover-Drone Stations & Patrolling 3D Hover-Ships)
     if (celestialGroup.visible) {
-      const { floatingNodes, armillaryRings, planetGroup } = celestialGroup.userData;
-      for (const node of floatingNodes) {
-        node.mesh.position.y = node.baseY + Math.sin(elapsedTotal * node.speed + node.phase) * 0.28;
-        node.mesh.rotation.y += dt * 0.65;
+      const { floatingNodes, patrollingShips } = celestialGroup.userData;
+      if (floatingNodes) {
+        for (const node of floatingNodes) {
+          node.mesh.position.y = node.baseY + Math.sin(elapsedTotal * node.speed + node.phase) * 0.24;
+        }
       }
-      for (const ring of armillaryRings) {
-        ring.group.rotation.x += dt * ring.speedX;
-        ring.group.rotation.y += dt * ring.speedY;
-      }
-      if (planetGroup) {
-        planetGroup.rotation.y += dt * 0.04;
+      if (patrollingShips) {
+        for (const ship of patrollingShips) {
+          const theta = elapsedTotal * ship.speed + ship.phase;
+          const nextTheta = theta + (ship.speed >= 0 ? 0.05 : -0.05);
+          const x = Math.cos(theta) * ship.orbitR;
+          const z = Math.sin(theta) * ship.orbitR;
+          const y = ship.baseY + Math.sin(elapsedTotal * 1.4 + ship.phase) * 0.55;
+          ship.mesh.position.set(x, y, z);
+          ship.mesh.lookAt(
+            Math.cos(nextTheta) * ship.orbitR,
+            y + Math.cos(elapsedTotal * 1.4 + ship.phase) * 0.08,
+            Math.sin(nextTheta) * ship.orbitR
+          );
+        }
       }
     }
 
