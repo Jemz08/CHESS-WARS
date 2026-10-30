@@ -937,8 +937,8 @@ export default function App() {
         }
       }
 
-      const controlH = Math.round(Math.min(40, Math.max(26, 31 * padScale)));
-      const gapPx = Math.round(Math.min(12, Math.max(4, 6 * padScale)));
+      const controlH = Math.round(Math.min(42, Math.max(33, 36 * padScale)));
+      const gapPx = Math.round(Math.min(14, Math.max(8, 10 * padScale)));
 
       const docEl = document.documentElement;
       docEl.dataset.orientation = orientation;
@@ -1146,8 +1146,8 @@ export default function App() {
     const handleStateChange = (ev: Event) => {
       const d = (ev as CustomEvent).detail;
       if (!d) return;
-      if (typeof d.matchStarted === 'boolean' && d.matchStarted) {
-        setHasStartedGame(true);
+      if (typeof d.matchStarted === 'boolean') {
+        setHasStartedGame(d.matchStarted);
       }
       setGameMode(d.gameMode || 'single');
       setBotDifficulty(d.botDifficulty || 'medium');
@@ -1904,34 +1904,76 @@ export default function App() {
         aria-hidden={uiHidden || activeDialog !== 'none'}
         style={{ display: activeDialog !== 'none' ? 'none' : undefined }}
       >
-        <div className="hud-group" id="hud-left">
-          <button
-            type="button"
-            className="hud-btn primary hud-lobby-back-btn"
-            id="btn-hud-lobby-top"
-            onClick={() => {
-              setMobileSheetOpen(false);
-              getEngine()?.setLobbyPaused?.(true);
-              setActiveDialog('gateway');
-            }}
-            title="Return to Sanctum Lobby (Pauses Game)"
-          >
-            <img
-              src="/assets/ui/icons/return.png"
-              alt=""
-              className="itch-hud-inline-icon"
-              aria-hidden="true"
-            />
-            <span>Lobby</span>
-          </button>
+        <div className="hud-top-main-row">
+          <div className="hud-group" id="hud-left">
+            <button
+              type="button"
+              className="hud-btn primary hud-lobby-back-btn"
+              id="btn-hud-lobby-top"
+              onClick={() => {
+                setMobileSheetOpen(false);
+                setPendingTurnHandoff(null);
+                getEngine()?.quitMatchToLobby?.();
+                setHasStartedGame(false);
+                setActiveDialog('gateway');
+              }}
+              title="Quit Match & Return to Sanctum Lobby"
+            >
+              <img
+                src="/assets/ui/icons/return.png"
+                alt=""
+                className="itch-hud-inline-icon"
+                aria-hidden="true"
+              />
+              <span>Lobby</span>
+            </button>
 
-          <div className={`status-pill ${inCheck ? 'in-check' : ''}`} id="status-pill">
-            <span className="turn-dot" id="turn-dot"></span>
-            <span id="turn-text">White to Move</span>
-            <span className="mode-badge" id="mode-badge">Vs Bot</span>
+            <div className={`status-pill ${inCheck ? 'in-check' : ''}`} id="status-pill">
+              <span className="turn-dot" id="turn-dot"></span>
+              <span id="turn-text">White to Move</span>
+              <span className="mode-badge" id="mode-badge">Vs Bot</span>
+            </div>
           </div>
 
-          {/* Live Dual Chess Clock (Bullet · Blitz · Rapid) */}
+          <div className="hud-compact-actions">
+            <button
+              type="button"
+              className="hud-btn hud-micro-btn"
+              onClick={() => getEngine()?.setCameraPreset?.('player')}
+              title="Flip / Reset Player Camera"
+            >
+              <ItchRotateCameraIcon size={13} />
+              <span>Cam</span>
+            </button>
+            <button
+              type="button"
+              className={`hud-btn hud-micro-btn ${sfxEnabled ? 'active' : ''}`}
+              onClick={handleToggleSfx}
+              title="Toggle Sound Effects"
+            >
+              <img
+                src={sfxEnabled ? '/assets/ui/icons/audioOn.png' : '/assets/ui/icons/audioOff.png'}
+                alt=""
+                className="itch-hud-inline-icon"
+                aria-hidden="true"
+              />
+              <span>{sfxEnabled ? 'SFX' : 'Mute'}</span>
+            </button>
+            <button
+              type="button"
+              className={`hud-btn mobile-controls-trigger ${mobileSheetOpen ? 'active' : ''}`}
+              id="btn-mobile-controls"
+              aria-expanded={mobileSheetOpen}
+              aria-controls="hud-right"
+              onClick={() => setMobileSheetOpen((prev) => !prev)}
+            >
+              {mobileSheetOpen ? '✕' : '☰ Toggles'}
+            </button>
+          </div>
+        </div>
+
+        {/* Second Row Below: Live Dual Chess Clock Bar, Gold Treasury & Check Alert */}
+        <div className="hud-group hud-top-sub-row" id="hud-sub-bar">
           <div
             className={`hud-chess-clock-bar mode-${timeControlCategory}`}
             id="hud-chess-clock-bar"
@@ -1987,20 +2029,6 @@ export default function App() {
             </div>
           </div>
 
-          {inCheck && (
-            <div
-              className="check-indicator-badge active"
-              id="check-indicator-badge"
-              role="status"
-              aria-live="assertive"
-            >
-              <span className="check-indicator-icon" aria-hidden="true">
-                <PlaySwordsVectorIcon size={Math.round(12 * hudViewport.fontScale)} />
-              </span>
-              <span className="check-indicator-label">CHECK!</span>
-            </div>
-          )}
-
           <button
             type="button"
             className="gold-wallet-btn"
@@ -2017,42 +2045,20 @@ export default function App() {
             </span>
             <span className="gold-wallet-amount">{economy.gold}</span>
           </button>
-        </div>
 
-        <div className="hud-compact-actions">
-          <button
-            type="button"
-            className="hud-btn hud-micro-btn"
-            onClick={() => getEngine()?.setCameraPreset?.('player')}
-            title="Flip / Reset Player Camera"
-          >
-            <ItchRotateCameraIcon size={13} />
-            <span>Cam</span>
-          </button>
-          <button
-            type="button"
-            className={`hud-btn hud-micro-btn ${sfxEnabled ? 'active' : ''}`}
-            onClick={handleToggleSfx}
-            title="Toggle Sound Effects"
-          >
-            <img
-              src={sfxEnabled ? '/assets/ui/icons/audioOn.png' : '/assets/ui/icons/audioOff.png'}
-              alt=""
-              className="itch-hud-inline-icon"
-              aria-hidden="true"
-            />
-            <span>{sfxEnabled ? 'SFX' : 'Mute'}</span>
-          </button>
-          <button
-            type="button"
-            className={`hud-btn mobile-controls-trigger ${mobileSheetOpen ? 'active' : ''}`}
-            id="btn-mobile-controls"
-            aria-expanded={mobileSheetOpen}
-            aria-controls="hud-right"
-            onClick={() => setMobileSheetOpen((prev) => !prev)}
-          >
-            {mobileSheetOpen ? '✕' : '☰ Toggles'}
-          </button>
+          {inCheck && (
+            <div
+              className="check-indicator-badge active"
+              id="check-indicator-badge"
+              role="status"
+              aria-live="assertive"
+            >
+              <span className="check-indicator-icon" aria-hidden="true">
+                <PlaySwordsVectorIcon size={Math.round(12 * hudViewport.fontScale)} />
+              </span>
+              <span className="check-indicator-label">CHECK!</span>
+            </div>
+          )}
         </div>
 
         <div
@@ -2185,7 +2191,9 @@ export default function App() {
             id="btn-arena-hub"
             onClick={() => {
               setMobileSheetOpen(false);
-              getEngine()?.setLobbyPaused?.(true);
+              setPendingTurnHandoff(null);
+              getEngine()?.quitMatchToLobby?.();
+              setHasStartedGame(false);
               setActiveDialog('gateway');
             }}
           >
@@ -4451,7 +4459,11 @@ export default function App() {
               onClick={() => {
                 const overlay = document.getElementById('checkmate-overlay');
                 if (overlay) overlay.classList.remove('visible');
-                setActiveDialog('arena');
+                setMobileSheetOpen(false);
+                setPendingTurnHandoff(null);
+                getEngine()?.quitMatchToLobby?.();
+                setHasStartedGame(false);
+                setActiveDialog('gateway');
               }}
             >
               Game Lobby

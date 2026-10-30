@@ -897,6 +897,8 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
   preloadAllMixkitSfx();
 
+  const activeGameplaySources = new Set();
+
   // Play a Mixkit sound effect with sample-accurate scheduling, pitch/rate control, filter sculpting, and envelope shaping
   function playMixkitClip(key, opts = {}) {
     const ctx = getAudioCtx();
@@ -916,8 +918,15 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       pan = 0
     } = opts;
 
+    const isUiOrLoadingKey =
+      key.startsWith('lobby_') ||
+      key.startsWith('loading_') ||
+      key === 'medieval_lock_187';
+
     const triggerFromBuffer = (buf, actualDelay) => {
       if (!buf || !sfxEnabled) return;
+      // Do not trigger delayed gameplay combat/board SFX if the player has already quit to the Lobby
+      if (!isUiOrLoadingKey && isLobbyMusicActiveState && actualDelay > 0.05) return;
       try {
         const startTime = ctx.currentTime + Math.max(0, actualDelay);
         const src = ctx.createBufferSource();
@@ -973,6 +982,13 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
         lastNode.connect(gainNode);
         gainNode.connect(getMasterBus(ctx));
+
+        if (!isUiOrLoadingKey) {
+          activeGameplaySources.add(src);
+          src.onended = () => {
+            activeGameplaySources.delete(src);
+          };
+        }
 
         src.start(startTime, startOffset);
         if (maxDuration) {
@@ -1375,7 +1391,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
   }
 
   // ==========================================================================
-  // Mixkit Atmospheric Sanctum Lobby Background Music Controller
+  // Mixkit Atmospheric Sanctum Loading Screen & Lobby Background Music Controller
   // ==========================================================================
   let lobbyMusicEnabled = true;
   try {
@@ -1386,15 +1402,20 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
   let userMusicVolumeMultiplier = 1.0;
   try {
     const savedMusicVol = localStorage.getItem('wizard_chess_music_volume');
-    if (savedMusicVol !== null) userMusicVolumeMultiplier = Math.max(0, Math.min(1, parseFloat(savedMusicVol)));
+    if (savedMusicVol !== null) {
+      const parsedVol = parseFloat(savedMusicVol);
+      if (Number.isFinite(parsedVol) && parsedVol > 0.02) {
+        userMusicVolumeMultiplier = Math.max(0.05, Math.min(1, parsedVol));
+      }
+    }
   } catch (e) {}
 
-  let isLobbyMusicActiveState = true; // True while user is in Lobby / Armory modal or before match starts
+  let isLobbyMusicActiveState = true; // True during Loading Screen, in Lobby / Armory modal, or whenever no active match is running
   let lobbyPrimaryAudio = null;
   let lobbyDrumsAudio = null;
   let lobbyMusicFadeTimer = null;
-  const getPrimaryTargetVol = () => 0.34 * userMusicVolumeMultiplier;
-  const getDrumsTargetVol = () => 0.14 * userMusicVolumeMultiplier;
+  const getPrimaryTargetVol = () => 0.42 * userMusicVolumeMultiplier;
+  const getDrumsTargetVol = () => 0.18 * userMusicVolumeMultiplier;
 
   function ensureLobbyAudioElements() {
     if (typeof window === 'undefined' || navigator.webdriver) return false;
@@ -1423,13 +1444,18 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     if (typeof window === 'undefined' || navigator.webdriver) return;
     if (!ensureLobbyAudioElements()) return;
 
-    const shouldPlay = sfxEnabled && lobbyMusicEnabled && isLobbyMusicActiveState;
+    // Lobby & Loading Screen music is controlled by lobbyMusicEnabled & isLobbyMusicActiveState (independent of Combat SFX mute)
+    const shouldPlay = lobbyMusicEnabled && isLobbyMusicActiveState;
     if (lobbyMusicFadeTimer) {
       clearInterval(lobbyMusicFadeTimer);
       lobbyMusicFadeTimer = null;
     }
 
     if (shouldPlay) {
+      try {
+        lobbyPrimaryAudio.playbackRate = 1.0;
+      } catch (e) {}
+
       const p1 = lobbyPrimaryAudio.play();
       if (p1 && typeof p1.catch === 'function') {
         p1.catch(() => {});
@@ -1443,31 +1469,40 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
       lobbyMusicFadeTimer = setInterval(() => {
         if (!lobbyPrimaryAudio) return;
+        if (lobbyPrimaryAudio.paused && lobbyMusicEnabled && isLobbyMusicActiveState) {
+          const retry1 = lobbyPrimaryAudio.play();
+          if (retry1 && typeof retry1.catch === 'function') retry1.catch(() => {});
+        }
+        if (lobbyDrumsAudio && lobbyDrumsAudio.paused && lobbyMusicEnabled && isLobbyMusicActiveState) {
+          const retry2 = lobbyDrumsAudio.play();
+          if (retry2 && typeof retry2.catch === 'function') retry2.catch(() => {});
+        }
+
         let done = true;
         const targetPrimary = getPrimaryTargetVol();
         const targetDrums = getDrumsTargetVol();
 
         if (lobbyPrimaryAudio.volume < targetPrimary - 0.01) {
-          lobbyPrimaryAudio.volume = Math.min(targetPrimary, lobbyPrimaryAudio.volume + 0.025);
+          lobbyPrimaryAudio.volume = Math.min(targetPrimary, lobbyPrimaryAudio.volume + 0.03);
           done = false;
         } else if (lobbyPrimaryAudio.volume > targetPrimary + 0.01) {
-          lobbyPrimaryAudio.volume = Math.max(targetPrimary, lobbyPrimaryAudio.volume - 0.025);
+          lobbyPrimaryAudio.volume = Math.max(targetPrimary, lobbyPrimaryAudio.volume - 0.03);
           done = false;
         } else {
           lobbyPrimaryAudio.volume = targetPrimary;
         }
         if (lobbyDrumsAudio) {
           if (lobbyDrumsAudio.volume < targetDrums - 0.008) {
-            lobbyDrumsAudio.volume = Math.min(targetDrums, lobbyDrumsAudio.volume + 0.012);
+            lobbyDrumsAudio.volume = Math.min(targetDrums, lobbyDrumsAudio.volume + 0.015);
             done = false;
           } else if (lobbyDrumsAudio.volume > targetDrums + 0.008) {
-            lobbyDrumsAudio.volume = Math.max(targetDrums, lobbyDrumsAudio.volume - 0.012);
+            lobbyDrumsAudio.volume = Math.max(targetDrums, lobbyDrumsAudio.volume - 0.015);
             done = false;
           } else {
             lobbyDrumsAudio.volume = targetDrums;
           }
         }
-        if (done && lobbyMusicFadeTimer) {
+        if (done && !lobbyPrimaryAudio.paused && lobbyMusicFadeTimer) {
           clearInterval(lobbyMusicFadeTimer);
           lobbyMusicFadeTimer = null;
         }
@@ -1506,11 +1541,19 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
   function setLobbyMusicActive(active) {
     isLobbyMusicActiveState = Boolean(active);
+    if (isLobbyMusicActiveState) {
+      // Entering Loading Screen or Lobby: stop all in-game background loops & gameplay SFX immediately
+      stopAllGameplayAudio();
+    }
     syncLobbyMusicPlayback();
+    syncGraveyardAmbientSoundscape();
   }
 
   function setLobbyMusicEnabled(enabled) {
     lobbyMusicEnabled = Boolean(enabled);
+    if (lobbyMusicEnabled && userMusicVolumeMultiplier <= 0.02) {
+      userMusicVolumeMultiplier = 0.85;
+    }
     try {
       localStorage.setItem('wizard_chess_music_enabled', String(lobbyMusicEnabled));
     } catch (e) {}
@@ -1524,14 +1567,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
   // ==========================================================================
   // Haunted Blood-Moon Graveyard Ambient Soundscape & Eerie Music Engine
-  // Powered by actual Mixkit Halloween Audio Assets:
-  // - /sfx/halloween_graveyard_wind_1157.mp3 (Continuous Howling Graveyard Wind)
-  // - /sfx/halloween_tomb_ambience_2500.mp3 (Creepy Crypt & Tomb Ambience)
-  // - /sfx/halloween_music_piano_horror_671.mp3 (Piano Horror Background Music)
-  // - /sfx/halloween_music_dark_shadows_64.mp3 (Dark Shadows Ambient Score)
-  // - /sfx/halloween_ghost_whispers_302.mp3 (Distant Ghostly Whispers)
-  // - /sfx/halloween_wolf_howl_1729.mp3 (Distant Blood-Moon Wolf Howl)
-  // - /sfx/halloween_cauldron_bubbles_2999.mp3 (Bubbling Witch Cauldron)
+  // Powered by actual Mixkit Halloween Audio Assets (ONLY active during an in-progress match)
   // ==========================================================================
   let activeWorldSceneryId = 'gothic_cathedral';
   let graveyardWindAudio = null;
@@ -1576,6 +1612,9 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
   function playHalloweenWhisperAndWindGustSfx(variant = 'whisper') {
     if (!sfxEnabled) return;
+    // Do not play background graveyard whispers/wind gusts while the user is in the Lobby unless explicitly previewing in Armory
+    if (isLobbyMusicActiveState && variant !== 'scenery_preview') return;
+
     if (variant === 'select') {
       playMixkitClip('halloween_cauldron_bubbles_2999', {
         volume: 0.42,
@@ -1694,26 +1733,37 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       try {
         aud.volume = 0;
         aud.pause();
+        aud.currentTime = 0;
       } catch (e) {}
     });
+  }
+
+  function stopAllGameplayAudio() {
+    stopGraveyardAmbientNodes();
+    activeGameplaySources.forEach((src) => {
+      try {
+        src.stop(0);
+        src.disconnect();
+      } catch (e) {}
+    });
+    activeGameplaySources.clear();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
+    }
   }
 
   function syncGraveyardAmbientSoundscape() {
     if (typeof window === 'undefined' || navigator.webdriver) return;
     const isGraveyard = activeWorldSceneryId === 'haunted_blood_graveyard';
-    if (!isGraveyard || !sfxEnabled) {
+    // Only play the in-game Graveyard ambient loops while an actual match is active (!isLobbyMusicActiveState)
+    if (!isGraveyard || !sfxEnabled || isLobbyMusicActiveState) {
       stopGraveyardAmbientNodes();
-      if (lobbyPrimaryAudio) {
-        try { lobbyPrimaryAudio.playbackRate = 1.0; } catch (e) {}
-      }
       return;
     }
 
     preloadHalloween3DAssets();
-
-    if (lobbyPrimaryAudio) {
-      try { lobbyPrimaryAudio.playbackRate = 0.78; } catch (e) {}
-    }
 
     if (ensureGraveyardAudioElements()) {
       const windVol = Math.max(0, Math.min(1, 0.38 * userSfxVolumeMultiplier));
@@ -1756,7 +1806,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
     if (!graveyardWhisperTimer) {
       graveyardWhisperTimer = setInterval(() => {
-        if (activeWorldSceneryId !== 'haunted_blood_graveyard' || !sfxEnabled) return;
+        if (activeWorldSceneryId !== 'haunted_blood_graveyard' || !sfxEnabled || isLobbyMusicActiveState) return;
         playHalloweenWhisperAndWindGustSfx('whisper');
       }, 7200);
     }
@@ -1767,13 +1817,16 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     const changed = nextId !== activeWorldSceneryId;
     activeWorldSceneryId = nextId;
     syncGraveyardAmbientSoundscape();
-    if (changed && nextId === 'haunted_blood_graveyard' && sfxEnabled) {
+    if (changed && nextId === 'haunted_blood_graveyard' && sfxEnabled && !isLobbyMusicActiveState) {
       playHalloweenWhisperAndWindGustSfx('scenery_preview');
     }
   }
 
-  // Unlock AudioContext & start Lobby Music on first user interaction if browser blocked initial autoplay
+  // Start Loading Screen & Lobby Background Music immediately on initialization,
+  // and unlock on any user gesture if browser autoplay policy requires interaction
   if (typeof window !== 'undefined' && !navigator.webdriver) {
+    syncLobbyMusicPlayback();
+
     const unlockAudioOnFirstGesture = () => {
       if (sfxEnabled) {
         const ctx = getAudioCtx();
@@ -1789,6 +1842,10 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       syncGraveyardAmbientSoundscape();
     };
     window.addEventListener('pointerdown', unlockAudioOnFirstGesture, { passive: true });
+    window.addEventListener('pointerup', unlockAudioOnFirstGesture, { passive: true });
+    window.addEventListener('click', unlockAudioOnFirstGesture, { passive: true });
+    window.addEventListener('touchstart', unlockAudioOnFirstGesture, { passive: true });
+    window.addEventListener('touchend', unlockAudioOnFirstGesture, { passive: true });
     window.addEventListener('keydown', unlockAudioOnFirstGesture, { passive: true });
   }
 
@@ -4375,10 +4432,10 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     try {
       localStorage.setItem('wizard_chess_music_volume', String(userMusicVolumeMultiplier));
     } catch (e) {}
-    if (lobbyPrimaryAudio && sfxEnabled && lobbyMusicEnabled && isLobbyMusicActiveState) {
+    if (lobbyPrimaryAudio && lobbyMusicEnabled && isLobbyMusicActiveState) {
       lobbyPrimaryAudio.volume = getPrimaryTargetVol();
     }
-    if (lobbyDrumsAudio && sfxEnabled && lobbyMusicEnabled && isLobbyMusicActiveState) {
+    if (lobbyDrumsAudio && lobbyMusicEnabled && isLobbyMusicActiveState) {
       lobbyDrumsAudio.volume = getDrumsTargetVol();
     }
     syncGraveyardAmbientSoundscape();
@@ -4395,6 +4452,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     getLobbyMusicVolume: () => userMusicVolumeMultiplier,
     setLobbyMusicVolume,
     setLobbyMusicActive,
+    stopAllGameplayAudio,
     setActiveWorldScenery,
     playHalloweenWhisperAndWindGustSfx,
     playSelectSfx,

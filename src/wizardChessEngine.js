@@ -1531,6 +1531,7 @@ export function initWizardChess() {
     }
 
     async function loadAllAssets() {
+      sfxVfxManager.setLobbyMusicActive?.(true);
       const loaderBar = document.getElementById('loader-bar');
       const loaderText = document.getElementById('loader-text');
       const loaderPct = document.getElementById('loader-pct');
@@ -4865,16 +4866,15 @@ export function initWizardChess() {
       }
 
       if (modeBadge) {
-        const tcPreset = TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
         if (!matchStarted) {
           modeBadge.textContent = 'Sanctum Lobby';
         } else if (gameMode === 'pass') {
-          modeBadge.textContent = `${tcPreset.shortLabel} • 2P • ${currentTurn === 'w' ? 'P1 White' : 'P2 Black'}`;
+          modeBadge.textContent = `2P • ${currentTurn === 'w' ? 'P1 White' : 'P2 Black'}`;
         } else if (gameMode === 'multi') {
-          modeBadge.textContent = `${tcPreset.shortLabel} • Online ${roomCode ? `[${roomCode}]` : ''}`;
+          modeBadge.textContent = `Online ${roomCode ? `[${roomCode}]` : ''}`;
         } else {
           const diffCap = botDifficulty.charAt(0).toUpperCase() + botDifficulty.slice(1);
-          modeBadge.textContent = `${tcPreset.shortLabel} • Vs Bot (${diffCap})`;
+          modeBadge.textContent = `Vs Bot (${diffCap})`;
         }
       }
       if (btnAiMove) {
@@ -5567,6 +5567,7 @@ export function initWizardChess() {
       clearMatchmakingTimers();
       lobbyPaused = false;
       matchStarted = true;
+      sfxVfxManager.setLobbyMusicActive?.(false);
       orbitControls.enabled = true;
       onlineQueueStatus = 'matched';
       scriptedGameActive = false;
@@ -5825,6 +5826,7 @@ export function initWizardChess() {
       }
       lobbyPaused = false;
       matchStarted = true;
+      sfxVfxManager.setLobbyMusicActive?.(false);
       orbitControls.enabled = true;
       scriptedGameActive = false;
       gameMode = 'single';
@@ -5857,6 +5859,7 @@ export function initWizardChess() {
       }
       lobbyPaused = false;
       matchStarted = true;
+      sfxVfxManager.setLobbyMusicActive?.(false);
       orbitControls.enabled = true;
       scriptedGameActive = false;
       gameMode = 'pass';
@@ -5876,6 +5879,42 @@ export function initWizardChess() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, camera);
+    }
+
+    function quitMatchToLobby() {
+      cancelOnlineMatchmaking();
+      stopMultiplayerSync();
+      if (aiTimer) {
+        clearTimeout(aiTimer);
+        aiTimer = null;
+      }
+      preMoveHighlightTask = null;
+      activeMoveTweens.length = 0;
+      isAnimatingMove = false;
+      matchStarted = false;
+      lobbyPaused = true;
+      gameOver = false;
+      scriptedGameActive = false;
+      scriptDeviated = false;
+      roomCode = null;
+      onlineQueueStatus = 'idle';
+      heldCameraKeys.clear();
+      orbitControls.enabled = false;
+      for (const d of shatterDebris) {
+        if (d.mesh) scene.remove(d.mesh);
+      }
+      shatterDebris.length = 0;
+      impactFlashLight.intensity = 0;
+      impactFlashLight.visible = false;
+      const overlay = document.getElementById('checkmate-overlay');
+      if (overlay) overlay.classList.remove('visible');
+      sfxVfxManager.clearAllVfx?.();
+      sfxVfxManager.stopAllGameplayAudio?.();
+      sfxVfxManager.setLobbyMusicActive?.(true);
+      window.history.replaceState({}, '', window.location.pathname);
+      resetChessBoard(true, false);
       renderer.shadowMap.needsUpdate = true;
       renderer.render(scene, camera);
     }
@@ -6365,6 +6404,8 @@ export function initWizardChess() {
       applyWorldScenery,
       startBotMatch,
       startPassAndPlayMatch,
+      quitMatchToLobby,
+      stopAllGameplayAudio: () => sfxVfxManager.stopAllGameplayAudio?.(),
       startOnlineMatchmaking,
       cancelOnlineMatchmaking,
       createMultiplayerRoom,
