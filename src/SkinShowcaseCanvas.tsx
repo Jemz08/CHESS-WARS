@@ -12,14 +12,25 @@ import {
   rebuildBoardArchitectureGroup
 } from './customBoardAndPieceModels.js';
 import {
+  applyPoliigonPbrToMaterial,
+  resolvePiecePoliigonPresets,
+  resolveBoardPoliigonPresets
+} from './poliigonPbrTextures.js';
+import {
   createUnitySlashRibbonShaderMaterial,
   createUnityFresnelDissolveSphereMaterial,
   createUnityMagicCircleShaderMaterial,
   createUnityFireBreathShaderMaterial,
   createUnityPlasmaBeamShaderMaterial,
   getUnityStarFlareTexture,
-  getUnityFireFlameTexture
+  getUnityFireFlameTexture,
+  getHalloweenBatTexture,
+  getHalloweenGhostTexture
 } from './soundAndVfxEngine.js';
+import {
+  mountHalloweenModel,
+  preloadHalloween3DAssets
+} from './halloweenAssetLoader.js';
 
 interface SkinShowcaseCanvasProps {
   activeTab: 'types' | 'sceneries' | 'boards' | 'pieces';
@@ -28,6 +39,8 @@ interface SkinShowcaseCanvasProps {
   boardSkin: BoardSkin;
   scenery: WorldScenery;
   attackPreviewNonce?: number;
+  poliigonOverrideNonce?: number;
+  paused?: boolean;
 }
 
 /**
@@ -57,6 +70,12 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
       grad.addColorStop(0.78, '#7a1905');
       grad.addColorStop(0.92, '#d9480f');
       grad.addColorStop(1.0, '#1a0402');
+    } else if (scenery.id === 'haunted_blood_graveyard') {
+      grad.addColorStop(0.0, '#06020c');
+      grad.addColorStop(0.38, '#1d082b');
+      grad.addColorStop(0.72, '#5c1124');
+      grad.addColorStop(0.90, '#c2410c');
+      grad.addColorStop(1.0, '#0f0517');
     } else {
       grad.addColorStop(0.0, '#04060c');
       grad.addColorStop(0.45, '#10182b');
@@ -72,8 +91,8 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
       const y = Math.random() * (canvas.height * 0.82);
       const r = 0.5 + Math.random() * 1.6;
       ctx.fillStyle =
-        scenery.id === 'volcanic_titan_forge'
-          ? `rgba(255, 165, 65, ${0.35 + Math.random() * 0.6})`
+        scenery.id === 'volcanic_titan_forge' || scenery.id === 'haunted_blood_graveyard'
+          ? `rgba(255, 145, 35, ${0.4 + Math.random() * 0.6})`
           : scenery.id === 'celestial_observatory'
             ? `rgba(180, 255, 245, ${0.35 + Math.random() * 0.65})`
             : `rgba(255, 244, 214, ${0.2 + Math.random() * 0.5})`;
@@ -89,11 +108,23 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
 
 function sanitizeCrossContextMaterials(root: THREE.Object3D, _fallbackColorHex = 0xff6a00) {
   const shaderUniformList: Array<Record<string, any>> = [];
+  const clonedTexMap = new Map<any, THREE.CanvasTexture>();
   root.traverse((child: any) => {
-    if (!child.isMesh) return;
-    if (child.geometry) {
-      child.geometry = child.geometry.clone();
+    if (child.isSprite && child.material) {
+      const clonedSpriteMat = child.material.clone();
+      if (child.material.map && child.material.map.image) {
+        let ctxTex = clonedTexMap.get(child.material.map.image);
+        if (!ctxTex) {
+          ctxTex = new THREE.CanvasTexture(child.material.map.image);
+          ctxTex.needsUpdate = true;
+          clonedTexMap.set(child.material.map.image, ctxTex);
+        }
+        clonedSpriteMat.map = ctxTex;
+      }
+      child.material = clonedSpriteMat;
+      return;
     }
+    if (!child.isMesh) return;
     if (
       child.userData?.isDragonFire ||
       child.material?.isShaderMaterial ||
@@ -110,8 +141,8 @@ function sanitizeCrossContextMaterials(root: THREE.Object3D, _fallbackColorHex =
         child.material = clonedShaderMat;
       }
     } else {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = false;
+      child.receiveShadow = false;
     }
   });
   if (root.userData?.proceduralAnim) {
@@ -121,15 +152,16 @@ function sanitizeCrossContextMaterials(root: THREE.Object3D, _fallbackColorHex =
 
 function disposeHierarchy(root: THREE.Object3D) {
   root.traverse((child: any) => {
-    if (child.geometry && typeof child.geometry.dispose === 'function') {
-      child.geometry.dispose();
-    }
     if (child.material) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
       for (const m of mats) {
         if (!m) continue;
-        if (m.map && typeof m.map.dispose === 'function') m.map.dispose();
-        if (typeof m.dispose === 'function') m.dispose();
+        if (m.map && !m.map.userData?.isSharedPoliigonTex && typeof m.map.dispose === 'function') {
+          m.map.dispose();
+        }
+        if (!m.userData?.isSharedPoliigonTex && typeof m.dispose === 'function') {
+          m.dispose();
+        }
       }
     }
   });
@@ -141,7 +173,9 @@ export default function SkinShowcaseCanvas({
   pieceSkin,
   boardSkin,
   scenery,
-  attackPreviewNonce = 0
+  attackPreviewNonce = 0,
+  poliigonOverrideNonce = 0,
+  paused = false
 }: SkinShowcaseCanvasProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [previewColor, setPreviewColor] = useState<'w' | 'b'>('w');
@@ -149,6 +183,8 @@ export default function SkinShowcaseCanvas({
   const [isAttackingPreview, setIsAttackingPreview] = useState(false);
   const autoRotateRef = useRef(autoRotate);
   autoRotateRef.current = autoRotate;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
 
   const stageRef = useRef<{
     scene: THREE.Scene;
@@ -219,6 +255,32 @@ export default function SkinShowcaseCanvas({
     fillLight.position.set(2.2, 0.9, -2.0);
     scene.add(fillLight);
 
+    // Self-contained Studio PMREM Environment for realistic Poliigon PBR reflections
+    try {
+      const pmremGen = new THREE.PMREMGenerator(renderer);
+      pmremGen.compileEquirectangularShader();
+      const envScene = new THREE.Scene();
+      envScene.background = new THREE.Color(0x14161f);
+      const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+      const addLightPanel = (hex: number, intensity: number, pos: [number, number, number], scl: [number, number, number]) => {
+        const m = new THREE.Mesh(
+          boxGeo,
+          new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(intensity) })
+        );
+        m.position.set(pos[0], pos[1], pos[2]);
+        m.scale.set(scl[0], scl[1], scl[2]);
+        envScene.add(m);
+      };
+      addLightPanel(0xfff0d4, 2.6, [3, 6, 4], [5, 2, 2]);
+      addLightPanel(0xd4e4ff, 2.0, [-4, 5, -3], [4, 3, 4]);
+      addLightPanel(0xff9f38, 2.8, [-3, 1.5, 2], [2, 2, 3]);
+      scene.environment = pmremGen.fromScene(envScene, 0.04).texture;
+      boxGeo.dispose();
+      pmremGen.dispose();
+    } catch {
+      // Ignore PMREM fallback
+    }
+
     const pedestalGroup = new THREE.Group();
     scene.add(pedestalGroup);
 
@@ -227,6 +289,13 @@ export default function SkinShowcaseCanvas({
       color: 0x12151e,
       roughness: 0.28,
       metalness: 0.62
+    });
+    applyPoliigonPbrToMaterial(baseMat, 'marble_nero_marquina', {
+      contextId: 'showcase',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: 0.75,
+      envMapIntensity: 1.25
     });
     const baseMesh = new THREE.Mesh(baseGeo, baseMat);
     baseMesh.position.y = -0.08;
@@ -239,6 +308,13 @@ export default function SkinShowcaseCanvas({
       roughness: 0.22,
       emissive: 0x5a4208,
       emissiveIntensity: 0.4
+    });
+    applyPoliigonPbrToMaterial(ringMat, 'metal_gold_hammered', {
+      contextId: 'showcase',
+      repeatX: 3,
+      repeatY: 1,
+      normalScale: 0.65,
+      envMapIntensity: 1.5
     });
     const ringMesh = new THREE.Mesh(ringGeo, ringMat);
     ringMesh.rotation.x = Math.PI / 2;
@@ -302,6 +378,10 @@ export default function SkinShowcaseCanvas({
     };
 
     const onWheel = (e: WheelEvent) => {
+      // Only intercept wheel for 3D camera zoom when holding Ctrl/Alt/Shift so normal vertical wheel scrolls the Armory skin list smoothly
+      if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        return;
+      }
       e.preventDefault();
       const dir = new THREE.Vector3().subVectors(camera.position, state.lookTarget);
       const dist = dir.length();
@@ -322,6 +402,10 @@ export default function SkinShowcaseCanvas({
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
+      if (pausedRef.current) {
+        clock.getDelta();
+        return;
+      }
       const delta = Math.min(clock.getDelta(), 0.1);
       const elapsed = clock.getElapsedTime();
 
@@ -383,18 +467,29 @@ export default function SkinShowcaseCanvas({
 
     const handleResize = () => {
       if (!mountRef.current) return;
-      const w = mountRef.current.clientWidth || 360;
-      const h = mountRef.current.clientHeight || 250;
+      const w = Math.max(200, mountRef.current.clientWidth || 360);
+      const h = Math.max(140, mountRef.current.clientHeight || 240);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       camera.lookAt(state.lookTarget);
       renderer.setSize(w, h);
     };
 
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            handleResize();
+          })
+        : null;
+    if (resizeObserver && mountRef.current) {
+      resizeObserver.observe(mountRef.current);
+    }
+
     window.addEventListener('resize', handleResize);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      resizeObserver?.disconnect();
       canvasEl.removeEventListener('pointerdown', onPointerDown);
       canvasEl.removeEventListener('wheel', onWheel);
       window.removeEventListener('pointermove', onPointerMove);
@@ -451,11 +546,19 @@ export default function SkinShowcaseCanvas({
     const isWhite = previewColor === 'w';
     const trimHex = parseInt(pieceSkin.trimHex.replace('#', ''), 16);
     const bladeHex = parseInt(pieceSkin.bladeHex.replace('#', ''), 16);
+    const piecePbrPresets = resolvePiecePoliigonPresets(pieceSkin.id, archetype.id);
 
     const trimMat = new THREE.MeshStandardMaterial({
       color: trimHex,
       roughness: pieceSkin.trimRoughness,
       metalness: pieceSkin.trimMetalness
+    });
+    applyPoliigonPbrToMaterial(trimMat, piecePbrPresets.trimPreset, {
+      contextId: 'showcase',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: piecePbrPresets.normalScaleVal * 0.78,
+      envMapIntensity: 1.5
     });
 
     const bladeMat = new THREE.MeshStandardMaterial({
@@ -465,9 +568,17 @@ export default function SkinShowcaseCanvas({
       emissive: parseInt(pieceSkin.bladeEmissiveHex.replace('#', ''), 16),
       emissiveIntensity: pieceSkin.bladeEmissiveIntensity || 0.3
     });
+    applyPoliigonPbrToMaterial(bladeMat, piecePbrPresets.bladePreset, {
+      contextId: 'showcase',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: piecePbrPresets.normalScaleVal * 0.82,
+      envMapIntensity: 1.55
+    });
 
     const buildKingPiece = (archId: string, colorCode: 'w' | 'b', targetHeight: number) => {
       const cIsWhite = colorCode === 'w';
+      const localPresets = resolvePiecePoliigonPresets(pieceSkin.id, archId);
       const cMainHex = parseInt(
         (cIsWhite ? pieceSkin.whiteHex : pieceSkin.blackHex).replace('#', ''),
         16
@@ -485,6 +596,17 @@ export default function SkinShowcaseCanvas({
           ? pieceSkin.whiteEmissiveIntensity || 0.2
           : pieceSkin.blackEmissiveIntensity || 0.2
       });
+      applyPoliigonPbrToMaterial(
+        cMat,
+        cIsWhite ? localPresets.whitePreset : localPresets.blackPreset,
+        {
+          contextId: 'showcase',
+          repeatX: 2,
+          repeatY: 2,
+          normalScale: localPresets.normalScaleVal,
+          envMapIntensity: 1.4
+        }
+      );
 
       const customMats = {
         primaryMat: cMat,
@@ -622,20 +744,44 @@ export default function SkinShowcaseCanvas({
       const borderHex = parseInt(boardSkin.borderHex.replace('#', ''), 16);
       rimLight.color.setHex(borderHex);
 
+      const bPresets = resolveBoardPoliigonPresets(boardSkin.id, boardSkin.archType);
       const lightMat = new THREE.MeshStandardMaterial({
         color: lightHex,
         roughness: boardSkin.lightRoughness,
         metalness: boardSkin.lightMetalness
       });
+      applyPoliigonPbrToMaterial(lightMat, bPresets.lightPreset, {
+        contextId: 'showcase',
+        repeatX: bPresets.repeatSq,
+        repeatY: bPresets.repeatSq,
+        normalScale: bPresets.normalScaleVal,
+        envMapIntensity: 1.35
+      });
+
       const darkMat = new THREE.MeshStandardMaterial({
         color: darkHex,
         roughness: boardSkin.darkRoughness,
         metalness: boardSkin.darkMetalness
       });
+      applyPoliigonPbrToMaterial(darkMat, bPresets.darkPreset, {
+        contextId: 'showcase',
+        repeatX: bPresets.repeatSq,
+        repeatY: bPresets.repeatSq,
+        normalScale: bPresets.normalScaleVal,
+        envMapIntensity: 1.45
+      });
+
       const borderMat = new THREE.MeshStandardMaterial({
         color: borderHex,
         roughness: 0.25,
         metalness: 0.82
+      });
+      applyPoliigonPbrToMaterial(borderMat, bPresets.borderPreset, {
+        contextId: 'showcase',
+        repeatX: bPresets.repeatBorder,
+        repeatY: bPresets.repeatBorder,
+        normalScale: bPresets.normalScaleVal,
+        envMapIntensity: 1.5
       });
 
       const sqGeo = new THREE.BoxGeometry(sqSize * 0.96, 0.036, sqSize * 0.96);
@@ -649,7 +795,7 @@ export default function SkinShowcaseCanvas({
       }
 
       const archGroup = new THREE.Group();
-      rebuildBoardArchitectureGroup(archGroup, boardSkin, sqSize, surfaceY, borderMat);
+      rebuildBoardArchitectureGroup(archGroup, boardSkin, sqSize, surfaceY, borderMat, 'showcase');
       boardPreviewGroup.add(archGroup);
 
       const whiteKing = buildKingPiece(archetype.id, 'w', 0.48);
@@ -739,12 +885,13 @@ export default function SkinShowcaseCanvas({
       islandGroup.add(rimTorus);
 
       const miniSq = 0.14;
+      const miniTileGeo = new THREE.BoxGeometry(miniSq * 0.95, 0.02, miniSq * 0.95);
       const miniLightMat = new THREE.MeshStandardMaterial({ color: 0xe2d9c8, roughness: 0.3 });
       const miniDarkMat = new THREE.MeshStandardMaterial({ color: 0x181d28, roughness: 0.35 });
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
           const tile = new THREE.Mesh(
-            new THREE.BoxGeometry(miniSq * 0.95, 0.02, miniSq * 0.95),
+            miniTileGeo,
             (r + c) % 2 === 0 ? miniLightMat : miniDarkMat
           );
           tile.position.set((c - 3.5) * miniSq, 0.015, (r - 3.5) * miniSq);
@@ -839,6 +986,115 @@ export default function SkinShowcaseCanvas({
           subjectGroup.add(emberTip);
           st.floatingNodes.push({ mesh: emberTip, baseY, phase: i });
         }
+      } else if (scenery.id === 'haunted_blood_graveyard') {
+        preloadHalloween3DAssets();
+        if (typeof (window as any).wizardChess?.playHalloweenWhisperSfx === 'function') {
+          (window as any).wizardChess.playHalloweenWhisperSfx('scenery_preview');
+        }
+        // Colossal Blood Moon Halo behind the Graveyard Island + Actual 3D GLTF/GLB Halloween Asset Pack Models:
+        // Haunted Crypt Mausoleum, Decorated Dead Trees, Wrought-Iron Arch Gate, Bubbling Witch Cauldron,
+        // Gravestones, Decorated Coffins, Skeleton Minions & Carved Jack-o'-Lanterns
+        const bloodMoonMesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.55, 24, 18),
+          new THREE.MeshBasicMaterial({ color: 0xff5500 })
+        );
+        bloodMoonMesh.position.set(0, 0.92, -1.55);
+        subjectGroup.add(bloodMoonMesh);
+
+        const ectoMat = new THREE.MeshStandardMaterial({
+          color: 0x00e676,
+          emissive: 0x00e676,
+          emissiveIntensity: 1.15,
+          roughness: 0.2
+        });
+        const ectoRing = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.035, 12, 48), ectoMat);
+        ectoRing.rotation.x = Math.PI / 2;
+        ectoRing.position.y = -0.18;
+        subjectGroup.add(ectoRing);
+
+        // Actual 3D GLTF Crypt Mausoleum (`crypt.gltf`) on rear rim of the floating island
+        mountHalloweenModel(islandGroup, 'crypt', {
+          position: [-0.62, 0.0, -0.62],
+          rotation: [0, 0.68, 0],
+          scale: 0.14
+        });
+
+        // Actual 3D GLTF Decorated Dead Tree (`tree_dead_large_decorated.gltf`) on right rear rim
+        mountHalloweenModel(islandGroup, 'tree_dead_large_decorated', {
+          position: [0.66, 0.0, -0.58],
+          rotation: [0, -0.55, 0],
+          scale: 0.16
+        });
+
+        // Actual 3D GLTF Wrought-Iron Arch Gate (`arch_gate.gltf`) on front rim
+        mountHalloweenModel(islandGroup, 'arch_gate', {
+          position: [0.0, 0.0, 0.86],
+          rotation: [0, 0, 0],
+          scale: 0.13
+        });
+
+        // Actual 3D GLB Witch Cauldron (`cauldron.glb`) + Triple Candles (`candle_triple.gltf`) on right front rim
+        const cauldronGroup = new THREE.Group();
+        cauldronGroup.position.set(0.66, 0.0, 0.56);
+        mountHalloweenModel(cauldronGroup, 'cauldron', {
+          scale: 0.24
+        });
+        mountHalloweenModel(cauldronGroup, 'candle_triple', {
+          position: [-0.18, 0, 0.08],
+          scale: 0.20
+        });
+        const cLiquid = new THREE.Mesh(new THREE.CircleGeometry(0.11, 16), ectoMat);
+        cLiquid.rotation.x = -Math.PI / 2;
+        cLiquid.position.y = 0.20;
+        cauldronGroup.add(cLiquid);
+        islandGroup.add(cauldronGroup);
+
+        // Actual 3D GLTF Decorated Coffin (`coffin_decorated.gltf`) & Skeleton Minion (`character_skeleton_minion.gltf`) on left front rim
+        mountHalloweenModel(islandGroup, 'coffin_decorated', {
+          position: [-0.68, 0.0, 0.52],
+          rotation: [0, 0.85, 0],
+          scale: 0.18
+        });
+        mountHalloweenModel(islandGroup, 'character_skeleton_minion', {
+          position: [-0.48, 0.0, 0.68],
+          rotation: [0, 0.45, 0],
+          scale: 0.17
+        });
+
+        const tombAssets = [
+          'gravestone',
+          'gravemarker_A',
+          'grave_A',
+          'gravemarker_B',
+          'shrine_candles',
+          'grave_B'
+        ];
+        const floatingAssets = [
+          'pumpkin_orange_jackolantern',
+          'skull_candle',
+          'pumpkin_yellow_jackolantern',
+          'lantern_hanging',
+          'pumpkin_orange_jackolantern',
+          'skull_candle'
+        ];
+        for (let i = 0; i < 6; i++) {
+          const ang = (i / 6) * Math.PI * 2 + 0.25;
+          mountHalloweenModel(islandGroup, tombAssets[i % tombAssets.length], {
+            position: [Math.cos(ang) * 0.92, 0.0, Math.sin(ang) * 0.92],
+            rotation: [0, -ang + Math.PI / 2, 0],
+            scale: 0.16
+          });
+
+          const floatNode = new THREE.Group();
+          const floatKey = floatingAssets[i % floatingAssets.length];
+          mountHalloweenModel(floatNode, floatKey, {
+            scale: floatKey === 'skull_candle' ? 0.24 : 0.22
+          });
+          const baseY = 0.38 + (i % 2) * 0.16;
+          floatNode.position.set(Math.cos(ang) * 1.42, baseY, Math.sin(ang) * 1.42);
+          subjectGroup.add(floatNode);
+          st.floatingNodes.push({ mesh: floatNode, baseY, phase: i * 1.05 });
+        }
       } else {
         const pillarGeo = new THREE.CylinderGeometry(0.065, 0.08, 0.72, 16);
         for (const sx of [-1, 1]) {
@@ -893,7 +1149,7 @@ export default function SkinShowcaseCanvas({
       lookTarget.set(0, 0.25, 0);
       camera.lookAt(lookTarget);
     }
-  }, [activeTab, archetype, pieceSkin, boardSkin, scenery, previewColor]);
+  }, [activeTab, archetype, pieceSkin, boardSkin, scenery, previewColor, poliigonOverrideNonce]);
 
   // Trigger set-specific 3D Attack choreography + 3D VFX burst in the Showcase
   const triggerShowcaseAttackAndVfx = () => {
@@ -945,7 +1201,13 @@ export default function SkinShowcaseCanvas({
 
     const archId = archetype.id;
     const styleIdx =
-      archId === 'classic_staunton' ? 1 : archId === 'arcane_cyber' ? 2 : archId === 'dragon_elemental' ? 3 : 0;
+      archId === 'classic_staunton'
+        ? 1
+        : archId === 'arcane_cyber'
+          ? 2
+          : archId === 'dragon_elemental' || archId === 'hollow_reapers'
+            ? 3
+            : 0;
     const primaryHex =
       archId === 'classic_staunton'
         ? 0xffd166
@@ -953,7 +1215,9 @@ export default function SkinShowcaseCanvas({
           ? 0x00f5d4
           : archId === 'dragon_elemental'
             ? 0xff2a55
-            : 0xff6b35;
+            : archId === 'hollow_reapers'
+              ? 0xff6d00
+              : 0xff6b35;
     const secondaryHex =
       archId === 'classic_staunton'
         ? 0xe09f3e
@@ -961,8 +1225,10 @@ export default function SkinShowcaseCanvas({
           ? 0x9d4edd
           : archId === 'dragon_elemental'
             ? 0xff9e00
-            : 0xd4af37;
-    const coreHex = 0xffffff;
+            : archId === 'hollow_reapers'
+              ? 0x00e676
+              : 0xd4af37;
+    const coreHex = archId === 'hollow_reapers' ? 0xffe066 : 0xffffff;
 
     // Shared Unity URP / ShaderGraph Shader VFX Layers on the Showcase Pedestal:
     // A. Unity Procedural Magic Circle / Voronoi Ground Crack Shader Decal
@@ -978,7 +1244,7 @@ export default function SkinShowcaseCanvas({
     fresnelSphere.position.y = 0.65;
     vfxGroup.add(fresnelSphere);
 
-    // C. Unity Shuriken Scrolling Noise Slash Ribbon Shader (only for melee Gothic Warriors)
+    // C. Unity Shuriken Scrolling Noise Slash Ribbon Shader (for melee Gothic Warriors & Hollow Reapers Scythe)
     const slashRibbonMat = createUnitySlashRibbonShaderMaterial(primaryHex, secondaryHex, coreHex);
     const slashRibbonMesh = new THREE.Mesh(
       new THREE.RingGeometry(0.45, 0.85, 32, 2, -Math.PI * 0.55, Math.PI * 1.1),
@@ -986,7 +1252,7 @@ export default function SkinShowcaseCanvas({
     );
     slashRibbonMesh.position.set(0, 0.72, 0.35);
     slashRibbonMesh.rotation.set(0.38, 0, 0.32);
-    slashRibbonMesh.visible = archId === 'gothic_warriors';
+    slashRibbonMesh.visible = archId === 'gothic_warriors' || archId === 'hollow_reapers';
     vfxGroup.add(slashRibbonMesh);
 
     // D. Unity Soft-Particle Star-Flare Billboards
@@ -1259,55 +1525,7 @@ export default function SkinShowcaseCanvas({
         return true;
       });
     } else if (archId === 'arcane_cyber') {
-      // Overcharged GLSL Plasma Cannon Beam + 4 Snapping 3D Lightning Arcs + Sky Orbital Laser + Hex Holo-Grids
-      const plasmaCoreMat = createUnityPlasmaBeamShaderMaterial(0x00f5d4, 0x9d4edd, 0xffffff);
-      const plasmaSheathMat = createUnityPlasmaBeamShaderMaterial(0x7209b7, 0x00bbf9, 0x00f5d4);
-
-      const ionBeam = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.18, 0.18, 2.6, 20, 8, true),
-        plasmaSheathMat
-      );
-      ionBeam.position.y = 1.3;
-      vfxGroup.add(ionBeam);
-
-      const lanceBeam = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.095, 0.05, 1.45, 20, 10, true),
-        plasmaCoreMat
-      );
-      lanceBeam.rotation.x = Math.PI / 2;
-      lanceBeam.position.set(0, 0.74, 0.62);
-      vfxGroup.add(lanceBeam);
-
-      // 4 Snapping 3D Jagged Electric Lightning Bolts shooting forward from the Mech
-      const lightningBolts: THREE.Mesh[] = [];
-      for (let b = 0; b < 4; b++) {
-        const pts: THREE.Vector3[] = [];
-        for (let s = 0; s <= 12; s++) {
-          const u = s / 12;
-          const fade = Math.sin(u * Math.PI);
-          pts.push(
-            new THREE.Vector3(
-              (Math.random() - 0.5) * 0.24 * fade,
-              0.74 - u * 0.22 + (Math.random() - 0.5) * 0.22 * fade,
-              0.12 + u * 1.15
-            )
-          );
-        }
-        const curve = new THREE.CatmullRomCurve3(pts);
-        const tubeGeo = new THREE.TubeGeometry(curve, 24, b === 0 ? 0.022 : 0.014, 6, false);
-        const boltMesh = new THREE.Mesh(
-          tubeGeo,
-          new THREE.MeshBasicMaterial({
-            color: b % 2 === 0 ? 0xffffff : 0x00f5d4,
-            transparent: true,
-            opacity: 0.95,
-            blending: THREE.AdditiveBlending
-          })
-        );
-        vfxGroup.add(boltMesh);
-        lightningBolts.push(boltMesh);
-      }
-
+      // Hex Holo-Grids + EMP Dome on the pedestal (coherent laser beams fire directly from the Mech's integrated cannons & chest emitter)
       const hexGrids: THREE.Mesh[] = [];
       for (let i = 0; i < 3; i++) {
         const hex = new THREE.Mesh(
@@ -1344,22 +1562,6 @@ export default function SkinShowcaseCanvas({
       st.activeVfxUpdaters.push((dt) => {
         t += dt;
         const p = Math.min(1, t / 1.2);
-        plasmaCoreMat.uniforms.uTime.value = t;
-        plasmaCoreMat.uniforms.uProgress.value = p;
-        plasmaSheathMat.uniforms.uTime.value = t;
-        plasmaSheathMat.uniforms.uProgress.value = p;
-
-        const beamScale = p < 0.2 ? p / 0.2 : Math.max(0.01, 1 - (p - 0.2) / 0.8);
-        ionBeam.scale.set(beamScale * 1.35, 1, beamScale * 1.35);
-        ionBeam.rotation.y += dt * 8.0;
-        lanceBeam.scale.set(beamScale * 1.2, 1 + p * 0.45, beamScale * 1.2);
-        lanceBeam.rotation.y -= dt * 14.0;
-
-        lightningBolts.forEach((bm, idx) => {
-          const flicker = 0.5 + 0.5 * Math.sin(t * 75.0 + idx * 1.9);
-          bm.visible = p < 0.78 && flicker > 0.25;
-          (bm.material as THREE.MeshBasicMaterial).opacity = Math.max(0, (1 - p * 1.25) * flicker);
-        });
 
         hexGrids.forEach((h, idx) => {
           h.position.y = 0.08 + idx * 0.24 + p * 0.85;
@@ -1377,66 +1579,127 @@ export default function SkinShowcaseCanvas({
         }
         return true;
       });
-    } else {
-      // DRAGON & ELEMENTAL GUARDIANS: Actual Roaring Volumetric Dragon Fire Breath Stream from the Jaws +
-      // 44 Billowing PYROLUX Flame/Ember/Smoke Particles + Erupting Obsidian Crags
-      const breathRig = new THREE.Group();
-      // Anchor at the Dragon Sovereign's open jaws (y = 0.96, z = 0.14) and angle downward across the pedestal
-      breathRig.position.set(0, 0.96, 0.14);
-      breathRig.rotation.x = 0.44;
-      vfxGroup.add(breathRig);
+    } else if (archId === 'hollow_reapers') {
+      // HOLLOW JACK & WRAITH REAPERS:
+      // Samhain Reaper Scythe Slash Ribbons + Actual 3D GLTF Gravestones & Jack-o'-Lanterns + Bat & Ghost Sprites
+      preloadHalloween3DAssets();
+      if (typeof (window as any).wizardChess?.playHalloweenWhisperSfx === 'function') {
+        (window as any).wizardChess.playHalloweenWhisperSfx('whisper');
+      }
+      const reaperWaves: Array<{ mesh: THREE.Mesh; mat: THREE.ShaderMaterial; speed: number; scaleMul: number }> = [];
+      const waveCfgs = [
+        { tiltX: 0.36, tiltZ: 0.48, scaleMul: 1.12, speed: 13.0, pHex: 0xff6d00, sHex: 0x00e676 },
+        { tiltX: 0.36, tiltZ: -0.48, scaleMul: 1.04, speed: -14.0, pHex: 0x00e676, sHex: 0x9d4edd }
+      ];
+      for (const wc of waveCfgs) {
+        const wMat = createUnitySlashRibbonShaderMaterial(wc.pHex, wc.sHex, 0xffe066);
+        const wMesh = new THREE.Mesh(
+          new THREE.RingGeometry(0.42, 0.88, 32, 2, -Math.PI * 0.55, Math.PI * 1.1),
+          wMat
+        );
+        wMesh.position.set(0, 0.72, 0.38);
+        wMesh.rotation.set(wc.tiltX, 0, wc.tiltZ);
+        vfxGroup.add(wMesh);
+        reaperWaves.push({ mesh: wMesh, mat: wMat, speed: wc.speed, scaleMul: wc.scaleMul });
+      }
 
-      const jetConeGeo = new THREE.ConeGeometry(0.46, 1.48, 28, 18, true);
-      // Tip at origin (jaws), wide flame front extending along +Z
-      jetConeGeo.translate(0, -0.74, 0);
-      jetConeGeo.rotateX(-Math.PI / 2);
+      const eruptingProps: Array<{ group: THREE.Group; peakY: number }> = [];
+      const propKeys = [
+        'gravestone',
+        'pumpkin_orange_jackolantern',
+        'gravemarker_A',
+        'skull_candle',
+        'gravemarker_B',
+        'pumpkin_yellow_jackolantern'
+      ];
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const propHolder = new THREE.Group();
+        propHolder.position.set(Math.cos(ang) * 0.52, -0.15, Math.sin(ang) * 0.52);
+        propHolder.rotation.y = -ang + Math.PI / 2;
+        const key = propKeys[i % propKeys.length];
+        mountHalloweenModel(propHolder, key, {
+          scale: key.startsWith('pumpkin') || key === 'skull_candle' ? 0.24 : 0.16,
+          castShadow: false,
+          receiveShadow: false
+        });
+        vfxGroup.add(propHolder);
+        eruptingProps.push({ group: propHolder, peakY: 0.08 + (i % 2) * 0.06 });
+      }
 
-      const outerFireMat = createUnityFireBreathShaderMaterial(0xfff3b0, 0xff6d00, 0xd90429);
-      const innerFireMat = createUnityFireBreathShaderMaterial(0xffffff, 0xffd166, 0xff5400);
-
-      const outerBreathCone = new THREE.Mesh(jetConeGeo, outerFireMat);
-      breathRig.add(outerBreathCone);
-
-      const innerBreathCone = new THREE.Mesh(jetConeGeo, innerFireMat);
-      innerBreathCone.scale.set(0.62, 0.62, 0.95);
-      breathRig.add(innerBreathCone);
-
-      // 44 Billowing Soft-Particle Flame, Ember & Smoke Billboards pouring out of the Dragon's Jaws
-      const flameTex = getUnityFireFlameTexture();
-      const flameParticles: Array<{
+      const batTex = getHalloweenBatTexture();
+      const ghostTex = getHalloweenGhostTexture();
+      const halloweenSprites: Array<{
         sprite: THREE.Sprite;
         mat: THREE.SpriteMaterial;
-        phase: number;
-        speed: number;
-        swirlAngle: number;
-        swirlRadius: number;
-        rotSpeed: number;
+        ang: number;
+        vy: number;
+        isGhost: boolean;
         baseScale: number;
       }> = [];
-      for (let i = 0; i < 44; i++) {
-        const fMat = new THREE.SpriteMaterial({
-          map: flameTex,
+      for (let i = 0; i < 12; i++) {
+        const isGhost = i % 3 === 0;
+        const spMat = new THREE.SpriteMaterial({
+          map: isGhost ? ghostTex : batTex,
           color: 0xffffff,
           transparent: true,
-          opacity: 0.95,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          rotation: Math.random() * Math.PI * 2
+          opacity: 0.96,
+          depthWrite: false
         });
-        const fSp = new THREE.Sprite(fMat);
-        breathRig.add(fSp);
-        flameParticles.push({
-          sprite: fSp,
-          mat: fMat,
-          phase: i / 44,
-          speed: 1.85 + (i % 5) * 0.28,
-          swirlAngle: (i / 44) * Math.PI * 2 * 3.0,
-          swirlRadius: 0.06 + (i % 7) * 0.048,
-          rotSpeed: (i % 2 === 0 ? 1 : -1) * (2.4 + (i % 4) * 0.75),
-          baseScale: 0.24 + (i % 4) * 0.095
+        const sp = new THREE.Sprite(spMat);
+        const ang = (i / 12) * Math.PI * 2;
+        const baseScale = isGhost ? 0.36 : 0.28;
+        sp.scale.setScalar(baseScale);
+        sp.position.set(Math.cos(ang) * 0.45, 0.22 + (i % 3) * 0.16, Math.sin(ang) * 0.45);
+        vfxGroup.add(sp);
+        halloweenSprites.push({
+          sprite: sp,
+          mat: spMat,
+          ang,
+          vy: isGhost ? 0.72 : 1.05,
+          isGhost,
+          baseScale
         });
       }
 
+      let t = 0;
+      st.activeVfxUpdaters.push((dt) => {
+        t += dt;
+        const p = Math.min(1, t / 1.25);
+        const cragEnv = p < 0.28 ? p / 0.28 : Math.max(0, 1 - (p - 0.28) / 0.72);
+        for (const ep of eruptingProps) {
+          ep.group.position.y = -0.15 + cragEnv * ep.peakY;
+          ep.group.scale.setScalar(Math.max(0.01, cragEnv));
+        }
+        for (const rw of reaperWaves) {
+          rw.mat.uniforms.uTime.value = t;
+          rw.mat.uniforms.uProgress.value = Math.min(1, p * 1.25);
+          rw.mesh.scale.setScalar((0.75 + p * 1.15) * rw.scaleMul);
+          rw.mesh.rotation.z += dt * rw.speed;
+        }
+        for (const hs of halloweenSprites) {
+          const curAng = hs.ang + t * (hs.isGhost ? 2.4 : 5.2);
+          const rad = 0.45 + p * (hs.isGhost ? 0.45 : 0.75);
+          hs.sprite.position.x = Math.cos(curAng) * rad;
+          hs.sprite.position.z = Math.sin(curAng) * rad;
+          hs.sprite.position.y += hs.vy * dt;
+          const fade = Math.max(0.02, 1 - p);
+          const flap = hs.isGhost ? 1.0 : 1.0 + Math.sin(t * 25.0 + hs.ang) * 0.22;
+          hs.sprite.scale.set(hs.baseScale * flap * fade, hs.baseScale * fade, 1);
+          hs.mat.opacity = 0.96 * fade;
+        }
+        if (p >= 1) {
+          disposeHierarchy(vfxGroup);
+          vfxGroup.clear();
+          return false;
+        }
+        return true;
+      });
+    } else {
+      // DRAGON & ELEMENTAL GUARDIANS:
+      // The real PYROLUX Volumetric Fire-Breathing Stream + 44 Billowing Flame/Ember/Smoke Particles
+      // pours directly from the Dragon's moving fanged jaws (`dragonBreathJet` attached to `head`).
+      // On the pedestal floor we erupt the 8 Obsidian Magma Crags scorched by the Dragon's breath!
       const crags: Array<{ mesh: THREE.Mesh; maxH: number }> = [];
       for (let i = 0; i < 8; i++) {
         const ang = (i / 8) * Math.PI * 2;
@@ -1458,52 +1721,10 @@ export default function SkinShowcaseCanvas({
         crags.push({ mesh: crag, maxH });
       }
 
-      const cWhite = new THREE.Color(0xfff8d6);
-      const cGold = new THREE.Color(0xffbe0b);
-      const cOrange = new THREE.Color(0xff4d00);
-      const cCrimson = new THREE.Color(0x9b0014);
-
       let t = 0;
       st.activeVfxUpdaters.push((dt) => {
         t += dt;
         const p = Math.min(1, t / 1.25);
-        outerFireMat.uniforms.uTime.value = t;
-        outerFireMat.uniforms.uProgress.value = p;
-        innerFireMat.uniforms.uTime.value = t;
-        innerFireMat.uniforms.uProgress.value = p;
-
-        const swell = 0.75 + Math.sin(p * Math.PI) * 0.65;
-        outerBreathCone.scale.set(swell, swell, 0.8 + Math.min(1, p * 1.8) * 0.45);
-        outerBreathCone.rotation.z += dt * 9.5;
-        innerBreathCone.scale.set(swell * 0.62, swell * 0.62, 0.78 + Math.min(1, p * 1.9) * 0.42);
-        innerBreathCone.rotation.z -= dt * 13.5;
-
-        const lifeFade = 1.0 - Math.pow(p, 1.45);
-        for (const fp of flameParticles) {
-          const prog = (t * fp.speed + fp.phase) % 1.0;
-          const zDist = prog * 1.45;
-          const spread = Math.pow(prog, 1.1) * fp.swirlRadius * (1.0 + p * 0.55);
-          const swAng = fp.swirlAngle + t * 8.5 + prog * 3.8;
-          const lift = Math.pow(prog, 1.7) * 0.22;
-          fp.sprite.position.set(
-            Math.cos(swAng) * spread,
-            Math.sin(swAng) * spread + lift,
-            zDist
-          );
-          const s = fp.baseScale * (0.35 + prog * 1.75) * (0.75 + 0.45 * Math.sin(p * Math.PI));
-          fp.sprite.scale.setScalar(s);
-          fp.mat.rotation += fp.rotSpeed * dt;
-
-          if (prog < 0.28) {
-            fp.mat.color.lerpColors(cWhite, cGold, prog / 0.28);
-          } else if (prog < 0.68) {
-            fp.mat.color.lerpColors(cGold, cOrange, (prog - 0.28) / 0.40);
-          } else {
-            fp.mat.color.lerpColors(cOrange, cCrimson, (prog - 0.68) / 0.32);
-          }
-          fp.mat.opacity = Math.max(0, Math.sin(prog * Math.PI) * lifeFade * 0.95);
-        }
-
         const erupt = p < 0.35 ? p / 0.35 : Math.max(0, 1 - (p - 0.35) / 0.65);
         crags.forEach((c) => {
           c.mesh.scale.set(1, Math.max(0.01, erupt), 1);
@@ -1526,64 +1747,113 @@ export default function SkinShowcaseCanvas({
     }
   }, [attackPreviewNonce]);
 
-  return (
-    <div className="showcase-viewport-container">
-      <div className="showcase-3d-mount" ref={mountRef}></div>
+  const handleZoomShowcase = (delta: number) => {
+    const st = stageRef.current;
+    if (!st) return;
+    const dir = new THREE.Vector3().subVectors(st.camera.position, st.lookTarget);
+    const dist = dir.length();
+    const nextDist = Math.max(1.8, Math.min(5.2, dist + delta));
+    dir.normalize().multiplyScalar(nextDist);
+    st.camera.position.copy(st.lookTarget).add(dir);
+    st.camera.lookAt(st.lookTarget);
+  };
 
-      {/* Overlay Showcase Controls */}
-      <div className="showcase-overlay-bar">
-        <div className="showcase-badge-title">
-          <span className="showcase-pulse-dot" aria-hidden="true"></span>
-          <span className="showcase-label-text">
-            {activeTab === 'types'
-              ? `PIECE SET · ${archetype.name}`
-              : activeTab === 'boards'
-                ? `ALTAR BOARD · ${boardSkin.name}`
-                : activeTab === 'sceneries'
-                  ? `WORLD SCENERY · ${scenery.name}`
-                  : `FINISH · ${pieceSkin.name}`}
-          </span>
+  return (
+    <div className="showcase-studio-widget">
+      <div className="showcase-viewport-container">
+        <div className="showcase-3d-mount" ref={mountRef}></div>
+
+        {/* Discreet Top-Left Floating Status Badge */}
+        <div className="showcase-overlay-bar">
+          <div className="showcase-badge-title">
+            <span className="showcase-pulse-dot" aria-hidden="true"></span>
+            <span className="showcase-label-text">
+              {activeTab === 'types'
+                ? `PIECE SET · ${archetype.name}`
+                : activeTab === 'boards'
+                  ? `ALTAR BOARD · ${boardSkin.name}`
+                  : activeTab === 'sceneries'
+                    ? `WORLD SCENERY · ${scenery.name}`
+                    : `FINISH · ${pieceSkin.name}`}
+            </span>
+          </div>
         </div>
 
-        <div className="showcase-btn-group">
-          {(activeTab === 'types' || activeTab === 'pieces') && (
-            <>
-              <button
-                type="button"
-                className={`showcase-toggle-btn ${isAttackingPreview ? 'active' : ''}`}
-                onClick={triggerShowcaseAttackAndVfx}
-                title={`Preview ${archetype.name} Unique Attack & 3D Effect`}
-              >
-                ⚔ Attack &amp; VFX
-              </button>
-              <button
-                type="button"
-                className={`showcase-toggle-btn ${previewColor === 'w' ? 'active' : ''}`}
-                onClick={() => setPreviewColor((prev) => (prev === 'w' ? 'b' : 'w'))}
-                title="Toggle between White and Black variant of this set"
-              >
-                {previewColor === 'w' ? '♔ White' : '♚ Black'}
-              </button>
-            </>
-          )}
+        <div className="showcase-drag-hint">
+          <span>
+            {activeTab === 'types'
+              ? `${archetype.strikeStyle} · ${archetype.shatterStyle}`
+              : 'Drag 360° to orbit · Ctrl + Scroll to zoom'}
+          </span>
+        </div>
+      </div>
 
+      {/* Dedicated Non-Overlapping Interactive Control Toolbar */}
+      <div className="showcase-control-strip" role="toolbar" aria-label="3D Preview Controls">
+        {(activeTab === 'types' || activeTab === 'pieces') && (
+          <>
+            <button
+              type="button"
+              className={`showcase-toggle-btn showcase-attack-btn ${isAttackingPreview ? 'active' : ''}`}
+              onClick={triggerShowcaseAttackAndVfx}
+              title={`Preview ${archetype.name} Unique Attack & 3D Effect`}
+            >
+              ⚔ Attack &amp; VFX
+            </button>
+
+            <div className="showcase-army-tabs" role="tablist" aria-label="Preview Army Color">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={previewColor === 'w'}
+                className={`showcase-toggle-btn ${previewColor === 'w' ? 'active' : ''}`}
+                onClick={() => setPreviewColor('w')}
+                title="Preview White Army"
+              >
+                ♔ White
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={previewColor === 'b'}
+                className={`showcase-toggle-btn ${previewColor === 'b' ? 'active' : ''}`}
+                onClick={() => setPreviewColor('b')}
+                title="Preview Black Army"
+              >
+                ♚ Black
+              </button>
+            </div>
+          </>
+        )}
+
+        <div className="showcase-cam-group">
+          <button
+            type="button"
+            className="showcase-toggle-btn"
+            onClick={() => handleZoomShowcase(-0.35)}
+            title="Zoom In 3D Preview"
+            aria-label="Zoom In 3D Preview"
+          >
+            Zoom ＋
+          </button>
+          <button
+            type="button"
+            className="showcase-toggle-btn"
+            onClick={() => handleZoomShowcase(0.35)}
+            title="Zoom Out 3D Preview"
+            aria-label="Zoom Out 3D Preview"
+          >
+            Zoom －
+          </button>
           <button
             type="button"
             className={`showcase-toggle-btn ${autoRotate ? 'active' : ''}`}
             onClick={() => setAutoRotate((prev) => !prev)}
             title="Toggle 360° showcase spin"
           >
-            {autoRotate ? 'Spin: ON' : 'Spin: OFF'}
+            {autoRotate ? '↻ Spin: ON' : '↻ Spin: OFF'}
           </button>
         </div>
-      </div>
-
-      <div className="showcase-drag-hint">
-        <span>
-          {activeTab === 'types'
-            ? `${archetype.strikeStyle} · ${archetype.shatterStyle}`
-            : 'Drag to orbit 360° · Scroll to zoom · Live 3D Showcase'}
-        </span>
       </div>
     </div>
   );

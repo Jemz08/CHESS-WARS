@@ -1,4 +1,9 @@
 import * as THREE_NS from 'three';
+import {
+  loadHalloweenTextureAsset,
+  mountHalloweenModel,
+  preloadHalloween3DAssets
+} from './halloweenAssetLoader.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -151,6 +156,23 @@ export const ARCHETYPE_COMBAT_PROFILES = {
       bishop: { title: 'PYROMANCER CHALICE IMMOLATION',   subtitle: 'Ritual Dragonfire Geyser & Swirling Ember Tornado' },
       queen:  { title: 'DRAGON EMPRESS FIVE-FLIGHT NOVA', subtitle: '4-Wing Aerial Dive, Blazing Diadem Breath & Lava Crater' },
       king:   { title: 'ELDER DRAGON SOVEREIGN INFERNO',  subtitle: 'Colossal Winged Pounce, Flame Greatsword & Magma Apocalypse' }
+    }
+  },
+  hollow_reapers: {
+    id: 'hollow_reapers',
+    setName: 'Hollow Jack & Wraith Reapers',
+    attackName: 'SAMHAIN SCYTHE SOUL-HARVEST',
+    effectSummary: 'Wraith Reaper Scythe Cleave, Carved Jack-o\'-Lantern Detonation & Ectoplasm Bat Swarm',
+    primaryHex: 0xff6d00,
+    secondaryHex: 0x00e676,
+    coreHex: 0xffe066,
+    titles: {
+      pawn:   { title: 'LANTERN THRALL SICKLE REAP',       subtitle: 'Cursed Iron Sickle Slash & Jack-o\'-Lantern Cinder Burst' },
+      rook:   { title: 'HAUNTED CRYPT BELFRY DOOM',        subtitle: 'Tolling Graveyard Bell & Tombstone Obelisk Eruption' },
+      knight: { title: 'HEADLESS HORSEMAN DULLAHAN CLEAVE', subtitle: 'Nightmare Steed Charge & Blazing Pumpkin Skull Detonation' },
+      bishop: { title: 'WRAITH HARVESTER ECTO-REAPING',    subtitle: 'Phantom Scythe Sweep & Spectral Green Soul Vortex' },
+      queen:  { title: 'BANSHEE SCYTHE EMPRESS OBLITERATION', subtitle: 'Twin Crescent War-Scythe Flurry & Blood-Moon Nova' },
+      king:   { title: 'PUMPKIN LORD SAMHAIN APOCALYPSE',  subtitle: 'Sovereign Scythe Execution, Tolling Crypt Bell & Hellfire Gourd' }
     }
   }
 };
@@ -472,8 +494,25 @@ export function getUnityFireFlameTexture() {
     }
   }
   cachedUnityFireFlameTex = new THREE.CanvasTexture(canvas);
+  cachedUnityFireFlameTex.colorSpace = THREE.SRGBColorSpace;
   cachedUnityFireFlameTex.needsUpdate = true;
   return cachedUnityFireFlameTex;
+}
+
+let cachedHalloweenBatTex = null;
+export function getHalloweenBatTexture() {
+  if (!cachedHalloweenBatTex) {
+    cachedHalloweenBatTex = loadHalloweenTextureAsset('vfx_bat_sprite.png');
+  }
+  return cachedHalloweenBatTex;
+}
+
+let cachedHalloweenGhostTex = null;
+export function getHalloweenGhostTexture() {
+  if (!cachedHalloweenGhostTex) {
+    cachedHalloweenGhostTex = loadHalloweenTextureAsset('vfx_ghost_sprite.png');
+  }
+  return cachedHalloweenGhostTex;
 }
 
 /**
@@ -553,7 +592,7 @@ export function createUnityFireBreathShaderMaterial(
         float softCylinder = pow(clamp(facing, 0.0, 1.0), 0.55);
 
         float flameDensity = clamp((turb * 1.25 - vAxial * 0.32) * softCylinder, 0.0, 1.0);
-        float tailErode = smoothstep(Math.max(0.0, uProgress - 0.35) * 1.1, 1.0, turb + (1.0 - vAxial) * 0.45);
+        float tailErode = smoothstep(max(0.0, uProgress - 0.35) * 1.1, 1.0, turb + (1.0 - vAxial) * 0.45);
 
         vec3 col = mix(uOuterColor, uMidColor, smoothstep(0.18, 0.58, flameDensity));
         col = mix(col, uCoreColor, smoothstep(0.58, 0.92, flameDensity + (1.0 - vAxial) * 0.35));
@@ -694,12 +733,30 @@ export const MIXKIT_SFX_MANIFEST = {
   // Lobby UI Click, Tab, Equip & Unlock SFX (Mixkit Click & Win Library)
   lobby_click_select_1109: '/sfx/lobby_click_select_1109.mp3',           // Mixkit #1109: Select click
   lobby_click_tone_2568: '/sfx/lobby_click_tone_2568.mp3',               // Mixkit #2568: Cool interface click tone
-  lobby_unlock_item_253: '/sfx/lobby_unlock_item_253.mp3'                // Mixkit #253: Unlock game notification
+  lobby_unlock_item_253: '/sfx/lobby_unlock_item_253.mp3',               // Mixkit #253: Unlock game notification
+
+  // Halloween & Haunted Graveyard SFX (Mixkit Horror, Wind, Ghost, Wolf & Cauldron Library)
+  halloween_graveyard_wind_1157: '/sfx/halloween_graveyard_wind_1157.mp3', // Mixkit #1157: Scary graveyard wind
+  halloween_tomb_ambience_2500: '/sfx/halloween_tomb_ambience_2500.mp3',   // Mixkit #2500: Creepy tomb ambience
+  halloween_ghost_whispers_302: '/sfx/halloween_ghost_whispers_302.mp3',   // Mixkit #302: Distant ghostly whispers
+  halloween_ghost_swoosh_1340: '/sfx/halloween_ghost_swoosh_1340.mp3',     // Mixkit #1340: Ghost fire swoosh
+  halloween_haunted_orchestra_634: '/sfx/halloween_haunted_orchestra_634.mp3', // Mixkit #634: Haunted slow orchestra
+  halloween_terror_sweep_2630: '/sfx/halloween_terror_sweep_2630.mp3',     // Mixkit #2630: Terror sweep of darkness
+  halloween_wolf_howl_1729: '/sfx/halloween_wolf_howl_1729.mp3',           // Mixkit #1729: Lone wolf howling
+  halloween_cauldron_bubbles_2999: '/sfx/halloween_cauldron_bubbles_2999.mp3', // Mixkit #2999: Magic cauldron bubbles spell
+  halloween_potion_fx_2831: '/sfx/halloween_potion_fx_2831.mp3'            // Mixkit #2831: Magic potion music and fx
 };
 
 export const MIXKIT_LOBBY_MUSIC_TRACKS = [
   '/sfx/lobby_music_sanctum_614.mp3', // Mixkit #614: Silent Descent (Dark Atmospheric Sanctum Score)
   '/sfx/lobby_music_drums_676.mp3'    // Mixkit #676: Epical Drums 01 (Medieval Sanctum Percussion)
+];
+
+export const MIXKIT_HALLOWEEN_MUSIC_TRACKS = [
+  '/sfx/halloween_music_piano_horror_671.mp3', // Mixkit #671: Piano Horror (Eerie Graveyard Piano Score)
+  '/sfx/halloween_music_dark_shadows_64.mp3',  // Mixkit #64: Dark Shadows (Haunted Blood-Moon Orchestra)
+  '/sfx/halloween_graveyard_wind_1157.mp3',    // Mixkit #1157: Continuous Howling Graveyard Wind Loop
+  '/sfx/halloween_tomb_ambience_2500.mp3'      // Mixkit #2500: Creepy Crypt & Tomb Ambience Loop
 ];
 
 export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
@@ -978,6 +1035,9 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       maxDuration: 0.22,
       fadeOut: 0.09
     });
+    if (activeWorldSceneryId === 'haunted_blood_graveyard') {
+      playHalloweenWhisperAndWindGustSfx('select');
+    }
   }
 
   function playMoveStartSfx(pieceType = 'pawn', isCapture = false) {
@@ -1003,6 +1063,9 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         maxDuration: 0.34,
         fadeOut: 0.10
       });
+    }
+    if (activeWorldSceneryId === 'haunted_blood_graveyard') {
+      playHalloweenWhisperAndWindGustSfx(isCapture ? 'capture_glide' : 'move');
     }
   }
 
@@ -1452,10 +1515,261 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       localStorage.setItem('wizard_chess_music_enabled', String(lobbyMusicEnabled));
     } catch (e) {}
     syncLobbyMusicPlayback();
+    syncGraveyardAmbientSoundscape();
     window.dispatchEvent(
       new CustomEvent('wizardchess:musicchange', { detail: { lobbyMusicEnabled } })
     );
     return lobbyMusicEnabled;
+  }
+
+  // ==========================================================================
+  // Haunted Blood-Moon Graveyard Ambient Soundscape & Eerie Music Engine
+  // Powered by actual Mixkit Halloween Audio Assets:
+  // - /sfx/halloween_graveyard_wind_1157.mp3 (Continuous Howling Graveyard Wind)
+  // - /sfx/halloween_tomb_ambience_2500.mp3 (Creepy Crypt & Tomb Ambience)
+  // - /sfx/halloween_music_piano_horror_671.mp3 (Piano Horror Background Music)
+  // - /sfx/halloween_music_dark_shadows_64.mp3 (Dark Shadows Ambient Score)
+  // - /sfx/halloween_ghost_whispers_302.mp3 (Distant Ghostly Whispers)
+  // - /sfx/halloween_wolf_howl_1729.mp3 (Distant Blood-Moon Wolf Howl)
+  // - /sfx/halloween_cauldron_bubbles_2999.mp3 (Bubbling Witch Cauldron)
+  // ==========================================================================
+  let activeWorldSceneryId = 'gothic_cathedral';
+  let graveyardWindAudio = null;
+  let graveyardTombAudio = null;
+  let graveyardMusicAudio = null;
+  let graveyardShadowsAudio = null;
+  let graveyardWhisperTimer = null;
+  let graveyardWhisperStep = 0;
+
+  function ensureGraveyardAudioElements() {
+    if (typeof window === 'undefined' || navigator.webdriver) return false;
+    try {
+      if (!graveyardWindAudio) {
+        graveyardWindAudio = new Audio(MIXKIT_HALLOWEEN_MUSIC_TRACKS[2]);
+        graveyardWindAudio.loop = true;
+        graveyardWindAudio.preload = 'auto';
+        graveyardWindAudio.volume = 0;
+      }
+      if (!graveyardTombAudio) {
+        graveyardTombAudio = new Audio(MIXKIT_HALLOWEEN_MUSIC_TRACKS[3]);
+        graveyardTombAudio.loop = true;
+        graveyardTombAudio.preload = 'auto';
+        graveyardTombAudio.volume = 0;
+      }
+      if (!graveyardMusicAudio) {
+        graveyardMusicAudio = new Audio(MIXKIT_HALLOWEEN_MUSIC_TRACKS[0]);
+        graveyardMusicAudio.loop = true;
+        graveyardMusicAudio.preload = 'auto';
+        graveyardMusicAudio.volume = 0;
+      }
+      if (!graveyardShadowsAudio) {
+        graveyardShadowsAudio = new Audio(MIXKIT_HALLOWEEN_MUSIC_TRACKS[1]);
+        graveyardShadowsAudio.loop = true;
+        graveyardShadowsAudio.preload = 'auto';
+        graveyardShadowsAudio.volume = 0;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function playHalloweenWhisperAndWindGustSfx(variant = 'whisper') {
+    if (!sfxEnabled) return;
+    if (variant === 'select') {
+      playMixkitClip('halloween_cauldron_bubbles_2999', {
+        volume: 0.42,
+        rate: 1.12,
+        maxDuration: 0.55,
+        fadeOut: 0.16
+      });
+      playMixkitClip('halloween_ghost_swoosh_1340', {
+        delay: 0.02,
+        volume: 0.34,
+        rate: 1.18,
+        maxDuration: 0.48,
+        fadeOut: 0.14
+      });
+      return;
+    }
+
+    if (variant === 'move' || variant === 'capture_glide') {
+      playMixkitClip('halloween_ghost_swoosh_1340', {
+        volume: variant === 'capture_glide' ? 0.62 : 0.44,
+        rate: variant === 'capture_glide' ? 0.94 : 1.08,
+        maxDuration: 0.72,
+        fadeOut: 0.20
+      });
+      if (variant === 'capture_glide') {
+        playMixkitClip('halloween_ghost_whispers_302', {
+          delay: 0.04,
+          volume: 0.48,
+          rate: 1.04,
+          maxDuration: 0.95,
+          fadeOut: 0.28
+        });
+      }
+      return;
+    }
+
+    // Full Eerie Howling Wind Gust + Distant Ghostly Whispers + Cauldron / Wolf / Orchestra Accents
+    const pan = (Math.random() - 0.5) * 1.3;
+    playMixkitClip('halloween_ghost_whispers_302', {
+      volume: variant === 'scenery_preview' ? 0.68 : 0.52,
+      rate: 0.94 + Math.random() * 0.14,
+      maxDuration: variant === 'scenery_preview' ? 2.6 : 1.9,
+      fadeOut: 0.55,
+      pan
+    });
+    playMixkitClip('halloween_graveyard_wind_1157', {
+      delay: 0.03,
+      volume: variant === 'scenery_preview' ? 0.58 : 0.44,
+      rate: 0.92 + Math.random() * 0.16,
+      extraOffset: Math.random() * 2.5,
+      maxDuration: variant === 'scenery_preview' ? 2.8 : 2.1,
+      fadeIn: 0.18,
+      fadeOut: 0.65,
+      pan: -pan * 0.7
+    });
+
+    if (variant === 'scenery_preview') {
+      playMixkitClip('halloween_haunted_orchestra_634', {
+        delay: 0.04,
+        volume: 0.54,
+        rate: 1.0,
+        maxDuration: 2.5,
+        fadeOut: 0.65
+      });
+      playMixkitClip('halloween_wolf_howl_1729', {
+        delay: 0.18,
+        volume: 0.46,
+        rate: 0.96,
+        maxDuration: 2.4,
+        fadeOut: 0.55
+      });
+      playMixkitClip('cinematic_bell_619', {
+        delay: 0.06,
+        volume: 0.40,
+        rate: 0.76,
+        maxDuration: 2.1,
+        fadeOut: 0.55
+      });
+    } else {
+      const cycle = graveyardWhisperStep++ % 3;
+      if (cycle === 0) {
+        playMixkitClip('halloween_cauldron_bubbles_2999', {
+          delay: 0.15,
+          volume: 0.40,
+          rate: 0.98,
+          maxDuration: 1.4,
+          fadeOut: 0.35
+        });
+      } else if (cycle === 1) {
+        playMixkitClip('halloween_wolf_howl_1729', {
+          delay: 0.20,
+          volume: 0.38,
+          rate: 0.95,
+          maxDuration: 2.1,
+          fadeOut: 0.50
+        });
+      } else {
+        playMixkitClip('halloween_haunted_orchestra_634', {
+          delay: 0.10,
+          volume: 0.42,
+          rate: 0.96,
+          maxDuration: 2.0,
+          fadeOut: 0.50
+        });
+      }
+    }
+  }
+
+  function stopGraveyardAmbientNodes() {
+    if (graveyardWhisperTimer) {
+      clearInterval(graveyardWhisperTimer);
+      graveyardWhisperTimer = null;
+    }
+    [graveyardWindAudio, graveyardTombAudio, graveyardMusicAudio, graveyardShadowsAudio].forEach((aud) => {
+      if (!aud) return;
+      try {
+        aud.volume = 0;
+        aud.pause();
+      } catch (e) {}
+    });
+  }
+
+  function syncGraveyardAmbientSoundscape() {
+    if (typeof window === 'undefined' || navigator.webdriver) return;
+    const isGraveyard = activeWorldSceneryId === 'haunted_blood_graveyard';
+    if (!isGraveyard || !sfxEnabled) {
+      stopGraveyardAmbientNodes();
+      if (lobbyPrimaryAudio) {
+        try { lobbyPrimaryAudio.playbackRate = 1.0; } catch (e) {}
+      }
+      return;
+    }
+
+    preloadHalloween3DAssets();
+
+    if (lobbyPrimaryAudio) {
+      try { lobbyPrimaryAudio.playbackRate = 0.78; } catch (e) {}
+    }
+
+    if (ensureGraveyardAudioElements()) {
+      const windVol = Math.max(0, Math.min(1, 0.38 * userSfxVolumeMultiplier));
+      const tombVol = Math.max(0, Math.min(1, 0.28 * userSfxVolumeMultiplier));
+      const pianoVol = lobbyMusicEnabled ? Math.max(0, Math.min(1, 0.36 * userMusicVolumeMultiplier)) : 0;
+      const shadowsVol = lobbyMusicEnabled ? Math.max(0, Math.min(1, 0.24 * userMusicVolumeMultiplier)) : 0;
+
+      try {
+        graveyardWindAudio.volume = windVol;
+        const pWind = graveyardWindAudio.play();
+        if (pWind && typeof pWind.catch === 'function') pWind.catch(() => {});
+      } catch (e) {}
+
+      try {
+        graveyardTombAudio.volume = tombVol;
+        const pTomb = graveyardTombAudio.play();
+        if (pTomb && typeof pTomb.catch === 'function') pTomb.catch(() => {});
+      } catch (e) {}
+
+      try {
+        graveyardMusicAudio.volume = pianoVol;
+        if (lobbyMusicEnabled) {
+          const pMusic = graveyardMusicAudio.play();
+          if (pMusic && typeof pMusic.catch === 'function') pMusic.catch(() => {});
+        } else {
+          graveyardMusicAudio.pause();
+        }
+      } catch (e) {}
+
+      try {
+        graveyardShadowsAudio.volume = shadowsVol;
+        if (lobbyMusicEnabled) {
+          const pShad = graveyardShadowsAudio.play();
+          if (pShad && typeof pShad.catch === 'function') pShad.catch(() => {});
+        } else {
+          graveyardShadowsAudio.pause();
+        }
+      } catch (e) {}
+    }
+
+    if (!graveyardWhisperTimer) {
+      graveyardWhisperTimer = setInterval(() => {
+        if (activeWorldSceneryId !== 'haunted_blood_graveyard' || !sfxEnabled) return;
+        playHalloweenWhisperAndWindGustSfx('whisper');
+      }, 7200);
+    }
+  }
+
+  function setActiveWorldScenery(sceneryId) {
+    const nextId = typeof sceneryId === 'string' ? sceneryId : sceneryId?.id || 'gothic_cathedral';
+    const changed = nextId !== activeWorldSceneryId;
+    activeWorldSceneryId = nextId;
+    syncGraveyardAmbientSoundscape();
+    if (changed && nextId === 'haunted_blood_graveyard' && sfxEnabled) {
+      playHalloweenWhisperAndWindGustSfx('scenery_preview');
+    }
   }
 
   // Unlock AudioContext & start Lobby Music on first user interaction if browser blocked initial autoplay
@@ -1472,6 +1786,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         }
       }
       syncLobbyMusicPlayback();
+      syncGraveyardAmbientSoundscape();
     };
     window.addEventListener('pointerdown', unlockAudioOnFirstGesture, { passive: true });
     window.addEventListener('keydown', unlockAudioOnFirstGesture, { passive: true });
@@ -1573,6 +1888,15 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
           osc.start(now + idx * 0.018);
           osc.stop(now + dur + 0.03);
         });
+      } else if (arch === 'hollow_reapers') {
+        // Actual Mixkit Halloween Ghost Swoosh, Terror Sweep & Cauldron Potion FX
+        playMixkitClip(stage === 'kill' ? 'halloween_terror_sweep_2630' : 'halloween_ghost_swoosh_1340', {
+          volume: stage === 'kill' ? 0.56 : 0.42,
+          rate: stage === 'charge' ? 1.08 : 0.94,
+          maxDuration: stage === 'kill' ? 1.25 : 0.65,
+          fadeOut: 0.22
+        });
+        playHalloweenWhisperAndWindGustSfx(stage === 'kill' ? 'whisper' : 'select');
       } else {
         // Gothic Sanctum Warriors: Heavy Forged Anvil Harmonic & Cathedral Sub-Drop
         const osc = ctx.createOscillator();
@@ -1703,6 +2027,39 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         rate: 0.84 * pitchScale,
         maxDuration: 0.62,
         fadeOut: 0.12
+      });
+      return;
+    }
+
+    if (arch === 'hollow_reapers') {
+      // HOLLOW JACK & WRAITH REAPERS: Actual Mixkit Ghost Fire Swoosh + Terror Sweep + Cursed Iron Scythe Cleave
+      playMixkitClip('halloween_terror_sweep_2630', {
+        delay: 0,
+        volume: 0.78,
+        rate: 0.96 * pitchScale,
+        maxDuration: 0.65,
+        fadeOut: 0.16
+      });
+      playMixkitClip('halloween_ghost_swoosh_1340', {
+        delay: 0.04,
+        volume: 0.74,
+        rate: 1.04 * pitchScale,
+        maxDuration: 0.58,
+        fadeOut: 0.14
+      });
+      playMixkitClip('slash_swoosh_1476', {
+        delay: 0.22,
+        volume: 0.95,
+        rate: 0.88 * pitchScale,
+        maxDuration: 0.60,
+        fadeOut: 0.12
+      });
+      playMixkitClip('halloween_potion_fx_2831', {
+        delay: 0.24,
+        volume: 0.72,
+        rate: 1.06 * pitchScale,
+        maxDuration: 0.62,
+        fadeOut: 0.15
       });
       return;
     }
@@ -1842,6 +2199,39 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       return;
     }
 
+    if (arch === 'hollow_reapers') {
+      // Reaper Scythe Soul-Harvest Slice + Ghost Swoosh + Cauldron Bubbles + Tolling Graveyard Crypt Bell
+      playMixkitClip('samurai_impact_2789', {
+        delay: 0,
+        volume: 0.95,
+        rate: 0.92 * clashPitch,
+        maxDuration: 0.65,
+        fadeOut: 0.14
+      });
+      playMixkitClip('halloween_ghost_swoosh_1340', {
+        delay: 0.01,
+        volume: 0.84,
+        rate: 1.02 * clashPitch,
+        maxDuration: 0.72,
+        fadeOut: 0.18
+      });
+      playMixkitClip('cinematic_bell_619', {
+        delay: 0.015,
+        volume: 0.78,
+        rate: 0.86 * clashPitch,
+        maxDuration: 0.95,
+        fadeOut: 0.22
+      });
+      playMixkitClip('halloween_cauldron_bubbles_2999', {
+        delay: 0.03,
+        volume: 0.76,
+        rate: 1.05 * clashPitch,
+        maxDuration: 0.68,
+        fadeOut: 0.18
+      });
+      return;
+    }
+
     // DEFAULT: GOTHIC SANCTUM WARRIORS (Forged Steel-on-Steel Parry Clash)
     playMixkitClip('battle_slashes_2763', {
       delay: 0,
@@ -1933,6 +2323,35 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         delay: 0.02,
         volume: 0.84,
         rate: 0.82,
+        maxDuration: 1.45,
+        fadeOut: 0.30
+      });
+    } else if (arch === 'hollow_reapers') {
+      playMixkitClip('halloween_haunted_orchestra_634', {
+        delay: 0,
+        volume: 0.86,
+        rate: 0.96,
+        maxDuration: 1.85,
+        fadeOut: 0.42
+      });
+      playMixkitClip('halloween_ghost_whispers_302', {
+        delay: 0.02,
+        volume: 0.82,
+        rate: 1.0,
+        maxDuration: 1.65,
+        fadeOut: 0.38
+      });
+      playMixkitClip('cinematic_bell_619', {
+        delay: 0.01,
+        volume: 0.84,
+        rate: 0.78,
+        maxDuration: 1.85,
+        fadeOut: 0.38
+      });
+      playMixkitClip('rock_explosion_debris_1703', {
+        delay: 0.03,
+        volume: 0.84,
+        rate: 0.96,
         maxDuration: 1.45,
         fadeOut: 0.30
       });
@@ -2382,39 +2801,22 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     group.add(flashSphere);
 
     // ========================================================================
-    // 1. DRAGON & ELEMENTAL GUARDIANS: ACTUAL ROARING DRAGON FIRE BREATH STREAM
+    // 1. DRAGON & ELEMENTAL GUARDIANS: TARGET IMPACT ENGULFMENT
+    // (The real PYROLUX fire-breathing stream pours directly from the attacking Dragon's moving jaws;
+    // here on the victim square we spawn the impact fireball bloom, engulfing flame puffs & lava splash)
     // ========================================================================
     if (arch === 'dragon_elemental') {
-      const breathRig = new THREE.Group();
-      breathRig.rotation.y = headingY;
-      // Tilt slightly downward from the dragon's elevated jaws (+0.18 Y at z = -0.52) into the victim's chest (y = 0, z = 0)
-      breathRig.rotation.x = 0.26;
-      group.add(breathRig);
-
-      // A. Outer Roaring Crimson-Orange Volumetric Flame Jet Shader Cone
-      const outerFireShaderMat = createUnityFireBreathShaderMaterial(0xfff3b0, 0xff6d00, 0xd90429);
-      // B. Inner White-Hot / Solar-Gold Volumetric Core Flame Jet Shader Cone
-      const innerFireShaderMat = createUnityFireBreathShaderMaterial(0xffffff, 0xffd166, 0xff5400);
-      disposableMats.push(outerFireShaderMat, innerFireShaderMat);
-
-      const outerBreathJet = new THREE.Mesh(sharedFireBreathJetGeo, outerFireShaderMat);
-      breathRig.add(outerBreathJet);
-
-      const innerBreathJet = new THREE.Mesh(sharedFireBreathJetGeo, innerFireShaderMat);
-      innerBreathJet.scale.set(0.62, 0.62, 0.94);
-      breathRig.add(innerBreathJet);
-
-      // C. Rolling Draconic Fireball Core hurtling down the breath stream from jaws to victim
+      // A. Rolling Draconic Fireball Impact Sphere engulfing the victim piece
       const fireballMat = createUnityFresnelDissolveSphereMaterial(0xff9e00, 0xff2a00, 0xffffff);
       disposableMats.push(fireballMat);
       const fireballCore = new THREE.Mesh(sharedSphereGeo, fireballMat);
-      fireballCore.scale.setScalar(0.11);
-      breathRig.add(fireballCore);
+      fireballCore.scale.setScalar(0.14);
+      group.add(fireballCore);
 
-      // D. 48 Billowing PYROLUX Soft-Particle Flame, Ember & Smoke Billboards streaming from the Dragon's Jaws
+      // B. 18 Engulfing PYROLUX Soft-Particle Flame & Smoke Billboards swirling up the victim piece
       const flameTex = getUnityFireFlameTexture();
       const flameParticles = [];
-      for (let i = 0; i < 48; i++) {
+      for (let i = 0; i < 18; i++) {
         const pMat = new THREE.SpriteMaterial({
           map: flameTex,
           color: 0xffffff,
@@ -2426,20 +2828,20 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         });
         disposableMats.push(pMat);
         const sp = new THREE.Sprite(pMat);
-        breathRig.add(sp);
+        group.add(sp);
         flameParticles.push({
           sprite: sp,
           mat: pMat,
-          phase: i / 48,
-          speed: 2.1 + (i % 5) * 0.32,
-          swirlAngle: (i / 48) * Math.PI * 2 * 3.0,
-          swirlRadius: 0.03 + (i % 7) * 0.032,
-          rotSpeed: (i % 2 === 0 ? 1 : -1) * (2.5 + (i % 4) * 0.8),
-          baseScale: 0.14 + (i % 4) * 0.055
+          phase: i / 18,
+          speed: 2.0 + (i % 4) * 0.35,
+          swirlAngle: (i / 18) * Math.PI * 2,
+          swirlRadius: 0.05 + (i % 5) * 0.028,
+          rotSpeed: (i % 2 === 0 ? 1 : -1) * (2.6 + (i % 3) * 0.8),
+          baseScale: 0.16 + (i % 4) * 0.05
         });
       }
 
-      // E. 20 Splashing Molten Lava Droplets & Scorched Cinders erupting at the target's feet
+      // C. 20 Splashing Molten Lava Droplets & Scorched Cinders erupting at the target's feet
       const lavaDrops = [];
       for (let i = 0; i < 20; i++) {
         const dMesh = new THREE.Mesh(
@@ -2467,45 +2869,24 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         group,
         0.58,
         (u, elapsed, dt) => {
-          outerFireShaderMat.uniforms.uTime.value = elapsed;
-          outerFireShaderMat.uniforms.uProgress.value = u;
-          innerFireShaderMat.uniforms.uTime.value = elapsed;
-          innerFireShaderMat.uniforms.uProgress.value = u;
-
-          const jetSwell = 0.85 + Math.sin(u * Math.PI) * 0.55;
-          outerBreathJet.scale.set(jetSwell, jetSwell, 0.85 + Math.min(1, u * 1.8) * 0.45);
-          outerBreathJet.rotation.z += dt * 11.0;
-          innerBreathJet.scale.set(jetSwell * 0.62, jetSwell * 0.62, 0.82 + Math.min(1, u * 1.9) * 0.42);
-          innerBreathJet.rotation.z -= dt * 15.0;
-
-          // Fireball hurtles from dragon jaws (z = -0.54) to target (z = +0.06) and expands on impact
-          const fbTravel = Math.min(1, u * 2.1);
-          fireballCore.position.set(0, 0, -0.54 + fbTravel * 0.60);
-          fireballCore.scale.setScalar(0.08 + fbTravel * 0.14 + Math.sin(u * Math.PI) * 0.08);
+          fireballCore.scale.setScalar(0.12 + Math.sin(u * Math.PI) * 0.22);
           fireballMat.uniforms.uTime.value = elapsed;
-          fireballMat.uniforms.uDissolve.value = Math.max(0, (u - 0.25) / 0.75);
+          fireballMat.uniforms.uDissolve.value = Math.max(0, (u - 0.2) / 0.8);
 
-          // Update 48 billowing dragonfire breath particles
           const lifeFade = 1.0 - Math.pow(u, 1.45);
           for (let i = 0; i < flameParticles.length; i++) {
             const fp = flameParticles[i];
             const p = (elapsed * fp.speed + fp.phase) % 1.0;
-            // Stream from z = -0.56 (dragon jaws) to z = +0.22 (past victim)
-            const zPos = -0.56 + p * 0.78;
-            const coneSpread = Math.pow(p, 1.1) * fp.swirlRadius * (1.1 + u * 0.6);
-            const swirlA = fp.swirlAngle + elapsed * 9.5 + p * 4.0;
-            const buoyantLift = Math.pow(p, 1.6) * 0.14;
+            const swA = fp.swirlAngle + elapsed * 8.0 + p * 3.2;
+            const rad = fp.swirlRadius * (0.6 + p * 1.1);
             fp.sprite.position.set(
-              Math.cos(swirlA) * coneSpread,
-              Math.sin(swirlA) * coneSpread + buoyantLift,
-              zPos
+              Math.cos(swA) * rad,
+              (p - 0.2) * 0.36,
+              Math.sin(swA) * rad
             );
-            // Expand as flame billows outward from the snout
-            const s = fp.baseScale * (0.38 + p * 1.65) * (0.75 + 0.45 * Math.sin(u * Math.PI));
-            fp.sprite.scale.setScalar(s);
+            fp.sprite.scale.setScalar(fp.baseScale * (0.5 + p * 1.2) * (0.8 + 0.4 * Math.sin(u * Math.PI)));
             fp.mat.rotation += fp.rotSpeed * dt;
 
-            // Color evolution along the breath stream: white-hot throat -> solar gold -> roaring orange -> crimson smoke
             if (p < 0.28) {
               fp.mat.color.lerpColors(cWhite, cGold, p / 0.28);
             } else if (p < 0.68) {
@@ -2513,8 +2894,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
             } else {
               fp.mat.color.lerpColors(cOrange, cCrimson, (p - 0.68) / 0.32);
             }
-            const particleAlpha = Math.sin(p * Math.PI) * lifeFade * 0.95;
-            fp.mat.opacity = Math.max(0, particleAlpha);
+            fp.mat.opacity = Math.max(0, Math.sin(p * Math.PI) * lifeFade * 0.95);
           }
 
           flareSprite.scale.setScalar(0.38 + Math.sin(u * Math.PI) * 0.52);
@@ -2539,26 +2919,15 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     }
 
     // ========================================================================
-    // 2. ARCANE RUNIC & CYBER-MECH: OVERCHARGED PLASMA CANNON & ARC LIGHTNING
+    // 2. ARCANE RUNIC & CYBER-MECH: ARC LIGHTNING, HEX TARGET-LOCK & ION SPARKS
+    // (Coherent laser beams fire directly from the Mech's integrated chest & cannon emitters)
     // ========================================================================
     if (arch === 'arcane_cyber') {
       const cyberRig = new THREE.Group();
       cyberRig.rotation.y = headingY;
       group.add(cyberRig);
 
-      // A. Scrolling GLSL Plasma Beam Core & Outer Ion Sheath
-      const plasmaCoreMat = createUnityPlasmaBeamShaderMaterial(0x00f5d4, 0x9d4edd, 0xffffff);
-      const plasmaSheathMat = createUnityPlasmaBeamShaderMaterial(0x7209b7, 0x00bbf9, 0x00f5d4);
-      disposableMats.push(plasmaCoreMat, plasmaSheathMat);
-
-      const coreBeam = new THREE.Mesh(sharedPlasmaBeamGeo, plasmaCoreMat);
-      cyberRig.add(coreBeam);
-
-      const sheathBeam = new THREE.Mesh(sharedPlasmaBeamGeo, plasmaSheathMat);
-      sheathBeam.scale.set(1.85, 1.85, 1.04);
-      cyberRig.add(sheathBeam);
-
-      // B. 4 Snapping 3D Jagged Electric Arc Lightning Bolts bridging Attacker -> Target
+      // A. 4 Snapping 3D Jagged Electric Arc Lightning Bolts bridging Attacker -> Target
       const arcBolts = [];
       for (let i = 0; i < 4; i++) {
         const boltGeo = buildJaggedLightningGeometry(0.68, 12, 0.085, i === 0 ? 0.016 : 0.011);
@@ -2571,7 +2940,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         arcBolts.push(boltMesh);
       }
 
-      // C. Triple Counter-Rotating Holographic Hex Target-Lock Reticle on the Victim
+      // B. Triple Counter-Rotating Holographic Hex Target-Lock Reticle on the Victim
       const reticleRings = [];
       for (let r = 0; r < 3; r++) {
         const rMesh = new THREE.Mesh(sharedHexRingGeo, r === 0 ? flashMat : r === 1 ? primaryMat : secondaryMat);
@@ -2581,7 +2950,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         reticleRings.push({ mesh: rMesh, idx: r });
       }
 
-      // D. 26 High-Velocity Cyan/Violet Plasma Ion Particles
+      // C. 26 High-Velocity Cyan/Violet Plasma Ion Particles
       const ions = [];
       for (let i = 0; i < 26; i++) {
         const spMesh = new THREE.Mesh(
@@ -2602,16 +2971,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         group,
         0.48,
         (u, elapsed, dt) => {
-          plasmaCoreMat.uniforms.uTime.value = elapsed;
-          plasmaCoreMat.uniforms.uProgress.value = u;
-          plasmaSheathMat.uniforms.uTime.value = elapsed;
-          plasmaSheathMat.uniforms.uProgress.value = u;
-
-          const pulse = 1.0 + Math.sin(elapsed * 65.0) * 0.35;
-          coreBeam.scale.set(pulse, pulse, 0.85 + u * 0.45);
-          sheathBeam.scale.set(pulse * 1.85, pulse * 1.85, 0.88 + u * 0.48);
-          sheathBeam.rotation.z -= dt * 16.0;
-
           for (let i = 0; i < arcBolts.length; i++) {
             const b = arcBolts[i];
             b.rotation.z += dt * (i % 2 === 0 ? 22.0 : -22.0);
@@ -2735,6 +3094,118 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
           flashMat.opacity = 0.98 * (1 - u * u);
           primaryMat.opacity = 0.96 * (1 - u);
           secondaryMat.opacity = 0.92 * (1 - u);
+        },
+        disposableMats,
+        disposableGeos
+      );
+      return;
+    }
+
+    // ========================================================================
+    // 3b. HOLLOW JACK & WRAITH REAPERS: SAMHAIN SCYTHE SLASH + SWARM OF BATS + CAULDRON POTION SPLASH
+    // ========================================================================
+    if (arch === 'hollow_reapers') {
+      const reaperWaves = [];
+      const reaperConfigs = [
+        { tiltX: Math.PI * 0.36, tiltZ: 0.45, scaleMul: 1.12, speed: 15.0, pHex: 0xff6d00, sHex: 0x00e676 },
+        { tiltX: -Math.PI * 0.36, tiltZ: -0.45, scaleMul: 1.04, speed: -16.0, pHex: 0x00e676, sHex: 0x9d4edd },
+        { tiltX: Math.PI * 0.50, tiltZ: 0.0, scaleMul: 1.24, speed: 18.0, pHex: 0xff9100, sHex: 0xffe066 }
+      ];
+      for (const cfg of reaperConfigs) {
+        const sMat = createUnitySlashRibbonShaderMaterial(cfg.pHex, cfg.sHex, prof.coreHex);
+        disposableMats.push(sMat);
+        const sMesh = new THREE.Mesh(sharedSlashRibbonGeo, sMat);
+        sMesh.rotation.set(cfg.tiltX, headingY, cfg.tiltZ);
+        group.add(sMesh);
+        reaperWaves.push({ mesh: sMesh, mat: sMat, cfg });
+      }
+
+      // 12 Flying Vampire Bat Billboards & 4 Ghost Spirits bursting from the Reaper Scythe cleave
+      const batTex = getHalloweenBatTexture();
+      const ghostTex = getHalloweenGhostTexture();
+      const batSprites = [];
+      for (let i = 0; i < 12; i++) {
+        const isGhost = i % 4 === 0;
+        const bMat = new THREE.SpriteMaterial({
+          map: isGhost ? ghostTex : batTex,
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.98,
+          depthWrite: false
+        });
+        disposableMats.push(bMat);
+        const sp = new THREE.Sprite(bMat);
+        sp.scale.setScalar(isGhost ? 0.24 : 0.20);
+        group.add(sp);
+        const ang = (i / 12) * Math.PI * 2;
+        batSprites.push({
+          sprite: sp,
+          mat: bMat,
+          ang,
+          radSpeed: 0.95 + (i % 3) * 0.35,
+          vy: 0.75 + (i % 4) * 0.32,
+          wobblePhase: i * 0.9,
+          baseScale: isGhost ? 0.24 : 0.20
+        });
+      }
+
+      // 24 Bubbling Witch Cauldron Green Potion & Jack-o'-Lantern Ember Droplets
+      const potionDrops = [];
+      for (let i = 0; i < 24; i++) {
+        const spMesh = new THREE.Mesh(
+          sharedSphereGeo,
+          i % 3 === 0 ? flashMat : i % 2 === 0 ? primaryMat : secondaryMat
+        );
+        const ang = (i / 24) * Math.PI * 2;
+        spMesh.scale.setScalar(0.028);
+        potionDrops.push({
+          mesh: spMesh,
+          vx: Math.cos(ang) * (0.75 + Math.random() * 0.95) + dirX * 0.45,
+          vy: 0.55 + Math.random() * 1.15,
+          vz: Math.sin(ang) * (0.75 + Math.random() * 0.95) + dirZ * 0.45
+        });
+        group.add(spMesh);
+      }
+
+      addVfxUpdater(
+        group,
+        0.54,
+        (u, elapsed, dt) => {
+          for (const rw of reaperWaves) {
+            rw.mat.uniforms.uTime.value = elapsed;
+            rw.mat.uniforms.uProgress.value = u;
+            rw.mesh.scale.setScalar((0.80 + u * 1.18) * rw.cfg.scaleMul);
+            rw.mesh.rotation.z += dt * rw.cfg.speed;
+          }
+
+          for (const b of batSprites) {
+            const curR = 0.08 + u * b.radSpeed * 0.55;
+            const curAng = b.ang + elapsed * 5.2;
+            b.sprite.position.set(
+              Math.cos(curAng) * curR,
+              u * b.vy * 0.55 + Math.sin(elapsed * 18.0 + b.wobblePhase) * 0.04,
+              Math.sin(curAng) * curR
+            );
+            const flap = 1.0 + Math.sin(elapsed * 26.0 + b.wobblePhase) * 0.22;
+            const fade = Math.max(0.02, 1 - Math.pow(u, 1.5));
+            b.sprite.scale.set(b.baseScale * flap * fade, b.baseScale * fade, 1);
+            b.mat.opacity = 0.98 * fade;
+          }
+
+          flareSprite.scale.setScalar(0.40 + Math.sin(u * Math.PI) * 0.48);
+          flareSpriteMat.opacity = 1.0 - u * u;
+          flashSphere.scale.setScalar(0.08 + Math.sin(u * Math.PI) * 0.18);
+          flashMat.opacity = 0.98 * (1 - u * u);
+          primaryMat.opacity = 0.96 * (1 - u);
+          secondaryMat.opacity = 0.92 * (1 - u);
+
+          for (const pd of potionDrops) {
+            pd.mesh.position.x += pd.vx * dt;
+            pd.mesh.position.y += pd.vy * dt;
+            pd.mesh.position.z += pd.vz * dt;
+            pd.vy -= 3.8 * dt;
+            pd.mesh.scale.setScalar(0.028 * Math.max(0.05, 1 - u));
+          }
         },
         disposableMats,
         disposableGeos
@@ -2955,15 +3426,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     };
 
     if (arch === 'arcane_cyber') {
-      // ARCANE CYBER-MECH SIGNATURE: Sky-to-Board Orbital Ion Laser + Counter-Rotating Hex Holo-Grids + Cyber EMP Dome
-      const ionLaser = new THREE.Mesh(sharedPillarGeo, cMat);
-      ionLaser.scale.set(0.08, 4.4, 0.08);
-      group.add(ionLaser);
-
-      const outerIonSheath = new THREE.Mesh(sharedPillarGeo, pMat);
-      outerIonSheath.scale.set(0.18, 4.4, 0.18);
-      group.add(outerIonSheath);
-
+      // ARCANE CYBER-MECH SIGNATURE: Counter-Rotating Hex Holo-Grids + Cyber EMP Dome
       const empDome = new THREE.Mesh(sharedDomeGeo, sMat);
       empDome.scale.setScalar(0.12);
       group.add(empDome);
@@ -2976,25 +3439,12 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       hexGrid2.position.y = 0.18;
       group.add(hexGrid2);
 
-      const plasmaArcs = [];
-      for (let i = 0; i < 3; i++) {
-        const bGeo = buildJaggedLightningGeometry(2.8, 14, 0.18, 0.018);
-        geos.push(bGeo);
-        const bMesh = new THREE.Mesh(bGeo, i === 0 ? cMat : pMat);
-        bMesh.rotation.y = (i * Math.PI * 2) / 3;
-        group.add(bMesh);
-        plasmaArcs.push(bMesh);
-      }
-
       addVfxUpdater(
         group,
         1.45,
         (u, elapsed, dt) => {
           const ease = 1 - Math.pow(1 - u, 3);
           stepCommonUnityShaders(u, elapsed, dt, ease);
-          const laserEnv = u < 0.22 ? u / 0.22 : Math.max(0, 1 - (u - 0.22) / 0.78);
-          ionLaser.scale.set(Math.max(0.004, 0.11 * laserEnv), 4.4, Math.max(0.004, 0.11 * laserEnv));
-          outerIonSheath.scale.set(Math.max(0.008, 0.24 * laserEnv), 4.4, Math.max(0.008, 0.24 * laserEnv));
 
           empDome.scale.setScalar(0.14 + ease * 0.78);
           empDome.rotation.y += dt * 3.5;
@@ -3004,12 +3454,6 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
           hexGrid2.scale.setScalar(0.12 + ease * 0.62);
           hexGrid2.position.y = 0.12 + ease * 0.55;
           hexGrid2.rotation.z -= dt * 5.5;
-
-          for (let i = 0; i < plasmaArcs.length; i++) {
-            const pa = plasmaArcs[i];
-            pa.visible = u < 0.68;
-            pa.rotation.y += dt * (i % 2 === 0 ? 9 : -9);
-          }
 
           pMat.opacity = 0.95 * Math.pow(1 - u, 1.3);
           sMat.opacity = 0.72 * Math.pow(1 - u, 1.4);
@@ -3135,6 +3579,114 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
           pMat.opacity = 0.95 * Math.pow(1 - u, 1.3);
           sMat.opacity = 0.90 * Math.pow(1 - u, 1.4);
+          cMat.opacity = 0.98 * Math.pow(1 - u, 1.5);
+        },
+        mats,
+        geos
+      );
+      return;
+    }
+
+    if (arch === 'hollow_reapers') {
+      // HOLLOW JACK & WRAITH REAPERS SIGNATURE:
+      // Actual 3D GLTF Graveyard Tombstone Obelisks & Jack-o'-Lanterns Erupting + Soul Vortex + Bat & Ghost Sprites
+      const vortexRings = [];
+      for (let v = 0; v < 4; v++) {
+        const vr = new THREE.Mesh(sharedRingGeo, v % 2 === 0 ? pMat : sMat);
+        vr.position.y = 0.08 + v * 0.16;
+        group.add(vr);
+        vortexRings.push({ mesh: vr, idx: v });
+      }
+
+      const tombSpires = [];
+      const spireAssets = [
+        'gravestone',
+        'pumpkin_orange_jackolantern',
+        'gravemarker_A',
+        'skull_candle',
+        'gravemarker_B',
+        'pumpkin_yellow_jackolantern'
+      ];
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const spireHolder = new THREE.Group();
+        const rad = 0.18 + (i % 2) * 0.06;
+        spireHolder.position.set(Math.cos(ang) * rad, -0.22, Math.sin(ang) * rad);
+        spireHolder.rotation.y = -ang + Math.PI / 2;
+        spireHolder.rotation.z = -Math.cos(ang) * 0.18;
+        spireHolder.rotation.x = Math.sin(ang) * 0.18;
+        const assetKey = spireAssets[i % spireAssets.length];
+        mountHalloweenModel(spireHolder, assetKey, {
+          scale: assetKey.startsWith('pumpkin') || assetKey === 'skull_candle' ? 0.16 : 0.11,
+          castShadow: false,
+          receiveShadow: false
+        });
+        group.add(spireHolder);
+        tombSpires.push({ mesh: spireHolder, peakH: 0.24 + (i % 2) * 0.08 });
+      }
+
+      const ghostTex = getHalloweenGhostTexture();
+      const batTex = getHalloweenBatTexture();
+      const halloweenSprites = [];
+      for (let i = 0; i < 12; i++) {
+        const isGhost = i < 5;
+        const spMat = new THREE.SpriteMaterial({
+          map: isGhost ? ghostTex : batTex,
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.96,
+          depthWrite: false
+        });
+        mats.push(spMat);
+        const sp = new THREE.Sprite(spMat);
+        const ang = (i / 12) * Math.PI * 2;
+        const baseScale = isGhost ? 0.25 : 0.19;
+        sp.scale.setScalar(baseScale);
+        sp.position.set(Math.cos(ang) * 0.18, 0.12 + (i % 3) * 0.08, Math.sin(ang) * 0.18);
+        group.add(sp);
+        halloweenSprites.push({
+          sprite: sp,
+          mat: spMat,
+          ang,
+          isGhost,
+          baseScale,
+          vy: isGhost ? 0.62 + (i % 3) * 0.18 : 0.85 + (i % 3) * 0.25
+        });
+      }
+
+      addVfxUpdater(
+        group,
+        1.52,
+        (u, elapsed, dt) => {
+          const ease = 1 - Math.pow(1 - u, 3);
+          stepCommonUnityShaders(u, elapsed, dt, ease);
+          const cragEnv = u < 0.28 ? ease / 0.28 : Math.max(0, 1 - (u - 0.28) / 0.72);
+          for (const ts of tombSpires) {
+            ts.mesh.position.y = -0.22 + cragEnv * ts.peakH;
+            ts.mesh.scale.setScalar(Math.max(0.01, cragEnv));
+          }
+          for (const vr of vortexRings) {
+            vr.mesh.position.y = 0.06 + vr.idx * 0.18 + u * 0.65;
+            const rS = (0.14 + vr.idx * 0.06) * (1 + ease * 1.32);
+            vr.mesh.scale.set(rS, 1, rS);
+            vr.mesh.rotation.z += dt * (7.5 + vr.idx * 2);
+          }
+          for (const hs of halloweenSprites) {
+            const spinSpd = hs.isGhost ? 2.4 : 5.2;
+            const curAng = hs.ang + elapsed * spinSpd;
+            const curR = (hs.isGhost ? 0.16 : 0.22) + ease * (hs.isGhost ? 0.28 : 0.48);
+            hs.sprite.position.set(
+              Math.cos(curAng) * curR,
+              0.12 + u * hs.vy,
+              Math.sin(curAng) * curR
+            );
+            const fade = Math.max(0.02, 1 - Math.pow(u, 1.35));
+            const flap = hs.isGhost ? 1.0 : 1.0 + Math.sin(elapsed * 24.0 + hs.ang) * 0.22;
+            hs.sprite.scale.set(hs.baseScale * flap * fade, hs.baseScale * fade, 1);
+            hs.mat.opacity = 0.96 * fade;
+          }
+          pMat.opacity = 0.95 * Math.pow(1 - u, 1.25);
+          sMat.opacity = 0.92 * Math.pow(1 - u, 1.35);
           cMat.opacity = 0.98 * Math.pow(1 - u, 1.5);
         },
         mats,
@@ -3799,6 +4351,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       playSelectSfx('queen');
     }
     syncLobbyMusicPlayback();
+    syncGraveyardAmbientSoundscape();
     window.dispatchEvent(
       new CustomEvent('wizardchess:sfxchange', { detail: { sfxEnabled } })
     );
@@ -3813,6 +4366,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     if (masterBusNode?.input) {
       masterBusNode.input.gain.value = 1.05 * userSfxVolumeMultiplier;
     }
+    syncGraveyardAmbientSoundscape();
     return userSfxVolumeMultiplier;
   }
 
@@ -3827,6 +4381,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     if (lobbyDrumsAudio && sfxEnabled && lobbyMusicEnabled && isLobbyMusicActiveState) {
       lobbyDrumsAudio.volume = getDrumsTargetVol();
     }
+    syncGraveyardAmbientSoundscape();
     return userMusicVolumeMultiplier;
   }
 
@@ -3840,6 +4395,8 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     getLobbyMusicVolume: () => userMusicVolumeMultiplier,
     setLobbyMusicVolume,
     setLobbyMusicActive,
+    setActiveWorldScenery,
+    playHalloweenWhisperAndWindGustSfx,
     playSelectSfx,
     playMoveStartSfx,
     playMoveLandSfx,

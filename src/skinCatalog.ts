@@ -1,5 +1,5 @@
 export interface PieceArchetype {
-  id: 'gothic_warriors' | 'classic_staunton' | 'arcane_cyber' | 'dragon_elemental';
+  id: 'gothic_warriors' | 'classic_staunton' | 'arcane_cyber' | 'dragon_elemental' | 'hollow_reapers';
   name: string;
   subtitle: string;
   badge: string;
@@ -39,7 +39,7 @@ export interface BoardSkin {
   name: string;
   subtitle: string;
   environmentLabel: string;
-  archType: 'gothic' | 'wood_table' | 'runic_pedestal' | 'crystal_sanctum' | 'lava_forge';
+  archType: 'gothic' | 'wood_table' | 'runic_pedestal' | 'crystal_sanctum' | 'lava_forge' | 'haunted_crypt';
   price: number;
   lightSqHex: string;
   lightRoughness: number;
@@ -63,7 +63,7 @@ export interface BoardSkin {
 }
 
 export interface WorldScenery {
-  id: 'gothic_cathedral' | 'celestial_observatory' | 'dragon_sky_citadel' | 'volcanic_titan_forge';
+  id: 'gothic_cathedral' | 'celestial_observatory' | 'dragon_sky_citadel' | 'volcanic_titan_forge' | 'haunted_blood_graveyard';
   name: string;
   subtitle: string;
   badge: string;
@@ -123,6 +123,16 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
     strikeStyle: 'Mid-Air Winged Hover, Unhinged Fanged Jaws & Helical Volumetric Fire-Breath Torrent',
     shatterStyle: 'Volcanic Magma Geyser & Erupting Crag Spikes',
     flashColorHex: '#ff4d6d'
+  },
+  {
+    id: 'hollow_reapers',
+    name: 'Hollow Jack & Wraith Reapers',
+    subtitle: 'Sculpted Jack-o\'-Lantern monarchs, Headless Horseman knights, scythe-wielding wraiths & haunted crypt rooks',
+    badge: 'Halloween Event',
+    price: 280,
+    strikeStyle: 'Scythe Soul-Harvest Sweep & Headless Jack-o\'-Lantern Surge',
+    shatterStyle: 'Carved Pumpkin Detonation, Ectoplasm Soul-Flames & Swirling Bats',
+    flashColorHex: '#ff6d00'
   }
 ];
 
@@ -246,6 +256,30 @@ export const PIECE_SKINS: PieceSkin[] = [
     bladeMetalness: 0.92,
     bladeEmissiveHex: '#7b2cbf',
     bladeEmissiveIntensity: 0.52
+  },
+  {
+    id: 'hallow_pumpkin_wraith',
+    name: 'Hallow Bone & Midnight Wraith',
+    subtitle: 'Bleached skull-bone ivory vs charred phantom obsidian with carved pumpkin-amber & ectoplasm glow',
+    price: 180,
+    whiteHex: '#e8dfd1',
+    whiteRoughness: 0.26,
+    whiteMetalness: 0.18,
+    whiteEmissiveHex: '#4a1c00',
+    whiteEmissiveIntensity: 0.28,
+    blackHex: '#16121d',
+    blackRoughness: 0.22,
+    blackMetalness: 0.54,
+    blackEmissiveHex: '#1f0933',
+    blackEmissiveIntensity: 0.32,
+    trimHex: '#ff6d00',
+    trimRoughness: 0.20,
+    trimMetalness: 0.88,
+    bladeHex: '#00e676',
+    bladeRoughness: 0.16,
+    bladeMetalness: 0.90,
+    bladeEmissiveHex: '#00c853',
+    bladeEmissiveIntensity: 0.62
   }
 ];
 
@@ -379,6 +413,32 @@ export const BOARD_SKINS: BoardSkin[] = [
     brazierMidRGB: [1.0, 0.24, 0.02],
     brazierTipRGB: [0.75, 0.02, 0.02],
     brazierLightHex: '#ff4800'
+  },
+  {
+    id: 'cursed_pumpkin_altar',
+    name: 'Cursed Jack-o\'-Lantern Crypt',
+    subtitle: 'Weathered tombstone slate & charred pumpkin-wood altar bordered by wrought-iron cemetery fencing & glowing corner Jack-o\'-Lanterns',
+    environmentLabel: 'Haunted Graveyard Crypt & Samhain Soulfire',
+    archType: 'haunted_crypt',
+    price: 220,
+    lightSqHex: '#d8cbb8',
+    lightRoughness: 0.34,
+    lightMetalness: 0.14,
+    darkSqHex: '#181122',
+    darkRoughness: 0.26,
+    darkMetalness: 0.36,
+    borderHex: '#261c2e',
+    accentHex: '#ff6d00',
+    wallLookIndex: 0,
+    floorLookIndex: 0,
+    fogHex: '#12081c',
+    sideWindowHex: '#ff6d00',
+    northWindowHex: '#ff3d00',
+    southWindowHex: '#00e676',
+    brazierBaseRGB: [0.45, 1.0, 0.55],
+    brazierMidRGB: [1.0, 0.45, 0.04],
+    brazierTipRGB: [0.62, 0.12, 0.88],
+    brazierLightHex: '#ff6d00'
   }
 ];
 
@@ -462,6 +522,26 @@ export const WORLD_SCENERIES: WorldScenery[] = [
     keyLightIntensity: 2.68,
     rimLightHex: '#ff4800',
     rimLightIntensity: 1.28
+  },
+  {
+    id: 'haunted_blood_graveyard',
+    name: 'Haunted Blood-Moon Graveyard',
+    subtitle: 'Moonlit Samhain cemetery beneath a colossal crimson Blood Moon with gnarled dead oaks, wrought-iron gates, circling bats & floating Jack-o\'-Lanterns',
+    badge: 'Halloween Realm',
+    price: 260,
+    skyPreviewGradient: 'radial-gradient(circle at 50% 26%, #ff3d00 0%, #7b1fa2 45%, #160926 78%, #090410 100%)',
+    accentHex: '#ff6d00',
+    landmarksLabel: 'Colossal Blood Moon, Gnarled Dead Oaks, Iron Crypt Gates & Floating Jack-o\'-Lanterns',
+    weatherLabel: 'Swirling Vampire Bats, Ectoplasm Mist & Rising Pumpkin Embers',
+    fogHex: '#12081c',
+    fogDensity: 0.0048,
+    hemiSkyHex: '#ff9e80',
+    hemiGroundHex: '#1b0c28',
+    hemiIntensity: 0.84,
+    keyLightHex: '#ffd1a3',
+    keyLightIntensity: 2.72,
+    rimLightHex: '#00e676',
+    rimLightIntensity: 1.22
   }
 ];
 

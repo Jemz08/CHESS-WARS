@@ -30,6 +30,13 @@ import {
 } from './firebase';
 import SkinShowcaseCanvas from './SkinShowcaseCanvas';
 import {
+  POLIIGON_PRESET_CATALOG,
+  setPoliigonPresetOverride,
+  getAllPoliigonSlotOverrides,
+  resetAllPoliigonSlotOverrides,
+  loadCustomPoliigonTextureFiles
+} from './poliigonPbrTextures.js';
+import {
   PlaySwordsVectorIcon,
   SkinsCrownVectorIcon,
   GoogleShieldVectorIcon,
@@ -38,24 +45,179 @@ import {
   SettingsGearVectorIcon,
   Eye3DPreviewVectorIcon,
   GoldCoinVectorIcon,
-  CommanderSigilVectorIcon
+  CommanderSigilVectorIcon,
+  ItchPouchBountyIcon,
+  ItchRotateCameraIcon,
+  BulletModeVectorIcon,
+  BlitzModeVectorIcon,
+  RapidModeVectorIcon
 } from './GameVectorIcons';
+
+export type TimeControlCategory = 'bullet' | 'blitz' | 'rapid';
+export type TimeControlPresetId =
+  | 'bullet_1'
+  | 'bullet_2'
+  | 'blitz_3'
+  | 'blitz_5'
+  | 'blitz_8'
+  | 'rapid_10'
+  | 'rapid_15'
+  | 'rapid_30'
+  | 'rapid_60';
+
+export interface TimeControlPresetOption {
+  id: TimeControlPresetId;
+  category: TimeControlCategory;
+  minutes: number;
+  initialSeconds: number;
+  label: string;
+  shortLabel: string;
+}
+
+export interface TimeControlCategoryDef {
+  id: TimeControlCategory;
+  name: string;
+  rangeTag: string;
+  description: string;
+  defaultPresetId: TimeControlPresetId;
+  presets: TimeControlPresetOption[];
+}
+
+export const TIME_CONTROL_CATEGORIES: TimeControlCategoryDef[] = [
+  {
+    id: 'bullet',
+    name: 'Bullet',
+    rangeTag: '< 3 Min Total',
+    description:
+      'Ultra-fast games where each player has less than 3 minutes (often 1 to 2 minutes) total.',
+    defaultPresetId: 'bullet_2',
+    presets: [
+      {
+        id: 'bullet_1',
+        category: 'bullet',
+        minutes: 1,
+        initialSeconds: 60,
+        label: 'Bullet • 1 Min',
+        shortLabel: '1 Min'
+      },
+      {
+        id: 'bullet_2',
+        category: 'bullet',
+        minutes: 2,
+        initialSeconds: 120,
+        label: 'Bullet • 2 Min',
+        shortLabel: '2 Min'
+      }
+    ]
+  },
+  {
+    id: 'blitz',
+    name: 'Blitz',
+    rangeTag: '3 to 10 Min Total',
+    description:
+      'Fast-paced games where each player gets 3 to 10 minutes total (commonly 5 minutes).',
+    defaultPresetId: 'blitz_5',
+    presets: [
+      {
+        id: 'blitz_3',
+        category: 'blitz',
+        minutes: 3,
+        initialSeconds: 180,
+        label: 'Blitz • 3 Min',
+        shortLabel: '3 Min'
+      },
+      {
+        id: 'blitz_5',
+        category: 'blitz',
+        minutes: 5,
+        initialSeconds: 300,
+        label: 'Blitz • 5 Min',
+        shortLabel: '5 Min'
+      },
+      {
+        id: 'blitz_8',
+        category: 'blitz',
+        minutes: 8,
+        initialSeconds: 480,
+        label: 'Blitz • 8 Min',
+        shortLabel: '8 Min'
+      }
+    ]
+  },
+  {
+    id: 'rapid',
+    name: 'Rapid',
+    rangeTag: '10 to 60 Min Total',
+    description:
+      'Medium-length games where each player gets 10 to 60 minutes total.',
+    defaultPresetId: 'rapid_10',
+    presets: [
+      {
+        id: 'rapid_10',
+        category: 'rapid',
+        minutes: 10,
+        initialSeconds: 600,
+        label: 'Rapid • 10 Min',
+        shortLabel: '10 Min'
+      },
+      {
+        id: 'rapid_15',
+        category: 'rapid',
+        minutes: 15,
+        initialSeconds: 900,
+        label: 'Rapid • 15 Min',
+        shortLabel: '15 Min'
+      },
+      {
+        id: 'rapid_30',
+        category: 'rapid',
+        minutes: 30,
+        initialSeconds: 1800,
+        label: 'Rapid • 30 Min',
+        shortLabel: '30 Min'
+      },
+      {
+        id: 'rapid_60',
+        category: 'rapid',
+        minutes: 60,
+        initialSeconds: 3600,
+        label: 'Rapid • 60 Min',
+        shortLabel: '60 Min'
+      }
+    ]
+  }
+];
+
+function formatChessClock(seconds: number): string {
+  const clamped = Math.max(0, seconds);
+  if (clamped > 0 && clamped < 10) {
+    return `0:0${clamped.toFixed(1)}`;
+  }
+  const totalSec = Math.ceil(clamped);
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
 
 interface WizardChessAPI {
   toggleUI?: (force?: boolean) => void;
+  refreshPoliigonMaterials?: () => void;
   applyPieceArchetype?: (archetype: unknown) => void;
   applyPieceSkin?: (skin: unknown) => void;
   applyBoardSkin?: (skin: unknown) => void;
   applyWorldScenery?: (scenery: unknown, options?: { flyToVista?: boolean }) => void;
-  startBotMatch?: (difficulty: 'easy' | 'medium' | 'hard', side: 'w' | 'b') => void;
-  startPassAndPlayMatch?: (autoFlip: boolean) => void;
+  startBotMatch?: (difficulty: 'easy' | 'medium' | 'hard', side: 'w' | 'b', timeControl?: string) => void;
+  startPassAndPlayMatch?: (autoFlip: boolean, timeControl?: string) => void;
   startOnlineMatchmaking?: (preferredColor?: 'w' | 'b' | 'any', rating?: number) => Promise<void>;
   cancelOnlineMatchmaking?: (reason?: string) => Promise<void>;
   createMultiplayerRoom?: (preferredColor: 'w' | 'b') => Promise<{ code: string; color: 'w' | 'b'; room: unknown }>;
   joinMultiplayerRoom?: (code: string) => Promise<boolean>;
   setBotDifficulty?: (diff: 'easy' | 'medium' | 'hard') => void;
+  setTimeControl?: (presetOrCategory: string, resetClocks?: boolean) => void;
   setPassAutoFlip?: (autoFlip: boolean) => void;
   flipPassCameraNow?: () => void;
+  setLobbyPaused?: (paused: boolean) => void;
+  setCameraPreset?: (preset: string) => void;
   setVoiceAnnouncerEnabled?: (enabled: boolean) => boolean;
   setSfxEnabled?: (enabled: boolean) => boolean;
   getSfxEnabled?: () => boolean;
@@ -79,6 +241,10 @@ interface WizardChessAPI {
     voiceEnabled?: boolean;
     sfxEnabled?: boolean;
     uiHidden?: boolean;
+    timeControlCategory?: TimeControlCategory;
+    timeControlPresetId?: TimeControlPresetId;
+    whiteTimeRemaining?: number;
+    blackTimeRemaining?: number;
   };
 }
 
@@ -214,6 +380,76 @@ export default function App() {
   const [showcaseBoardSkinId, setShowcaseBoardSkinId] = useState<string>(() => loadEconomyState().activeBoardSkin);
   const [showcaseSceneryId, setShowcaseSceneryId] = useState<string>(() => loadEconomyState().activeScenery);
   const [showcaseAttackNonce, setShowcaseAttackNonce] = useState<number>(0);
+  const [armoryPreviewCollapsed, setArmoryPreviewCollapsed] = useState<boolean>(false);
+  const [poliigonTargetSlot, setPoliigonTargetSlot] = useState<'pieces' | 'table' | 'board' | 'trim'>('pieces');
+  const [poliigonSlotOverrides, setPoliigonSlotOverrides] = useState<{
+    pieces: string;
+    table: string;
+    board: string;
+    trim: string;
+  }>(() => getAllPoliigonSlotOverrides());
+  const [poliigonOverrideNonce, setPoliigonOverrideNonce] = useState<number>(0);
+  const poliigonUploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  const activePoliigonPreset = poliigonSlotOverrides[poliigonTargetSlot] || 'auto';
+
+  const handleSelectPoliigonPreset = (presetId: string) => {
+    setPoliigonPresetOverride(presetId, poliigonTargetSlot);
+    setPoliigonSlotOverrides(getAllPoliigonSlotOverrides());
+    setPoliigonOverrideNonce((n) => n + 1);
+    getEngine()?.playLobbyClickSfx?.('equip');
+    getEngine()?.refreshPoliigonMaterials?.();
+  };
+
+  const handleResetAllPoliigonSlots = () => {
+    const reset = resetAllPoliigonSlotOverrides();
+    setPoliigonSlotOverrides(reset);
+    setPoliigonOverrideNonce((n) => n + 1);
+    getEngine()?.playLobbyClickSfx?.('close');
+    getEngine()?.refreshPoliigonMaterials?.();
+  };
+
+  const handlePoliigonFilesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const filesMap: {
+      albedoDataUrl?: string;
+      normalDataUrl?: string;
+      roughnessDataUrl?: string;
+    } = {};
+    const fileArr = Array.from(files);
+    let remaining = fileArr.length;
+
+    fileArr.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+        const lower = file.name.toLowerCase();
+        if (lower.includes('nrm') || lower.includes('norm') || lower.includes('normal')) {
+          filesMap.normalDataUrl = dataUrl;
+        } else if (lower.includes('rough') || lower.includes('gloss') || lower.includes('disp')) {
+          filesMap.roughnessDataUrl = dataUrl;
+        } else {
+          filesMap.albedoDataUrl = dataUrl;
+        }
+        remaining--;
+        if (remaining === 0) {
+          loadCustomPoliigonTextureFiles(
+            filesMap,
+            () => {
+              setPoliigonSlotOverrides(getAllPoliigonSlotOverrides());
+              setPoliigonOverrideNonce((n) => n + 1);
+              getEngine()?.playLobbyClickSfx?.('unlock');
+              getEngine()?.refreshPoliigonMaterials?.();
+            },
+            poliigonTargetSlot
+          );
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
 
   // Cloud & Firebase Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -272,6 +508,34 @@ export default function App() {
   const [inCheck, setInCheck] = useState(false);
   const [checkedColor, setCheckedColor] = useState<'w' | 'b' | null>(null);
 
+  // Bullet, Blitz & Rapid Time Control State
+  const [timeControlCategory, setTimeControlCategory] = useState<TimeControlCategory>('blitz');
+  const [timeControlPresetId, setTimeControlPresetId] = useState<TimeControlPresetId>('blitz_5');
+  const [whiteClockSec, setWhiteClockSec] = useState<number>(300);
+  const [blackClockSec, setBlackClockSec] = useState<number>(300);
+  const [activeClockTurn, setActiveClockTurn] = useState<'w' | 'b'>('w');
+
+  const handleSelectTimeControlCategory = (catId: TimeControlCategory) => {
+    const catObj = TIME_CONTROL_CATEGORIES.find((c) => c.id === catId);
+    if (!catObj) return;
+    setTimeControlCategory(catObj.id);
+    setTimeControlPresetId(catObj.defaultPresetId);
+    const defaultPreset = catObj.presets.find((p) => p.id === catObj.defaultPresetId) || catObj.presets[0];
+    setWhiteClockSec(defaultPreset.initialSeconds);
+    setBlackClockSec(defaultPreset.initialSeconds);
+    getEngine()?.setTimeControl?.(defaultPreset.id, true);
+    getEngine()?.playLobbyClickSfx?.('card');
+  };
+
+  const handleSelectTimeControlPreset = (preset: TimeControlPresetOption) => {
+    setTimeControlCategory(preset.category);
+    setTimeControlPresetId(preset.id);
+    setWhiteClockSec(preset.initialSeconds);
+    setBlackClockSec(preset.initialSeconds);
+    getEngine()?.setTimeControl?.(preset.id, true);
+    getEngine()?.playLobbyClickSfx?.('equip');
+  };
+
   // Pass-and-play local 2P state
   const [passAutoFlip, setPassAutoFlip] = useState(true);
   const [passPrivacyCurtain, setPassPrivacyCurtain] = useState(false);
@@ -295,6 +559,14 @@ export default function App() {
 
   // Bounties Toast
   const [bountyToast, setBountyToast] = useState<{ id: number; amount: number; label: string } | null>(null);
+
+  // HUD Entrance Animation Epoch (triggers fade-in + slide-down whenever match starts / board becomes active)
+  const [hudEntranceEpoch, setHudEntranceEpoch] = useState(0);
+  useEffect(() => {
+    if (activeDialog === 'none' && hasStartedGame) {
+      setHudEntranceEpoch((prev) => prev + 1);
+    }
+  }, [activeDialog, hasStartedGame]);
 
   // Rank Progress Calculation
   const rankProgress = getPlayerRankProgress(economy.stats.wins);
@@ -883,6 +1155,41 @@ export default function App() {
       setActiveRoomCode(d.roomCode || null);
       setInCheck(Boolean(d.inCheck));
       setCheckedColor(d.checkedColor || null);
+      if (d.currentTurn === 'w' || d.currentTurn === 'b') {
+        setActiveClockTurn(d.currentTurn);
+      }
+      if (d.timeControlCategory) {
+        setTimeControlCategory(d.timeControlCategory);
+      }
+      if (d.timeControlPresetId) {
+        setTimeControlPresetId(d.timeControlPresetId);
+      }
+      if (typeof d.whiteTimeRemaining === 'number') {
+        setWhiteClockSec(d.whiteTimeRemaining);
+      }
+      if (typeof d.blackTimeRemaining === 'number') {
+        setBlackClockSec(d.blackTimeRemaining);
+      }
+    };
+
+    const handleClockTick = (ev: Event) => {
+      const d = (ev as CustomEvent).detail;
+      if (!d) return;
+      if (typeof d.whiteTimeRemaining === 'number') {
+        setWhiteClockSec(d.whiteTimeRemaining);
+      }
+      if (typeof d.blackTimeRemaining === 'number') {
+        setBlackClockSec(d.blackTimeRemaining);
+      }
+      if (d.currentTurn === 'w' || d.currentTurn === 'b') {
+        setActiveClockTurn(d.currentTurn);
+      }
+      if (d.timeControlCategory) {
+        setTimeControlCategory(d.timeControlCategory);
+      }
+      if (d.timeControlPresetId) {
+        setTimeControlPresetId(d.timeControlPresetId);
+      }
     };
 
     const handleUiChange = (ev: Event) => {
@@ -1002,6 +1309,7 @@ export default function App() {
     window.addEventListener('wizardchess:piececaptured', handlePieceCaptured);
     window.addEventListener('wizardchess:matchwon', handleMatchWon);
     window.addEventListener('wizardchess:statechange', handleStateChange);
+    window.addEventListener('wizardchess:clocktick', handleClockTick);
     window.addEventListener('wizardchess:uichange', handleUiChange);
     window.addEventListener('wizardchess:voicechange', handleVoiceChange);
     window.addEventListener('wizardchess:sfxchange', handleSfxChange);
@@ -1016,6 +1324,7 @@ export default function App() {
       window.removeEventListener('wizardchess:piececaptured', handlePieceCaptured);
       window.removeEventListener('wizardchess:matchwon', handleMatchWon);
       window.removeEventListener('wizardchess:statechange', handleStateChange);
+      window.removeEventListener('wizardchess:clocktick', handleClockTick);
       window.removeEventListener('wizardchess:uichange', handleUiChange);
       window.removeEventListener('wizardchess:voicechange', handleVoiceChange);
       window.removeEventListener('wizardchess:sfxchange', handleSfxChange);
@@ -1106,7 +1415,7 @@ export default function App() {
   const handleStartBotGame = () => {
     requestAppFullscreenPortrait();
     const eng = getEngine();
-    eng?.startBotMatch?.(botDifficulty, botSide);
+    eng?.startBotMatch?.(botDifficulty, botSide, timeControlPresetId);
     setHasStartedGame(true);
     setGameMode('single');
     setActiveDialog('none');
@@ -1116,7 +1425,7 @@ export default function App() {
   const handleStartPassGame = () => {
     requestAppFullscreenPortrait();
     const eng = getEngine();
-    eng?.startPassAndPlayMatch?.(passAutoFlip);
+    eng?.startPassAndPlayMatch?.(passAutoFlip, timeControlPresetId);
     setHasStartedGame(true);
     setGameMode('pass');
     setActiveDialog('none');
@@ -1126,6 +1435,7 @@ export default function App() {
   const handleQuickMatchmaking = async () => {
     requestAppFullscreenPortrait();
     const eng = getEngine();
+    eng?.setTimeControl?.(timeControlPresetId, true);
     setMatchmakingTimedOut(false);
     setMatchmakingRemainingSec(30);
     setMatchmakingRatingWindow(150);
@@ -1191,18 +1501,24 @@ export default function App() {
     itemId: string
   ) => {
     setArmoryTab(category);
+    setArmoryPreviewCollapsed(false);
     if (category === 'types') {
       setShowcaseArchetypeId(itemId);
+      setPoliigonTargetSlot('pieces');
       setTimeout(() => setShowcaseAttackNonce((n) => n + 1), 90);
-    } else if (category === 'pieces') setShowcasePieceSkinId(itemId);
-    else if (category === 'boards') setShowcaseBoardSkinId(itemId);
-    else if (category === 'sceneries') setShowcaseSceneryId(itemId);
+    } else if (category === 'pieces') {
+      setShowcasePieceSkinId(itemId);
+      setPoliigonTargetSlot('pieces');
+    } else if (category === 'boards') {
+      setShowcaseBoardSkinId(itemId);
+      if (poliigonTargetSlot !== 'table' && poliigonTargetSlot !== 'board') {
+        setPoliigonTargetSlot('table');
+      }
+    } else if (category === 'sceneries') {
+      setShowcaseSceneryId(itemId);
+    }
 
     getEngine()?.playLobbyClickSfx?.('equip');
-    const showcaseEl = document.getElementById('skin-showcase-section');
-    if (showcaseEl) {
-      showcaseEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
   };
 
   const handleSelectOrBuyPieceType = (typeId: string) => {
@@ -1519,8 +1835,19 @@ export default function App() {
 
       {/* Floating Gold Bounty & Dramatic Kill Effect Notification */}
       {bountyToast && (
-        <div className="gold-bounty-toast" key={bountyToast.id} role="status" aria-live="polite">
-          <span className="gold-coin-glyph">{bountyToast.amount > 0 ? '◈' : '⚔'}</span>
+        <div
+          className={`gold-bounty-toast bounty-scale-in ${bountyToast.amount > 0 ? 'is-gold-bounty' : 'is-combat-alert'}`}
+          key={bountyToast.id}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="gold-coin-glyph" aria-hidden="true">
+            {bountyToast.amount > 0 ? (
+              <ItchPouchBountyIcon size={22} />
+            ) : (
+              <PlaySwordsVectorIcon size={20} />
+            )}
+          </span>
           {bountyToast.amount > 0 && (
             <>
               <span className="gold-bounty-amount">+{bountyToast.amount} Gold</span>
@@ -1570,6 +1897,8 @@ export default function App() {
 
       <div
         id="hud-top"
+        key={`hud-top-${hudEntranceEpoch}`}
+        className={hasStartedGame && activeDialog === 'none' ? 'hud-entrance-active' : ''}
         data-orientation={hudViewport.orientation}
         data-aspect-profile={hudViewport.aspectProfile}
         aria-hidden={uiHidden || activeDialog !== 'none'}
@@ -1587,13 +1916,75 @@ export default function App() {
             }}
             title="Return to Sanctum Lobby (Pauses Game)"
           >
-            ← Lobby
+            <img
+              src="/assets/ui/icons/return.png"
+              alt=""
+              className="itch-hud-inline-icon"
+              aria-hidden="true"
+            />
+            <span>Lobby</span>
           </button>
 
           <div className={`status-pill ${inCheck ? 'in-check' : ''}`} id="status-pill">
             <span className="turn-dot" id="turn-dot"></span>
             <span id="turn-text">White to Move</span>
             <span className="mode-badge" id="mode-badge">Vs Bot</span>
+          </div>
+
+          {/* Live Dual Chess Clock (Bullet · Blitz · Rapid) */}
+          <div
+            className={`hud-chess-clock-bar mode-${timeControlCategory}`}
+            id="hud-chess-clock-bar"
+            role="timer"
+            aria-label={`${timeControlCategory.toUpperCase()} Chess Clocks`}
+          >
+            <button
+              type="button"
+              className="clock-mode-tag-btn"
+              onClick={() => {
+                setMobileSheetOpen(false);
+                getEngine()?.setLobbyPaused?.(true);
+                setActiveDialog('play');
+              }}
+              title="Click to Change Game Mode (Bullet, Blitz, Rapid)"
+            >
+              <span className="clock-mode-icon" aria-hidden="true">
+                {timeControlCategory === 'bullet' ? (
+                  <BulletModeVectorIcon size={13} />
+                ) : timeControlCategory === 'blitz' ? (
+                  <BlitzModeVectorIcon size={13} />
+                ) : (
+                  <RapidModeVectorIcon size={13} />
+                )}
+              </span>
+              <span className="clock-mode-name">{timeControlCategory.toUpperCase()}</span>
+            </button>
+
+            <div
+              className={`clock-side-readout white-side ${activeClockTurn === 'w' ? 'is-active-turn' : ''} ${
+                whiteClockSec <= 20 ? 'is-low-time' : ''
+              }`}
+              title="White Army Remaining Time"
+            >
+              <span className="clock-side-king" aria-hidden="true">♔</span>
+              <span className="clock-side-digits" id="hud-clock-white">
+                {formatChessClock(whiteClockSec)}
+              </span>
+            </div>
+
+            <span className="clock-divider-colon" aria-hidden="true">:</span>
+
+            <div
+              className={`clock-side-readout black-side ${activeClockTurn === 'b' ? 'is-active-turn' : ''} ${
+                blackClockSec <= 20 ? 'is-low-time' : ''
+              }`}
+              title="Black Army Remaining Time"
+            >
+              <span className="clock-side-king" aria-hidden="true">♚</span>
+              <span className="clock-side-digits" id="hud-clock-black">
+                {formatChessClock(blackClockSec)}
+              </span>
+            </div>
           </div>
 
           {inCheck && (
@@ -1622,7 +2013,7 @@ export default function App() {
             title="Open Skin Reliquary"
           >
             <span className="gold-coin-glyph" aria-hidden="true">
-              <GoldCoinVectorIcon size={Math.round(13 * hudViewport.fontScale)} />
+              <GoldCoinVectorIcon size={Math.round(14 * hudViewport.fontScale)} />
             </span>
             <span className="gold-wallet-amount">{economy.gold}</span>
           </button>
@@ -1635,7 +2026,8 @@ export default function App() {
             onClick={() => getEngine()?.setCameraPreset?.('player')}
             title="Flip / Reset Player Camera"
           >
-            Cam ↻
+            <ItchRotateCameraIcon size={13} />
+            <span>Cam</span>
           </button>
           <button
             type="button"
@@ -1643,7 +2035,13 @@ export default function App() {
             onClick={handleToggleSfx}
             title="Toggle Sound Effects"
           >
-            {sfxEnabled ? 'SFX' : 'Mute'}
+            <img
+              src={sfxEnabled ? '/assets/ui/icons/audioOn.png' : '/assets/ui/icons/audioOff.png'}
+              alt=""
+              className="itch-hud-inline-icon"
+              aria-hidden="true"
+            />
+            <span>{sfxEnabled ? 'SFX' : 'Mute'}</span>
           </button>
           <button
             type="button"
@@ -1980,7 +2378,9 @@ export default function App() {
                 </div>
                 <div className="gateway-card-content">
                   <span className="gateway-card-title">PLAY</span>
-                  <span className="gateway-card-sub">Play vs Bots · Online PvP · 2P Game</span>
+                  <span className="gateway-card-sub">
+                    Bullet · Blitz · Rapid · Play vs Bots · Online PvP · 2P
+                  </span>
                 </div>
                 <span className="gateway-card-chevron" aria-hidden="true">›</span>
               </button>
@@ -2143,6 +2543,7 @@ export default function App() {
 
             <div className="sanctum-tapered-rule" aria-hidden="true"></div>
 
+            <div className="sanctum-modal-body arena-modal-scroll-body">
             {/* Engraved 4-Slot Sanctum Loadout Ledger */}
             <div className="sanctum-loadout-ledger" aria-label="Equipped Sanctum Loadout">
               <button
@@ -2206,39 +2607,140 @@ export default function App() {
               </button>
             </div>
 
-            <div className="sanctum-tab-bar" role="tablist">
+            <div
+              className="sanctum-tab-bar segmented-tabs"
+              role="tablist"
+              aria-label="Match Mode Tabs"
+              onKeyDown={(e) => {
+                const order: Array<'online' | 'bot' | 'pass'> = ['online', 'bot', 'pass'];
+                const idx = order.indexOf(arenaTab);
+                if (e.key === 'ArrowRight') {
+                  e.preventDefault();
+                  setArenaTab(order[(idx + 1) % order.length]);
+                } else if (e.key === 'ArrowLeft') {
+                  e.preventDefault();
+                  setArenaTab(order[(idx - 1 + order.length) % order.length]);
+                }
+              }}
+            >
               <button
                 type="button"
                 role="tab"
+                tabIndex={arenaTab === 'online' ? 0 : -1}
                 aria-selected={arenaTab === 'online'}
                 className={`sanctum-tab-btn ${arenaTab === 'online' ? 'active' : ''}`}
                 onClick={() => setArenaTab('online')}
               >
-                <span className="tab-numeral">I.</span> ONLINE
+                <span className="tab-numeral">I.</span>
+                <span>Online Match</span>
               </button>
               <button
                 type="button"
                 role="tab"
+                tabIndex={arenaTab === 'bot' ? 0 : -1}
                 aria-selected={arenaTab === 'bot'}
                 className={`sanctum-tab-btn ${arenaTab === 'bot' ? 'active' : ''}`}
                 onClick={() => setArenaTab('bot')}
               >
-                <span className="tab-numeral">II.</span> PLAY W BOTS
+                <span className="tab-numeral">II.</span>
+                <span>Play vs Bots</span>
               </button>
               <button
                 type="button"
                 role="tab"
+                tabIndex={arenaTab === 'pass' ? 0 : -1}
                 aria-selected={arenaTab === 'pass'}
                 className={`sanctum-tab-btn ${arenaTab === 'pass' ? 'active' : ''}`}
                 onClick={() => setArenaTab('pass')}
               >
-                <span className="tab-numeral">III.</span> 2P GAME
+                <span className="tab-numeral">III.</span>
+                <span>2P Pass &amp; Play</span>
               </button>
+            </div>
+
+            {/* BULLET · BLITZ · RAPID GAME MODE & TIME CONTROL SELECTOR */}
+            <div className="time-control-modes-section" aria-label="Select Game Mode Time Control">
+              <div className="sanctum-section-head time-control-section-head">
+                <span className="sanctum-field-label">Select Game Mode (Time Control)</span>
+                <span className="sanctum-field-note">
+                  Active Mode:{' '}
+                  <strong>
+                    {TIME_CONTROL_CATEGORIES.find((c) => c.id === timeControlCategory)?.name} (
+                    {TIME_CONTROL_CATEGORIES.flatMap((c) => c.presets).find(
+                      (p) => p.id === timeControlPresetId
+                    )?.shortLabel || '5 Min'}
+                    )
+                  </strong>
+                </span>
+              </div>
+
+              <div className="time-control-cards-grid">
+                {TIME_CONTROL_CATEGORIES.map((modeCat) => {
+                  const isCatSelected = timeControlCategory === modeCat.id;
+                  return (
+                    <div
+                      key={modeCat.id}
+                      className={`difficulty-card time-mode-card mode-${modeCat.id} ${
+                        isCatSelected ? 'selected' : ''
+                      }`}
+                      onClick={() => handleSelectTimeControlCategory(modeCat.id)}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isCatSelected}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSelectTimeControlCategory(modeCat.id);
+                        }
+                      }}
+                    >
+                      <div className="time-mode-card-top">
+                        <div className="time-mode-icon-badge" aria-hidden="true">
+                          {modeCat.id === 'bullet' ? (
+                            <BulletModeVectorIcon size={24} />
+                          ) : modeCat.id === 'blitz' ? (
+                            <BlitzModeVectorIcon size={24} />
+                          ) : (
+                            <RapidModeVectorIcon size={24} />
+                          )}
+                        </div>
+                        <div className="time-mode-titles">
+                          <div className="difficulty-card-kicker">
+                            <span>{modeCat.rangeTag}</span>
+                          </div>
+                          <div className="difficulty-name">{modeCat.name}</div>
+                        </div>
+                      </div>
+
+                      <p className="difficulty-desc time-mode-desc">{modeCat.description}</p>
+
+                      <div
+                        className="time-preset-pills-row"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {modeCat.presets.map((preset) => {
+                          const isPresetActive = timeControlPresetId === preset.id;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              className={`time-preset-pill-btn ${isPresetActive ? 'active' : ''}`}
+                              onClick={() => handleSelectTimeControlPreset(preset)}
+                            >
+                              {preset.shortLabel}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* TAB 1: PLAY VS BOT (Easy, Medium, Hard) */}
             {arenaTab === 'bot' && (
-              <div className="sanctum-modal-body">
+              <div className="arena-tab-section-stack">
                 <div className="sanctum-section-head">
                   <span className="sanctum-field-label">Select Opponent Rank</span>
                   <span className="sanctum-field-note">
@@ -2340,7 +2842,7 @@ export default function App() {
 
             {/* TAB 2: PLAYER VS PLAYER (ONLINE MATCHMAKING + ROOM CODES) */}
             {arenaTab === 'online' && (
-              <div className="sanctum-modal-body">
+              <div className="arena-tab-section-stack">
                 <div className="online-section-box">
                   <div className="online-section-header">
                     <div>
@@ -2584,7 +3086,7 @@ export default function App() {
 
             {/* TAB 3: P1 VS P2 (1 PHONE PASS-AND-PLAY WITH AUTO SWITCHING) */}
             {arenaTab === 'pass' && (
-              <div className="sanctum-modal-body">
+              <div className="arena-tab-section-stack">
                 <div className="pass-mode-explainer">
                   <h3 className="pass-explainer-title">Two Masters on One Device</h3>
                   <p className="pass-explainer-desc">
@@ -2642,6 +3144,7 @@ export default function App() {
                 </button>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -2655,7 +3158,7 @@ export default function App() {
           onClick={() => setActiveDialog(hasStartedGame ? 'none' : 'arena')}
         >
           <div
-            className="sanctum-modal-card wide"
+            className="sanctum-modal-card wide armory-modal-card"
             id="skin-shop-drawer"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
@@ -2672,15 +3175,13 @@ export default function App() {
                 <div className="sanctum-modal-kicker">Sanctum Vault &amp; Reliquary</div>
                 <h2 className="sanctum-modal-title" id="armory-modal-title">Armory of the Altar</h2>
                 <div className="sanctum-record-line">
-                  <span>Pawn <strong>+15G</strong></span>
+                  <span>Equipped Set: <strong>{equippedArchetypeObj.name}</strong></span>
                   <span aria-hidden="true">·</span>
-                  <span>Knight / Bishop <strong>+35G</strong></span>
+                  <span>Scenery: <strong>{equippedSceneryObj.name}</strong></span>
                   <span aria-hidden="true">·</span>
-                  <span>Rook <strong>+55G</strong></span>
+                  <span>Board: <strong>{equippedBoardSkinObj.name}</strong></span>
                   <span aria-hidden="true">·</span>
-                  <span>Queen <strong>+95G</strong></span>
-                  <span aria-hidden="true">·</span>
-                  <span>Match Win <strong>+150G–350G</strong></span>
+                  <span>Finish: <strong>{equippedPieceSkinObj.name}</strong></span>
                 </div>
               </div>
 
@@ -2689,6 +3190,15 @@ export default function App() {
                   <span className="treasury-label">Treasury</span>
                   <span className="treasury-amount">{economy.gold} Gold</span>
                 </div>
+                {hasStartedGame && (
+                  <button
+                    type="button"
+                    className="sanctum-modal-close"
+                    onClick={() => setActiveDialog('none')}
+                  >
+                    Resume Match
+                  </button>
+                )}
                 <button
                   type="button"
                   className="sanctum-modal-close gold-trim"
@@ -2701,378 +3211,670 @@ export default function App() {
 
             <div className="sanctum-tapered-rule" aria-hidden="true"></div>
 
-            {/* DEDICATED 3D INSPECTION SHOWCASE WINDOW */}
-            <div className="skin-showcase-section" id="skin-showcase-section">
-              <div className="showcase-header-bar">
-                <div className="showcase-header-left">
-                  <span className="showcase-kicker">✦ 3D LIVE INSPECTION PEDESTAL ✦</span>
-                  <span className="showcase-title">
-                    {armoryTab === 'types'
-                      ? showcaseArchetypeObj.name
-                      : armoryTab === 'sceneries'
-                        ? showcaseSceneryObj.name
-                        : armoryTab === 'boards'
-                          ? showcaseBoardSkinObj.name
-                          : showcasePieceSkinObj.name}
-                  </span>
-                </div>
-                <span className="showcase-instruction">
-                  Drag to Orbit 360° · Scroll to Zoom
-                </span>
-              </div>
-
-              <SkinShowcaseCanvas
-                activeTab={armoryTab}
-                archetype={showcaseArchetypeObj}
-                pieceSkin={showcasePieceSkinObj}
-                boardSkin={showcaseBoardSkinObj}
-                scenery={showcaseSceneryObj}
-                attackPreviewNonce={showcaseAttackNonce}
-              />
-            </div>
-
-            <div className="sanctum-tab-bar" role="tablist">
+            {/* Segmented Category Tab Bar with Proper Keyboard & Mouse Tabbing */}
+            <div
+              className="sanctum-tab-bar segmented-tabs armory-tabs"
+              role="tablist"
+              aria-label="Armory Categories"
+              onKeyDown={(e) => {
+                const order: Array<'types' | 'sceneries' | 'boards' | 'pieces'> = [
+                  'types',
+                  'sceneries',
+                  'boards',
+                  'pieces'
+                ];
+                const idx = order.indexOf(armoryTab);
+                if (e.key === 'ArrowRight') {
+                  e.preventDefault();
+                  setArmoryTab(order[(idx + 1) % order.length]);
+                } else if (e.key === 'ArrowLeft') {
+                  e.preventDefault();
+                  setArmoryTab(order[(idx - 1 + order.length) % order.length]);
+                }
+              }}
+            >
               <button
                 type="button"
                 role="tab"
+                tabIndex={armoryTab === 'types' ? 0 : -1}
                 aria-selected={armoryTab === 'types'}
                 className={`sanctum-tab-btn ${armoryTab === 'types' ? 'active' : ''}`}
-                onClick={() => setArmoryTab('types')}
+                onClick={() => {
+                  setArmoryTab('types');
+                  setPoliigonTargetSlot('pieces');
+                }}
               >
-                <span className="tab-numeral">I.</span> PIECE SETS ({economy.ownedPieceTypes.length}/{PIECE_ARCHETYPES.length})
+                <span className="tab-numeral">I.</span>
+                <span>Piece Sets</span>
+                <span className="tab-count-badge">
+                  {economy.ownedPieceTypes.length}/{PIECE_ARCHETYPES.length}
+                </span>
               </button>
               <button
                 type="button"
                 role="tab"
+                tabIndex={armoryTab === 'sceneries' ? 0 : -1}
                 aria-selected={armoryTab === 'sceneries'}
                 className={`sanctum-tab-btn ${armoryTab === 'sceneries' ? 'active' : ''}`}
                 onClick={() => setArmoryTab('sceneries')}
               >
-                <span className="tab-numeral">II.</span> Sceneries ({economy.ownedSceneries.length}/{WORLD_SCENERIES.length})
+                <span className="tab-numeral">II.</span>
+                <span>Sceneries</span>
+                <span className="tab-count-badge">
+                  {economy.ownedSceneries.length}/{WORLD_SCENERIES.length}
+                </span>
               </button>
               <button
                 type="button"
                 role="tab"
+                tabIndex={armoryTab === 'boards' ? 0 : -1}
                 aria-selected={armoryTab === 'boards'}
                 className={`sanctum-tab-btn ${armoryTab === 'boards' ? 'active' : ''}`}
-                onClick={() => setArmoryTab('boards')}
+                onClick={() => {
+                  setArmoryTab('boards');
+                  setPoliigonTargetSlot('table');
+                }}
               >
-                <span className="tab-numeral">III.</span> Boards ({economy.ownedBoardSkins.length}/{BOARD_SKINS.length})
+                <span className="tab-numeral">III.</span>
+                <span>Altar Boards</span>
+                <span className="tab-count-badge">
+                  {economy.ownedBoardSkins.length}/{BOARD_SKINS.length}
+                </span>
               </button>
               <button
                 type="button"
                 role="tab"
+                tabIndex={armoryTab === 'pieces' ? 0 : -1}
                 aria-selected={armoryTab === 'pieces'}
                 className={`sanctum-tab-btn ${armoryTab === 'pieces' ? 'active' : ''}`}
-                onClick={() => setArmoryTab('pieces')}
+                onClick={() => {
+                  setArmoryTab('pieces');
+                  setPoliigonTargetSlot('pieces');
+                }}
               >
-                <span className="tab-numeral">IV.</span> Finishes ({economy.ownedPieceSkins.length}/{PIECE_SKINS.length})
+                <span className="tab-numeral">IV.</span>
+                <span>Finishes</span>
+                <span className="tab-count-badge">
+                  {economy.ownedPieceSkins.length}/{PIECE_SKINS.length}
+                </span>
               </button>
             </div>
 
-            {armoryTab === 'types' && (
-              <div className="skin-grid">
-                {PIECE_ARCHETYPES.map((arch) => {
-                  const isOwned = economy.ownedPieceTypes.includes(arch.id);
-                  const isEquipped = economy.activePieceType === arch.id;
-                  const isInspecting = showcaseArchetypeId === arch.id;
-                  const canAfford = economy.gold >= arch.price;
+            {/* TWO-COLUMN MASTER-DETAIL SPLIT WORKSPACE (Preview Left + All Sets Right) */}
+            <div className="armory-split-layout" id="armory-scroll-body">
+              {/* LEFT PANE: 3D LIVE INSPECTION PEDESTAL & MATERIAL STUDIO */}
+              <div
+                className={`armory-preview-pane ${armoryPreviewCollapsed ? 'is-collapsed' : ''}`}
+                id="skin-showcase-section"
+              >
+                <div className="showcase-header-bar">
+                  <div className="showcase-header-left">
+                    <span className="showcase-kicker">✦ 3D LIVE STUDIO</span>
+                    <span className="showcase-title">
+                      {armoryTab === 'types'
+                        ? showcaseArchetypeObj.name
+                        : armoryTab === 'sceneries'
+                          ? showcaseSceneryObj.name
+                          : armoryTab === 'boards'
+                            ? showcaseBoardSkinObj.name
+                            : showcasePieceSkinObj.name}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="showcase-collapse-mobile-btn"
+                    onClick={() => setArmoryPreviewCollapsed((prev) => !prev)}
+                  >
+                    {armoryPreviewCollapsed ? '▼ Show 3D Preview' : '▲ Compact 3D'}
+                  </button>
+                </div>
 
-                  return (
-                    <div
-                      key={arch.id}
-                      className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
-                      onClick={() => handleInspectInShowcase('types', arch.id)}
-                    >
-                      <div className="skin-swatch-row">
-                        <span
-                          className="skin-kicker-tag"
-                          style={{ color: arch.flashColorHex }}
-                        >
-                          {arch.badge}
+                {!armoryPreviewCollapsed && (
+                  <>
+                    <SkinShowcaseCanvas
+                      activeTab={armoryTab}
+                      archetype={showcaseArchetypeObj}
+                      pieceSkin={showcasePieceSkinObj}
+                      boardSkin={showcaseBoardSkinObj}
+                      scenery={showcaseSceneryObj}
+                      attackPreviewNonce={showcaseAttackNonce}
+                      poliigonOverrideNonce={poliigonOverrideNonce}
+                      paused={armoryPreviewCollapsed}
+                    />
+
+                    {/* Quick Active Inspected Item Status & Action Bar */}
+                    <div className="showcase-active-summary">
+                      <div className="showcase-summary-text">
+                        <span className="showcase-summary-sub">
+                          {armoryTab === 'types'
+                            ? `⚔ ${showcaseArchetypeObj.strikeStyle} · ✦ ${showcaseArchetypeObj.shatterStyle}`
+                            : armoryTab === 'sceneries'
+                              ? `${showcaseSceneryObj.landmarksLabel} · ${showcaseSceneryObj.weatherLabel}`
+                              : armoryTab === 'boards'
+                                ? `Sanctum Chamber: ${showcaseBoardSkinObj.environmentLabel}`
+                                : showcasePieceSkinObj.subtitle}
                         </span>
-                        <span className="skin-price-tag">
-                          {isOwned ? 'Unlocked' : `${arch.price} Gold`}
-                        </span>
                       </div>
-
-                      <div className="skin-card-title">{arch.name}</div>
-                      <p className="skin-card-sub">{arch.subtitle}</p>
-                      <div className="skin-meta-line">
-                        <span>⚔ Attack: <strong>{arch.strikeStyle}</strong></span>
-                      </div>
-                      <div className="skin-meta-line">
-                        <span>✦ 3D Effect: <strong>{arch.shatterStyle}</strong></span>
-                      </div>
-
-                      <div className="skin-card-actions">
+                      {armoryTab === 'types' && (
                         <button
                           type="button"
-                          className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleInspectInShowcase('types', arch.id);
-                          }}
-                        >
-                          <Eye3DPreviewVectorIcon size={15} />
-                          <span>{isInspecting ? '⚔ Replay Attack & VFX' : '⚔ Preview Attack & 3D'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`skin-action-btn ${
-                            isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                          className={`showcase-quick-equip-btn ${
+                            economy.activePieceType === showcaseArchetypeObj.id ? 'equipped' : ''
                           }`}
-                          disabled={!isOwned && !canAfford}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectOrBuyPieceType(arch.id);
-                          }}
+                          disabled={
+                            !economy.ownedPieceTypes.includes(showcaseArchetypeObj.id) &&
+                            economy.gold < showcaseArchetypeObj.price
+                          }
+                          onClick={() => handleSelectOrBuyPieceType(showcaseArchetypeObj.id)}
                         >
-                          {isEquipped
-                            ? 'Equipped'
-                            : isOwned
-                            ? 'Equip Piece Set'
-                            : canAfford
-                            ? `Unlock · ${arch.price} Gold`
-                            : `Requires ${arch.price} Gold`}
+                          {economy.activePieceType === showcaseArchetypeObj.id
+                            ? '✓ Equipped Set'
+                            : economy.ownedPieceTypes.includes(showcaseArchetypeObj.id)
+                              ? 'Equip This Set'
+                              : `Unlock · ${showcaseArchetypeObj.price}G`}
                         </button>
-                      </div>
+                      )}
+                      {armoryTab === 'sceneries' && (
+                        <button
+                          type="button"
+                          className={`showcase-quick-equip-btn ${
+                            economy.activeScenery === showcaseSceneryObj.id ? 'equipped' : ''
+                          }`}
+                          disabled={
+                            !economy.ownedSceneries.includes(showcaseSceneryObj.id) &&
+                            economy.gold < showcaseSceneryObj.price
+                          }
+                          onClick={() => handleSelectOrBuyWorldScenery(showcaseSceneryObj.id, true)}
+                        >
+                          {economy.activeScenery === showcaseSceneryObj.id
+                            ? '✓ Equipped Realm'
+                            : economy.ownedSceneries.includes(showcaseSceneryObj.id)
+                              ? 'Equip Scenery'
+                              : `Unlock · ${showcaseSceneryObj.price}G`}
+                        </button>
+                      )}
+                      {armoryTab === 'boards' && (
+                        <button
+                          type="button"
+                          className={`showcase-quick-equip-btn ${
+                            economy.activeBoardSkin === showcaseBoardSkinObj.id ? 'equipped' : ''
+                          }`}
+                          disabled={
+                            !economy.ownedBoardSkins.includes(showcaseBoardSkinObj.id) &&
+                            economy.gold < showcaseBoardSkinObj.price
+                          }
+                          onClick={() => handleSelectOrBuyBoardSkin(showcaseBoardSkinObj.id)}
+                        >
+                          {economy.activeBoardSkin === showcaseBoardSkinObj.id
+                            ? '✓ Equipped Board'
+                            : economy.ownedBoardSkins.includes(showcaseBoardSkinObj.id)
+                              ? 'Equip Board'
+                              : `Unlock · ${showcaseBoardSkinObj.price}G`}
+                        </button>
+                      )}
+                      {armoryTab === 'pieces' && (
+                        <button
+                          type="button"
+                          className={`showcase-quick-equip-btn ${
+                            economy.activePieceSkin === showcasePieceSkinObj.id ? 'equipped' : ''
+                          }`}
+                          disabled={
+                            !economy.ownedPieceSkins.includes(showcasePieceSkinObj.id) &&
+                            economy.gold < showcasePieceSkinObj.price
+                          }
+                          onClick={() => handleSelectOrBuyPieceSkin(showcasePieceSkinObj.id)}
+                        >
+                          {economy.activePieceSkin === showcasePieceSkinObj.id
+                            ? '✓ Equipped Finish'
+                            : economy.ownedPieceSkins.includes(showcasePieceSkinObj.id)
+                              ? 'Equip Finish'
+                              : `Unlock · ${showcasePieceSkinObj.price}G`}
+                        </button>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
 
-            {armoryTab === 'pieces' && (
-              <div className="skin-grid">
-                {PIECE_SKINS.map((skin) => {
-                  const isOwned = economy.ownedPieceSkins.includes(skin.id);
-                  const isEquipped = economy.activePieceSkin === skin.id;
-                  const isInspecting = showcasePieceSkinId === skin.id;
-                  const canAfford = economy.gold >= skin.price;
-
-                  return (
-                    <div
-                      key={skin.id}
-                      className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
-                      onClick={() => handleInspectInShowcase('pieces', skin.id)}
-                    >
-                      <div className="skin-swatch-row">
-                        <div className="skin-swatch-pair">
-                          <span
-                            className="skin-orb"
-                            style={{
-                              background: `radial-gradient(circle at 32% 30%, #ffffff, ${skin.whiteHex} 58%, #1a1c22 100%)`,
-                              borderColor: skin.trimHex
-                            }}
-                            title="White Army Material"
+                    {/* POLIIGON FREE PBR TEXTURE SUITE BAR (INDEPENDENT PER-PART TEXTURE ASSIGNMENT) */}
+                    <div className="poliigon-pbr-studio-bar">
+                      <div className="poliigon-pbr-top-row">
+                        <span className="poliigon-pbr-label">
+                          ✦ Poliigon PBR Texture — Choose Target Part:
+                        </span>
+                        <div className="poliigon-pbr-top-actions">
+                          {(poliigonSlotOverrides.pieces !== 'auto' ||
+                            poliigonSlotOverrides.table !== 'auto' ||
+                            poliigonSlotOverrides.board !== 'auto' ||
+                            poliigonSlotOverrides.trim !== 'auto') && (
+                            <button
+                              type="button"
+                              className="poliigon-pbr-reset-btn"
+                              onClick={handleResetAllPoliigonSlots}
+                              title="Reset all parts back to their automatic matched Poliigon PBR textures"
+                            >
+                              Reset All Auto
+                            </button>
+                          )}
+                          <input
+                            ref={poliigonUploadInputRef}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            style={{ display: 'none' }}
+                            onChange={handlePoliigonFilesUpload}
                           />
-                          <span
-                            className="skin-orb"
-                            style={{
-                              background: `radial-gradient(circle at 32% 30%, ${skin.bladeHex}, ${skin.blackHex} 62%, #050608 100%)`,
-                              borderColor: skin.trimHex
-                            }}
-                            title="Black Army Material"
-                          />
+                          <button
+                            type="button"
+                            className="poliigon-pbr-upload-btn"
+                            onClick={() => poliigonUploadInputRef.current?.click()}
+                            title="Load downloaded Poliigon _Color, _NormalGL, and _Roughness image files for the selected part"
+                          >
+                            + Load PBR Maps
+                          </button>
                         </div>
-                        <span className="skin-price-tag">
-                          {isOwned ? 'Unlocked' : `${skin.price} Gold`}
-                        </span>
                       </div>
 
-                      <div className="skin-card-title">{skin.name}</div>
-                      <p className="skin-card-sub">{skin.subtitle}</p>
+                      {/* 4 Independent Surface Target Tabs (Piece Set, Table & Frame, Board Tiles, Trim & Blades) */}
+                      <div className="poliigon-target-slot-row" role="tablist" aria-label="Surface Target to Customize">
+                        {(
+                          [
+                            { id: 'pieces', label: '♟ Piece Set' },
+                            { id: 'table', label: '🏛 Table & Frame' },
+                            { id: 'board', label: '▦ Board Tiles' },
+                            { id: 'trim', label: '⚔ Trim & Blades' }
+                          ] as const
+                        ).map((slot) => {
+                          const assignedId = poliigonSlotOverrides[slot.id] || 'auto';
+                          const isTargetActive = poliigonTargetSlot === slot.id;
+                          const isCustomized = assignedId !== 'auto';
+                          return (
+                            <button
+                              key={slot.id}
+                              type="button"
+                              role="tab"
+                              aria-selected={isTargetActive}
+                              className={`poliigon-target-slot-btn ${isTargetActive ? 'active' : ''} ${
+                                isCustomized ? 'customized' : ''
+                              }`}
+                              onClick={() => {
+                                setPoliigonTargetSlot(slot.id);
+                                if (slot.id === 'table' || slot.id === 'board') {
+                                  if (armoryTab !== 'boards') setArmoryTab('boards');
+                                } else if (armoryTab === 'boards') {
+                                  setArmoryTab('types');
+                                }
+                              }}
+                            >
+                              <span>{slot.label}</span>
+                              <span className="poliigon-slot-state-dot">
+                                {isCustomized ? 'Custom' : 'Auto'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
 
-                      <div className="skin-card-actions">
-                        <button
-                          type="button"
-                          className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleInspectInShowcase('pieces', skin.id);
-                          }}
-                        >
-                          <Eye3DPreviewVectorIcon size={15} />
-                          <span>{isInspecting ? 'Showing in 3D' : 'Live 3D Preview'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`skin-action-btn ${
-                            isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
-                          }`}
-                          disabled={!isOwned && !canAfford}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectOrBuyPieceSkin(skin.id);
-                          }}
-                        >
-                          {isEquipped
-                            ? 'Equipped'
-                            : isOwned
-                            ? 'Equip Finish'
-                            : canAfford
-                            ? `Unlock · ${skin.price} Gold`
-                            : `Requires ${skin.price} Gold`}
-                        </button>
+                      <div className="poliigon-pbr-chip-scroll" role="group" aria-label="Poliigon PBR Presets">
+                        {POLIIGON_PRESET_CATALOG.map((preset) => {
+                          const isSelected = activePoliigonPreset === preset.id;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => handleSelectPoliigonPreset(preset.id)}
+                              title={`${preset.name} — ${preset.description}`}
+                              className={`poliigon-pbr-chip ${isSelected ? 'active' : ''}`}
+                            >
+                              {preset.id === 'auto' ? '✦ Auto PBR' : preset.code}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
-                  );
-                })}
+                  </>
+                )}
               </div>
-            )}
 
-            {armoryTab === 'boards' && (
-              <div className="skin-grid">
-                {BOARD_SKINS.map((bSkin) => {
-                  const isOwned = economy.ownedBoardSkins.includes(bSkin.id);
-                  const isEquipped = economy.activeBoardSkin === bSkin.id;
-                  const isInspecting = showcaseBoardSkinId === bSkin.id;
-                  const canAfford = economy.gold >= bSkin.price;
+              {/* RIGHT PANE: SCROLLABLE CATALOG OF ALL SETS & SKINS */}
+              <div className="armory-catalog-pane">
+                <div className="catalog-pane-header">
+                  <span className="catalog-pane-title">
+                    {armoryTab === 'types'
+                      ? `All Sculpted Piece Sets (${PIECE_ARCHETYPES.length})`
+                      : armoryTab === 'sceneries'
+                        ? `All 3D World Sceneries (${WORLD_SCENERIES.length})`
+                        : armoryTab === 'boards'
+                          ? `All Altar Boards & Chambers (${BOARD_SKINS.length})`
+                          : `All Stone & Metal Finishes (${PIECE_SKINS.length})`}
+                  </span>
+                  <span className="catalog-pane-hint">
+                    Click any card to preview in 3D or equip
+                  </span>
+                </div>
 
-                  return (
-                    <div
-                      key={bSkin.id}
-                      className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
-                      onClick={() => handleInspectInShowcase('boards', bSkin.id)}
-                    >
-                      <div className="skin-swatch-row">
+                {armoryTab === 'types' && (
+                  <div className="skin-grid">
+                    {PIECE_ARCHETYPES.map((arch) => {
+                      const isOwned = economy.ownedPieceTypes.includes(arch.id);
+                      const isEquipped = economy.activePieceType === arch.id;
+                      const isInspecting = showcaseArchetypeId === arch.id;
+                      const canAfford = economy.gold >= arch.price;
+
+                      return (
                         <div
-                          className="board-mini-preview"
-                          style={{ borderColor: bSkin.borderHex }}
+                          key={arch.id}
+                          className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
+                          onClick={() => handleInspectInShowcase('types', arch.id)}
                         >
-                          <span style={{ background: bSkin.lightSqHex }} />
-                          <span style={{ background: bSkin.darkSqHex }} />
-                          <span style={{ background: bSkin.darkSqHex }} />
-                          <span style={{ background: bSkin.lightSqHex }} />
+                          <div className="skin-swatch-row">
+                            <span
+                              className="skin-kicker-tag"
+                              style={{ color: arch.flashColorHex }}
+                            >
+                              {arch.badge}
+                            </span>
+                            <div className="skin-status-badges">
+                              {isInspecting && (
+                                <span className="skin-inspecting-pill">3D Active</span>
+                              )}
+                              <span className="skin-price-tag">
+                                {isEquipped ? '✓ Equipped' : isOwned ? 'Unlocked' : `${arch.price} Gold`}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="skin-card-title">{arch.name}</div>
+                          <p className="skin-card-sub">{arch.subtitle}</p>
+                          <div className="skin-meta-line">
+                            <span>⚔ Attack: <strong>{arch.strikeStyle}</strong></span>
+                          </div>
+                          <div className="skin-meta-line">
+                            <span>✦ 3D Effect: <strong>{arch.shatterStyle}</strong></span>
+                          </div>
+
+                          <div className="skin-card-actions">
+                            <button
+                              type="button"
+                              className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInspectInShowcase('types', arch.id);
+                              }}
+                            >
+                              <Eye3DPreviewVectorIcon size={14} />
+                              <span>{isInspecting ? '⚔ Replay Attack' : '⚔ Preview 3D'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`skin-action-btn ${
+                                isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                              }`}
+                              disabled={!isOwned && !canAfford}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectOrBuyPieceType(arch.id);
+                              }}
+                            >
+                              {isEquipped
+                                ? '✓ Equipped'
+                                : isOwned
+                                ? 'Equip Set'
+                                : canAfford
+                                ? `Unlock · ${arch.price}G`
+                                : `Need ${arch.price}G`}
+                            </button>
+                          </div>
                         </div>
-                        <span className="skin-price-tag">
-                          {isOwned ? 'Unlocked' : `${bSkin.price} Gold`}
-                        </span>
-                      </div>
+                      );
+                    })}
+                  </div>
+                )}
 
-                      <div className="skin-card-title">{bSkin.name}</div>
-                      <p className="skin-card-sub">{bSkin.subtitle}</p>
-                      <div className="skin-meta-line">
-                        <span>Sanctum Chamber: <strong>{bSkin.environmentLabel}</strong></span>
-                      </div>
+                {armoryTab === 'pieces' && (
+                  <div className="skin-grid">
+                    {PIECE_SKINS.map((skin) => {
+                      const isOwned = economy.ownedPieceSkins.includes(skin.id);
+                      const isEquipped = economy.activePieceSkin === skin.id;
+                      const isInspecting = showcasePieceSkinId === skin.id;
+                      const canAfford = economy.gold >= skin.price;
 
-                      <div className="skin-card-actions">
-                        <button
-                          type="button"
-                          className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleInspectInShowcase('boards', bSkin.id);
-                          }}
+                      return (
+                        <div
+                          key={skin.id}
+                          className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
+                          onClick={() => handleInspectInShowcase('pieces', skin.id)}
                         >
-                          <Eye3DPreviewVectorIcon size={15} />
-                          <span>{isInspecting ? 'Showing in 3D' : 'Live 3D Preview'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`skin-action-btn ${
-                            isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
-                          }`}
-                          disabled={!isOwned && !canAfford}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectOrBuyBoardSkin(bSkin.id);
-                          }}
+                          <div className="skin-swatch-row">
+                            <div className="skin-swatch-pair">
+                              <span
+                                className="skin-orb"
+                                style={{
+                                  background: `radial-gradient(circle at 32% 30%, #ffffff, ${skin.whiteHex} 58%, #1a1c22 100%)`,
+                                  borderColor: skin.trimHex
+                                }}
+                                title="White Army Material"
+                              />
+                              <span
+                                className="skin-orb"
+                                style={{
+                                  background: `radial-gradient(circle at 32% 30%, ${skin.bladeHex}, ${skin.blackHex} 62%, #050608 100%)`,
+                                  borderColor: skin.trimHex
+                                }}
+                                title="Black Army Material"
+                              />
+                            </div>
+                            <div className="skin-status-badges">
+                              {isInspecting && (
+                                <span className="skin-inspecting-pill">3D Active</span>
+                              )}
+                              <span className="skin-price-tag">
+                                {isEquipped ? '✓ Equipped' : isOwned ? 'Unlocked' : `${skin.price} Gold`}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="skin-card-title">{skin.name}</div>
+                          <p className="skin-card-sub">{skin.subtitle}</p>
+
+                          <div className="skin-card-actions">
+                            <button
+                              type="button"
+                              className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInspectInShowcase('pieces', skin.id);
+                              }}
+                            >
+                              <Eye3DPreviewVectorIcon size={14} />
+                              <span>{isInspecting ? 'Showing in 3D' : 'Preview 3D'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`skin-action-btn ${
+                                isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                              }`}
+                              disabled={!isOwned && !canAfford}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectOrBuyPieceSkin(skin.id);
+                              }}
+                            >
+                              {isEquipped
+                                ? '✓ Equipped'
+                                : isOwned
+                                ? 'Equip Finish'
+                                : canAfford
+                                ? `Unlock · ${skin.price}G`
+                                : `Need ${skin.price}G`}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {armoryTab === 'boards' && (
+                  <div className="skin-grid">
+                    {BOARD_SKINS.map((bSkin) => {
+                      const isOwned = economy.ownedBoardSkins.includes(bSkin.id);
+                      const isEquipped = economy.activeBoardSkin === bSkin.id;
+                      const isInspecting = showcaseBoardSkinId === bSkin.id;
+                      const canAfford = economy.gold >= bSkin.price;
+
+                      return (
+                        <div
+                          key={bSkin.id}
+                          className={`skin-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
+                          onClick={() => handleInspectInShowcase('boards', bSkin.id)}
                         >
-                          {isEquipped
-                            ? 'Equipped'
-                            : isOwned
-                            ? 'Equip Board & Chamber'
-                            : canAfford
-                            ? `Unlock · ${bSkin.price} Gold`
-                            : `Requires ${bSkin.price} Gold`}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                          <div className="skin-swatch-row">
+                            <div
+                              className="board-mini-preview"
+                              style={{ borderColor: bSkin.borderHex }}
+                            >
+                              <span style={{ background: bSkin.lightSqHex }} />
+                              <span style={{ background: bSkin.darkSqHex }} />
+                              <span style={{ background: bSkin.darkSqHex }} />
+                              <span style={{ background: bSkin.lightSqHex }} />
+                            </div>
+                            <div className="skin-status-badges">
+                              {isInspecting && (
+                                <span className="skin-inspecting-pill">3D Active</span>
+                              )}
+                              <span className="skin-price-tag">
+                                {isEquipped ? '✓ Equipped' : isOwned ? 'Unlocked' : `${bSkin.price} Gold`}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="skin-card-title">{bSkin.name}</div>
+                          <p className="skin-card-sub">{bSkin.subtitle}</p>
+                          <div className="skin-meta-line">
+                            <span>Sanctum Chamber: <strong>{bSkin.environmentLabel}</strong></span>
+                          </div>
+
+                          <div className="skin-card-actions">
+                            <button
+                              type="button"
+                              className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInspectInShowcase('boards', bSkin.id);
+                              }}
+                            >
+                              <Eye3DPreviewVectorIcon size={14} />
+                              <span>{isInspecting ? 'Showing in 3D' : 'Preview 3D'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`skin-action-btn ${
+                                isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                              }`}
+                              disabled={!isOwned && !canAfford}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectOrBuyBoardSkin(bSkin.id);
+                              }}
+                            >
+                              {isEquipped
+                                ? '✓ Equipped'
+                                : isOwned
+                                ? 'Equip Board'
+                                : canAfford
+                                ? `Unlock · ${bSkin.price}G`
+                                : `Need ${bSkin.price}G`}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {armoryTab === 'sceneries' && (
+                  <div className="skin-grid">
+                    {WORLD_SCENERIES.map((scenery) => {
+                      const isOwned = economy.ownedSceneries.includes(scenery.id);
+                      const isEquipped = economy.activeScenery === scenery.id;
+                      const isInspecting = showcaseSceneryId === scenery.id;
+                      const canAfford = economy.gold >= scenery.price;
+
+                      return (
+                        <div
+                          key={scenery.id}
+                          className={`skin-card scenery-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
+                          onClick={() => handleInspectInShowcase('sceneries', scenery.id)}
+                        >
+                          <div
+                            className="scenery-sky-banner"
+                            style={{
+                              background: scenery.skyPreviewGradient,
+                              borderColor: scenery.accentHex
+                            }}
+                          >
+                            <span
+                              className="skin-kicker-tag scenery-badge"
+                              style={{ color: scenery.accentHex }}
+                            >
+                              {scenery.badge}
+                            </span>
+                            <div className="skin-status-badges">
+                              {isInspecting && (
+                                <span className="skin-inspecting-pill">3D Active</span>
+                              )}
+                              <span className="skin-price-tag">
+                                {isEquipped ? '✓ Equipped' : isOwned ? 'Unlocked' : `${scenery.price} Gold`}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="skin-card-title">{scenery.name}</div>
+                          <p className="skin-card-sub">{scenery.subtitle}</p>
+                          <div className="skin-meta-line">
+                            <span>Landmarks: <strong>{scenery.landmarksLabel}</strong></span>
+                          </div>
+                          <div className="skin-meta-line">
+                            <span>Atmosphere: <strong>{scenery.weatherLabel}</strong></span>
+                          </div>
+
+                          <div className="skin-card-actions">
+                            <button
+                              type="button"
+                              className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInspectInShowcase('sceneries', scenery.id);
+                              }}
+                            >
+                              <Eye3DPreviewVectorIcon size={14} />
+                              <span>{isInspecting ? 'Showing in 3D' : 'Preview 3D'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`skin-action-btn ${
+                                isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
+                              }`}
+                              disabled={!isOwned && !canAfford}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectOrBuyWorldScenery(scenery.id, true);
+                              }}
+                            >
+                              {isEquipped
+                                ? '✓ Equipped'
+                                : isOwned
+                                ? 'Equip Realm'
+                                : canAfford
+                                ? `Unlock · ${scenery.price}G`
+                                : `Need ${scenery.price}G`}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-
-            {armoryTab === 'sceneries' && (
-              <div className="skin-grid">
-                {WORLD_SCENERIES.map((scenery) => {
-                  const isOwned = economy.ownedSceneries.includes(scenery.id);
-                  const isEquipped = economy.activeScenery === scenery.id;
-                  const isInspecting = showcaseSceneryId === scenery.id;
-                  const canAfford = economy.gold >= scenery.price;
-
-                  return (
-                    <div
-                      key={scenery.id}
-                      className={`skin-card scenery-card ${isEquipped ? 'equipped' : ''} ${isInspecting ? 'inspecting' : ''}`}
-                      onClick={() => handleInspectInShowcase('sceneries', scenery.id)}
-                    >
-                      <div
-                        className="scenery-sky-banner"
-                        style={{
-                          background: scenery.skyPreviewGradient,
-                          borderColor: scenery.accentHex
-                        }}
-                      >
-                        <span
-                          className="skin-kicker-tag scenery-badge"
-                          style={{ color: scenery.accentHex }}
-                        >
-                          {scenery.badge}
-                        </span>
-                        <span className="skin-price-tag">
-                          {isOwned ? 'Unlocked' : `${scenery.price} Gold`}
-                        </span>
-                      </div>
-
-                      <div className="skin-card-title">{scenery.name}</div>
-                      <p className="skin-card-sub">{scenery.subtitle}</p>
-                      <div className="skin-meta-line">
-                        <span>Landmarks: <strong>{scenery.landmarksLabel}</strong></span>
-                      </div>
-                      <div className="skin-meta-line">
-                        <span>Atmosphere: <strong>{scenery.weatherLabel}</strong></span>
-                      </div>
-
-                      <div className="skin-card-actions">
-                        <button
-                          type="button"
-                          className={`live-preview-btn ${isInspecting ? 'active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleInspectInShowcase('sceneries', scenery.id);
-                          }}
-                        >
-                          <Eye3DPreviewVectorIcon size={15} />
-                          <span>{isInspecting ? 'Showing in 3D' : 'Live 3D Preview'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`skin-action-btn ${
-                            isEquipped ? 'equipped' : isOwned ? 'owned' : canAfford ? 'buyable' : 'locked'
-                          }`}
-                          disabled={!isOwned && !canAfford}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectOrBuyWorldScenery(scenery.id, true);
-                          }}
-                        >
-                          {isEquipped
-                            ? 'Equipped Realm'
-                            : isOwned
-                            ? 'Equip World Scenery'
-                            : canAfford
-                            ? `Unlock · ${scenery.price} Gold`
-                            : `Requires ${scenery.price} Gold`}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}
@@ -3609,6 +4411,8 @@ export default function App() {
 
       <div
         id="hud-bottom"
+        key={`hud-bottom-${hudEntranceEpoch}`}
+        className={hasStartedGame && activeDialog === 'none' ? 'hud-bottom-entrance-active' : ''}
         style={{ display: activeDialog !== 'none' ? 'none' : undefined }}
       >
         <div className="hint-pill" id="controls-hint">
@@ -3620,7 +4424,8 @@ export default function App() {
             className="hud-btn pass-flip-btn"
             onClick={() => getEngine()?.flipPassCameraNow?.()}
           >
-            Flip Cam ↻
+            <ItchRotateCameraIcon size={13} />
+            <span>Flip Cam</span>
           </button>
         )}
         <div className="captured-pill" id="captured-tray"></div>

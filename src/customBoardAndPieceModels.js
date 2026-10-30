@@ -1,4 +1,10 @@
 import * as THREE from 'three';
+import {
+  applyPoliigonPbrToMaterial,
+  resolveBoardPoliigonPresets,
+  ensureGeometryHasUVs
+} from './poliigonPbrTextures.js';
+import { mountHalloweenModel, preloadHalloween3DAssets } from './halloweenAssetLoader.js';
 
 /**
  * High-Detail Sculpted 3D Chess Piece & Board Architecture Builder
@@ -21,6 +27,7 @@ function getCachedGeo(key, builderFn) {
   if (!geoCache.has(key)) {
     const g = builderFn();
     g.computeVertexNormals();
+    ensureGeometryHasUVs(g);
     geoCache.set(key, g);
   }
   return geoCache.get(key);
@@ -30,17 +37,19 @@ function getCachedGeo(key, builderFn) {
  * Creates a smooth high-resolution LatheGeometry from [radius, y] control points
  * using Catmull-Rom spline interpolation between segments.
  */
-function buildSmoothSplineLathe(controlPairs, sampleCount = 60, radialSegments = 52) {
+function buildSmoothSplineLathe(controlPairs, sampleCount = 36, radialSegments = 32) {
+  const effSamples = Math.min(sampleCount, 36);
+  const effRadial = Math.min(radialSegments, 32);
   const vecs = controlPairs.map(([r, y]) => new THREE.Vector2(Math.max(0, r), y));
   const curve = new THREE.SplineCurve(vecs);
-  const sampled = curve.getPoints(sampleCount);
+  const sampled = curve.getPoints(effSamples);
   // Clamp any slight spline overshoot below r=0
   for (const pt of sampled) {
     if (pt.x < 0) pt.x = 0;
   }
   sampled[0].x = 0;
   sampled[sampled.length - 1].x = 0;
-  return new THREE.LatheGeometry(sampled, radialSegments);
+  return new THREE.LatheGeometry(sampled, effRadial);
 }
 
 /**
@@ -48,8 +57,8 @@ function buildSmoothSplineLathe(controlPairs, sampleCount = 60, radialSegments =
  */
 function buildSculptedLathe(controlPairs, options = {}) {
   const {
-    sampleCount = 64,
-    radialSegments = 56,
+    sampleCount = 36,
+    radialSegments = 32,
     fluteCount = 0,
     fluteDepth = 0.012,
     fluteYMin = 0.18,
@@ -92,14 +101,16 @@ function buildSculptedLathe(controlPairs, options = {}) {
 /**
  * Builds a tapered organic tube along a 3D CatmullRomCurve3 (for curved horns, dragon necks, tails, and arches).
  */
-function buildTaperedCurveGeo(points3D, rStart, rEnd, tubularSegments = 36, radialSegments = 18) {
+function buildTaperedCurveGeo(points3D, rStart, rEnd, tubularSegments = 24, radialSegments = 12) {
+  const effTubular = Math.min(tubularSegments, 24);
+  const effRadial = Math.min(radialSegments, 12);
   const curve = new THREE.CatmullRomCurve3(points3D);
-  const geo = new THREE.TubeGeometry(curve, tubularSegments, 1.0, radialSegments, false);
+  const geo = new THREE.TubeGeometry(curve, effTubular, 1.0, effRadial, false);
   const pos = geo.attributes.position;
-  const ringStride = radialSegments + 1;
+  const ringStride = effRadial + 1;
 
-  for (let i = 0; i <= tubularSegments; i++) {
-    const u = i / tubularSegments;
+  for (let i = 0; i <= effTubular; i++) {
+    const u = i / effTubular;
     const center = curve.getPointAt(u);
     // Smooth taper from rStart to rEnd
     const radius = rStart * (1 - u) + rEnd * u + Math.sin(u * Math.PI) * (rStart * 0.12);
@@ -114,6 +125,1371 @@ function buildTaperedCurveGeo(points3D, rStart, rEnd, tubularSegments = 36, radi
   }
   geo.computeVertexNormals();
   return geo;
+}
+
+/**
+ * Builds a ribbed 3D Carved Jack-o'-Lantern gourd with glowing triangle eyes, jagged grin, and twisted vine stem.
+ * Non-bubbly, deeply furrowed 12-rib gothic gourd geometry + stationary mounting.
+ */
+function buildCarvedJackOLantern(radius = 0.095, gourdMat, glowMat, stemMat, variant = 'orange') {
+  preloadHalloween3DAssets();
+  const pumpkinGroup = new THREE.Group();
+  const rKey = radius.toFixed(3);
+
+  // 1. Deeply-Ribbed 12-Furrow Gothic Gourd Shell (non-spherical, flattened Squat Gourd profile with sharp ribs)
+  const ribbedGourdGeo = getCachedGeo(`halloween_ribbed_gourd_v2_${rKey}`, () => {
+    const g = buildSculptedLathe(
+      [
+        [0.0, -radius * 0.78],
+        [radius * 0.52, -radius * 0.76],
+        [radius * 0.94, -radius * 0.48],
+        [radius * 1.06, -radius * 0.06],
+        [radius * 1.02, radius * 0.36],
+        [radius * 0.78, radius * 0.68],
+        [radius * 0.36, radius * 0.78],
+        [0.0, radius * 0.72]
+      ],
+      {
+        sampleCount: 28,
+        radialSegments: 36,
+        fluteCount: 12,
+        fluteDepth: radius * 0.095,
+        fluteYMin: -radius * 0.72,
+        fluteYMax: radius * 0.72
+      }
+    );
+    return g;
+  });
+  const fallbackShellGroup = new THREE.Group();
+  pumpkinGroup.add(fallbackShellGroup);
+
+  const gourdMesh = new THREE.Mesh(ribbedGourdGeo, gourdMat);
+  fallbackShellGroup.add(gourdMesh);
+
+  // Inner recessed Hellfire Ember Core (scaled smaller inside so it never protrudes like a bubble)
+  const innerCoreGeo = getCachedGeo(`halloween_pumpkin_core_v2_${rKey}`, () =>
+    new THREE.OctahedronGeometry(radius * 0.62, 1)
+  );
+  const innerCore = new THREE.Mesh(innerCoreGeo, glowMat);
+  innerCore.userData.isDragonFire = true;
+  pumpkinGroup.add(innerCore);
+
+  // Carved Glowing Triangular Eyes & Jagged Grin on the front (+Z) of the fallback gothic gourd
+  const eyeGeo = getCachedGeo(`halloween_pumpkin_eye_v2_${rKey}`, () => {
+    const s = new THREE.Shape();
+    const ew = radius * 0.28;
+    const eh = radius * 0.26;
+    s.moveTo(-ew, -eh * 0.4);
+    s.lineTo(ew, -eh * 0.2);
+    s.lineTo(0, eh * 0.85);
+    s.closePath();
+    return new THREE.ExtrudeGeometry(s, { depth: radius * 0.14, bevelEnabled: false });
+  });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(eyeGeo, glowMat);
+    eye.userData.isDragonFire = true;
+    eye.position.set(side * radius * 0.36, radius * 0.12, radius * 0.88);
+    eye.rotation.z = side * -0.18;
+    eye.rotation.y = side * 0.24;
+    fallbackShellGroup.add(eye);
+  }
+
+  // Jagged Carved Grin Mouth
+  const grinGeo = getCachedGeo(`halloween_pumpkin_grin_v2_${rKey}`, () => {
+    const s = new THREE.Shape();
+    const mw = radius * 0.62;
+    const mh = radius * 0.22;
+    s.moveTo(-mw, mh * 0.35);
+    s.lineTo(-mw * 0.6, -mh * 0.55);
+    s.lineTo(-mw * 0.3, mh * 0.15);
+    s.lineTo(0, -mh * 0.75);
+    s.lineTo(mw * 0.3, mh * 0.15);
+    s.lineTo(mw * 0.6, -mh * 0.55);
+    s.lineTo(mw, mh * 0.35);
+    s.lineTo(mw * 0.5, -mh * 0.15);
+    s.lineTo(0, mh * 0.35);
+    s.lineTo(-mw * 0.5, -mh * 0.15);
+    s.closePath();
+    return new THREE.ExtrudeGeometry(s, { depth: radius * 0.14, bevelEnabled: false });
+  });
+  const grinMesh = new THREE.Mesh(grinGeo, glowMat);
+  grinMesh.userData.isDragonFire = true;
+  grinMesh.position.set(0, -radius * 0.26, radius * 0.88);
+  fallbackShellGroup.add(grinMesh);
+
+  // Twisted Gnarled Vine Stem on top
+  const stemGeo = getCachedGeo(`halloween_pumpkin_stem_v2_${rKey}`, () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(0, radius * 0.68, 0),
+        new THREE.Vector3(radius * 0.08, radius * 0.96, -radius * 0.06),
+        new THREE.Vector3(-radius * 0.12, radius * 1.16, -radius * 0.16)
+      ],
+      radius * 0.18,
+      radius * 0.05,
+      10,
+      8
+    )
+  );
+  fallbackShellGroup.add(new THREE.Mesh(stemGeo, stemMat || gourdMat));
+
+  // Mount the actual 3D Carved Jack-o'-Lantern GLTF model (`pumpkin_orange_jackolantern.gltf` or `pumpkin_yellow_jackolantern.gltf`)
+  const gltfHolder = new THREE.Group();
+  pumpkinGroup.add(gltfHolder);
+  const modelName = variant === 'yellow' ? 'pumpkin_yellow_jackolantern' : 'pumpkin_orange_jackolantern';
+  const gltfScale = (radius * 2.02) / 1.45;
+  mountHalloweenModel(gltfHolder, modelName, {
+    scale: gltfScale,
+    position: [0, -radius * 0.82, 0],
+    onLoaded: () => {
+      // Hide procedural shell once GLTF mesh is ready so there is never a double bubble layer
+      fallbackShellGroup.visible = false;
+      innerCore.scale.setScalar(0.58);
+    }
+  });
+
+  return pumpkinGroup;
+}
+
+/**
+ * Builds a gnarled grim-reaper scythe with the crescent soul-blade mounted at the TOP of the polearm shaft,
+ * plus an optional articulated Reaper Arm & 5-Fingered Clawed Hand gripping the shaft!
+ */
+function buildReaperScythe(scale = 1.0, shaftMat, bladeMat, trimMat, doubleHeaded = false, withGrippingHand = true) {
+  const scytheGroup = new THREE.Group();
+  scytheGroup.scale.setScalar(scale);
+
+  // 1. Long S-curved Gnarled Reaper Snath (Shaft) from Y = -0.34 up to the top socket at Y = 0.68
+  const shaftGeo = getCachedGeo('halloween_scythe_shaft_v3', () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(0, -0.34, -0.02),
+        new THREE.Vector3(0.012, 0.02, 0.01),
+        new THREE.Vector3(-0.015, 0.36, -0.01),
+        new THREE.Vector3(0.008, 0.68, 0.015)
+      ],
+      0.019,
+      0.014,
+      20,
+      10
+    )
+  );
+  scytheGroup.add(new THREE.Mesh(shaftGeo, shaftMat));
+
+  // Bottom Pommel Spike at Y = -0.36
+  const pommelGeo = getCachedGeo('halloween_scythe_pommel_v3', () =>
+    new THREE.ConeGeometry(0.024, 0.085, 8)
+  );
+  const pommel = new THREE.Mesh(pommelGeo, trimMat);
+  pommel.position.set(0, -0.37, -0.02);
+  pommel.rotation.x = Math.PI;
+  scytheGroup.add(pommel);
+
+  // Grip Rings around the middle of the shaft where the Clawed Hand holds it
+  const gripRingGeo = getCachedGeo('halloween_scythe_grip_ring_v3', () =>
+    new THREE.TorusGeometry(0.021, 0.0055, 8, 16)
+  );
+  for (const gy of [-0.04, 0.06, 0.28]) {
+    const ring = new THREE.Mesh(gripRingGeo, trimMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0.008, gy, 0.005);
+    scytheGroup.add(ring);
+  }
+
+  // 2. Top Socket Collar & Finial Spike at the APEX of the shaft (Y = 0.66..0.77)
+  const collarGeo = getCachedGeo('halloween_scythe_collar_v3', () =>
+    new THREE.CylinderGeometry(0.032, 0.024, 0.085, 12)
+  );
+  const collar = new THREE.Mesh(collarGeo, trimMat);
+  collar.position.set(0.008, 0.66, 0.015);
+  scytheGroup.add(collar);
+
+  const topSpikeGeo = getCachedGeo('halloween_scythe_top_spike_v3', () =>
+    new THREE.ConeGeometry(0.022, 0.11, 8)
+  );
+  const topSpike = new THREE.Mesh(topSpikeGeo, trimMat);
+  topSpike.position.set(0.008, 0.75, 0.015);
+  scytheGroup.add(topSpike);
+
+  // 3. True Beveled Crescent Grim-Reaper Blade mounted at the TOP of the shaft (Y = 0.67)!
+  // Built in local origin coordinates so scaling/rotating never shifts it down to the middle of the shaft.
+  const bladeGeo = getCachedGeo('halloween_scythe_top_blade_v3', () => {
+    const s = new THREE.Shape();
+    // Socket tang at (0, 0)
+    s.moveTo(-0.01, -0.025);
+    s.lineTo(0.0, 0.038);
+    // Sweeping reinforced upper spine arching out and down to the lethal reaper tip
+    s.bezierCurveTo(0.14, 0.075, 0.31, 0.035, 0.44, -0.095);
+    s.bezierCurveTo(0.48, -0.145, 0.50, -0.20, 0.47, -0.235);
+    // Razor-sharp inner concave cutting edge curving back to the collar
+    s.bezierCurveTo(0.41, -0.155, 0.27, -0.065, 0.12, -0.035);
+    s.bezierCurveTo(0.05, -0.025, 0.01, -0.025, -0.01, -0.025);
+    s.closePath();
+
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 0.010,
+      bevelEnabled: true,
+      bevelSegments: 3,
+      steps: 1,
+      bevelSize: 0.006,
+      bevelThickness: 0.006
+    });
+    g.translate(0, 0, -0.005);
+    return g;
+  });
+
+  // Heavy spine reinforcement rib along the top curve of the blade
+  const spineRibGeo = getCachedGeo('halloween_scythe_spine_rib_v3', () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(0.0, 0.025, 0.0),
+        new THREE.Vector3(0.15, 0.052, 0.0),
+        new THREE.Vector3(0.32, 0.005, 0.0),
+        new THREE.Vector3(0.46, -0.14, 0.0)
+      ],
+      0.016,
+      0.004,
+      16,
+      8
+    )
+  );
+
+  // Mount the primary blade assembly at the TOP of the shaft (Y = 0.67)
+  const topBladeMount = new THREE.Group();
+  topBladeMount.position.set(0.008, 0.67, 0.015);
+  topBladeMount.rotation.y = -0.35; // Angle slightly forward into the cleave plane
+  scytheGroup.add(topBladeMount);
+
+  const mainBlade = new THREE.Mesh(bladeGeo, bladeMat);
+  mainBlade.userData.excludeFromBounds = true;
+  topBladeMount.add(mainBlade);
+
+  const mainSpine = new THREE.Mesh(spineRibGeo, trimMat);
+  mainSpine.userData.excludeFromBounds = true;
+  topBladeMount.add(mainSpine);
+
+  if (doubleHeaded) {
+    const backBladeMount = new THREE.Group();
+    backBladeMount.position.set(0.008, 0.66, 0.015);
+    backBladeMount.rotation.y = Math.PI - 0.35;
+    backBladeMount.scale.set(0.76, 0.82, 0.82);
+    scytheGroup.add(backBladeMount);
+
+    const backBlade = new THREE.Mesh(bladeGeo, bladeMat);
+    backBlade.userData.excludeFromBounds = true;
+    backBladeMount.add(backBlade);
+
+    const backSpine = new THREE.Mesh(spineRibGeo, trimMat);
+    backSpine.userData.excludeFromBounds = true;
+    backBladeMount.add(backSpine);
+  }
+
+  // 4. Articulated Clawed Gauntlet Hand gripping the Scythe Shaft (at Y = 0.02)
+  if (withGrippingHand) {
+    const handGroup = buildClawedReaperHand(trimMat, bladeMat, 1.0, true);
+    handGroup.position.set(0.008, 0.02, 0.008);
+    scytheGroup.add(handGroup);
+  }
+
+  return scytheGroup;
+}
+
+/**
+ * Builds an articulated 5-fingered Skeletal / Armored Clawed Reaper Hand.
+ * When `closedGrip = true`, the 4 clawed fingers and opposable thumb curl tightly around a weapon shaft or rein.
+ * When `closedGrip = false`, the 5 clawed fingers splay in a menacing spellcasting / lantern-cradling pose.
+ */
+function buildClawedReaperHand(palmMat, clawMat, handScale = 1.0, closedGrip = true) {
+  const hand = new THREE.Group();
+  hand.scale.setScalar(handScale);
+
+  // 1. Armored Wrist Cuff & Metacarpal Palm Plate
+  const cuffGeo = getCachedGeo('hollow_hand_cuff_v1', () =>
+    new THREE.TorusGeometry(0.026, 0.007, 8, 16)
+  );
+  const cuff = new THREE.Mesh(cuffGeo, palmMat);
+  cuff.position.set(-0.022, 0, 0);
+  cuff.rotation.y = Math.PI / 2;
+  hand.add(cuff);
+
+  const palmGeo = getCachedGeo('hollow_hand_palm_v1', () => {
+    const g = new THREE.BoxGeometry(0.038, 0.042, 0.018);
+    return g;
+  });
+  const palm = new THREE.Mesh(palmGeo, palmMat);
+  palm.position.set(-0.006, 0, -0.014);
+  hand.add(palm);
+
+  // 2. 4 Articulated 2-Segment Clawed Fingers (Index, Middle, Ring, Pinky)
+  const knuckleGeo = getCachedGeo('hollow_hand_knuckle_v1', () =>
+    new THREE.CylinderGeometry(0.0055, 0.0048, 0.026, 7)
+  );
+  const clawTipGeo = getCachedGeo('hollow_hand_claw_tip_v1', () =>
+    new THREE.ConeGeometry(0.0052, 0.028, 7)
+  );
+
+  for (let f = 0; f < 4; f++) {
+    const yOff = (f - 1.5) * 0.0105;
+    const fingerGroup = new THREE.Group();
+    fingerGroup.position.set(0.012, yOff, -0.012);
+
+    const prox = new THREE.Mesh(knuckleGeo, palmMat);
+    prox.rotation.z = -Math.PI / 2;
+    prox.position.set(0.012, 0, 0);
+    fingerGroup.add(prox);
+
+    const distalGroup = new THREE.Group();
+    distalGroup.position.set(0.024, 0, 0);
+    const claw = new THREE.Mesh(clawTipGeo, clawMat);
+    claw.rotation.z = -Math.PI / 2;
+    claw.position.set(0.013, 0, 0);
+    distalGroup.add(claw);
+    fingerGroup.add(distalGroup);
+
+    if (closedGrip) {
+      // Curl fingers tightly around the shaft at (0, 0, 0)
+      fingerGroup.rotation.y = -0.85;
+      distalGroup.rotation.y = -1.35;
+    } else {
+      // Menacing splayed reaper claws
+      fingerGroup.rotation.y = -0.35;
+      fingerGroup.rotation.z = (f - 1.5) * 0.14;
+      distalGroup.rotation.y = -0.65;
+    }
+    hand.add(fingerGroup);
+  }
+
+  // 3. Opposable Clawed Thumb wrapping from the opposite side
+  const thumbGroup = new THREE.Group();
+  thumbGroup.position.set(-0.004, 0.022, -0.004);
+  const thumbProx = new THREE.Mesh(knuckleGeo, palmMat);
+  thumbProx.position.set(0, 0.010, 0.008);
+  thumbProx.rotation.x = 0.75;
+  thumbGroup.add(thumbProx);
+
+  const thumbClaw = new THREE.Mesh(clawTipGeo, clawMat);
+  thumbClaw.position.set(0.008, 0.018, 0.018);
+  thumbClaw.rotation.set(1.1, 0, -0.5);
+  thumbGroup.add(thumbClaw);
+  hand.add(thumbGroup);
+
+  return hand;
+}
+
+/**
+ * Builds a complete Draped/Armored Reaper Arm (Shoulder -> Elbow -> Wrist) + 5-Fingered Clawed Hand.
+ */
+function buildReaperArmWithHand(
+  sideSign,
+  shoulderPos,
+  elbowPos,
+  wristPos,
+  sleeveMat,
+  gauntletMat,
+  clawMat,
+  closedGrip = false,
+  handRot = [0, 0, 0]
+) {
+  const armGroup = new THREE.Group();
+
+  const key = `hollow_arm_${sideSign}_${shoulderPos.map((n) => n.toFixed(2)).join('_')}_${wristPos.map((n) => n.toFixed(2)).join('_')}`;
+  const armTubeGeo = getCachedGeo(key, () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(shoulderPos[0], shoulderPos[1], shoulderPos[2]),
+        new THREE.Vector3(elbowPos[0], elbowPos[1], elbowPos[2]),
+        new THREE.Vector3(wristPos[0], wristPos[1], wristPos[2])
+      ],
+      0.044,
+      0.025,
+      14,
+      10
+    )
+  );
+  armGroup.add(new THREE.Mesh(armTubeGeo, sleeveMat));
+
+  // Tattered Sleeve Drape Hanging under the Elbow
+  const drapeKey = `${key}_drape`;
+  const drapeGeo = getCachedGeo(drapeKey, () => {
+    const g = new THREE.ConeGeometry(0.036, 0.14, 7);
+    g.scale(0.55, 1.0, 1.25);
+    return g;
+  });
+  const drape = new THREE.Mesh(drapeGeo, sleeveMat);
+  drape.position.set(elbowPos[0], elbowPos[1] - 0.055, elbowPos[2]);
+  drape.rotation.x = Math.PI;
+  armGroup.add(drape);
+
+  // Clawed Hand at the Wrist
+  const hand = buildClawedReaperHand(gauntletMat, clawMat, 0.95, closedGrip);
+  hand.scale.x = sideSign * 0.95;
+  hand.position.set(wristPos[0], wristPos[1], wristPos[2]);
+  hand.rotation.set(handRot[0], handRot[1], handRot[2]);
+  armGroup.add(hand);
+
+  return armGroup;
+}
+
+/**
+ * Builds the 3D Halloween Piece Set ('hollow_reapers' — "Hollow Jack & Wraith Reapers")
+ * - Top-bladed crescent grim-reaper scythes
+ * - Articulated arms & 5-fingered clawed hands on the pieces
+ * - Stationary, deeply-ribbed Gothic Jack-o'-Lantern heads (zero bubbly wobble)
+ * - Detailed Headless Horseman riding a Rearing 4-Legged Nightmare Warhorse for the Knight
+ */
+function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts) {
+  const pumpkinGlowMat = new THREE.MeshBasicMaterial({
+    color: 0xff9100
+  });
+  const ectoGlowMat = new THREE.MeshBasicMaterial({
+    color: 0x00e676
+  });
+
+  // Shared Crypt Grave Pedestal with gnarled roots & carved pumpkin-amber rune ring
+  const baseGeo = getCachedGeo('hollow_crypt_base', () =>
+    buildSculptedLathe(
+      [
+        [0.0, 0.0],
+        [0.32, 0.0],
+        [0.33, 0.035],
+        [0.29, 0.065],
+        [0.30, 0.095],
+        [0.25, 0.135],
+        [0.22, 0.175],
+        [0.0, 0.175]
+      ],
+      {
+        sampleCount: 28,
+        radialSegments: 28,
+        fluteCount: 12,
+        fluteDepth: 0.009,
+        fluteYMin: 0.04,
+        fluteYMax: 0.16
+      }
+    )
+  );
+  rig.add(new THREE.Mesh(baseGeo, primaryMat));
+
+  const baseTrimGeo = getCachedGeo('hollow_crypt_base_trim', () =>
+    new THREE.TorusGeometry(0.275, 0.015, 10, 28)
+  );
+  const baseTrim = new THREE.Mesh(baseTrimGeo, goldTrimMat);
+  baseTrim.rotation.x = Math.PI / 2;
+  baseTrim.position.y = 0.095;
+  rig.add(baseTrim);
+
+  if (pieceType === 'pawn') {
+    // PAWN — LANTERN THRALL: Cloaked grave-watcher with Left & Right Arms + Clawed Hands holding a Hanging Lantern & Top-Bladed Harvest Scythe
+    const cloakGeo = getCachedGeo('hollow_pawn_cloak', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.16],
+          [0.21, 0.17],
+          [0.18, 0.30],
+          [0.14, 0.44],
+          [0.11, 0.56],
+          [0.0, 0.58]
+        ],
+        {
+          sampleCount: 26,
+          radialSegments: 26,
+          fluteCount: 9,
+          fluteDepth: 0.012,
+          fluteYMin: 0.18,
+          fluteYMax: 0.54
+        }
+      )
+    );
+    rig.add(new THREE.Mesh(cloakGeo, primaryMat));
+
+    // Stationary Ribbed Jack-o'-Lantern Head (no bobbing or bubbly scaling!)
+    const pumpkinHead = buildCarvedJackOLantern(0.098, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
+    pumpkinHead.position.set(0, 0.65, 0);
+    rig.add(pumpkinHead);
+
+    // Witch/Grave-keeper pointed brimmed hat seated firmly on the Jack-o'-Lantern brow
+    const brimGeo = getCachedGeo('hollow_pawn_hat_brim', () =>
+      new THREE.ConeGeometry(0.155, 0.04, 20)
+    );
+    const hatBrim = new THREE.Mesh(brimGeo, primaryMat);
+    hatBrim.position.set(0, 0.725, 0);
+    rig.add(hatBrim);
+
+    const hatTipGeo = getCachedGeo('hollow_pawn_hat_tip', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.725, 0),
+          new THREE.Vector3(0.015, 0.84, -0.02),
+          new THREE.Vector3(-0.03, 0.93, -0.06)
+        ],
+        0.075,
+        0.006,
+        12,
+        10
+      )
+    );
+    rig.add(new THREE.Mesh(hatTipGeo, primaryMat));
+
+    // Left Arm & 5-Fingered Clawed Hand reaching forward to hold the Hanging Graveyard Lantern
+    rig.add(
+      buildReaperArmWithHand(
+        -1,
+        [-0.10, 0.52, 0.0],
+        [-0.15, 0.46, 0.05],
+        [-0.15, 0.45, 0.11],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        true,
+        [0.2, 0.3, 0]
+      )
+    );
+
+    // Right Arm Sleeve connecting shoulder to the Harvest Scythe + Clawed Hand on the Scythe
+    rig.add(
+      buildReaperArmWithHand(
+        1,
+        [0.10, 0.52, 0.0],
+        [0.14, 0.44, 0.03],
+        [0.15, 0.39, 0.06],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        false,
+        [0.15, -0.35, -0.2]
+      )
+    );
+
+    // Top-Bladed Harvest Scythe held in the right Clawed Hand
+    const sicklePivot = buildReaperScythe(0.66, primaryMat, forgedSteelMat, goldTrimMat, false, true);
+    sicklePivot.position.set(0.15, 0.38, 0.05);
+    sicklePivot.rotation.set(0.22, -0.35, -0.18);
+    rig.add(sicklePivot);
+    animParts.push({
+      mesh: sicklePivot,
+      kind: 'reaperScythe',
+      baseX: 0.15,
+      baseY: 0.38,
+      baseZ: 0.05,
+      baseRotX: 0.22,
+      baseRotY: -0.35,
+      baseRotZ: -0.18
+    });
+
+    // Actual 3D Hanging Graveyard Lantern (`lantern_hanging.gltf`) & Skull Candle (`skull_candle.gltf`)
+    mountHalloweenModel(rig, 'lantern_hanging', {
+      scale: 0.14,
+      position: [-0.15, 0.43, 0.11],
+      excludeFromBounds: true
+    });
+    mountHalloweenModel(rig, 'skull_candle', {
+      scale: 0.11,
+      position: [-0.13, 0.17, 0.14],
+      rotationY: 0.35,
+      excludeFromBounds: true
+    });
+  } else if (pieceType === 'rook') {
+    // ROOK — HAUNTED CRYPT TOWER: Gothic mausoleum tower with Crypt Shrine, stationary Cursed Jack-o'-Lantern belfry & twin Wraith Guardian Arms wielding Top-Bladed Scythes
+    mountHalloweenModel(rig, 'shrine_candles', {
+      scale: 0.24,
+      position: [0, 0.17, 0],
+      excludeFromBounds: true
+    });
+    const towerGeo = getCachedGeo('hollow_rook_tower', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.16],
+          [0.23, 0.17],
+          [0.20, 0.34],
+          [0.18, 0.56],
+          [0.21, 0.68],
+          [0.22, 0.76],
+          [0.0, 0.76]
+        ],
+        {
+          sampleCount: 28,
+          radialSegments: 28,
+          fluteCount: 8,
+          fluteDepth: 0.012,
+          fluteYMin: 0.20,
+          fluteYMax: 0.66
+        }
+      )
+    );
+    rig.add(new THREE.Mesh(towerGeo, primaryMat));
+
+    // 6 Wrought-iron graveyard turret spikes around the battlement
+    const spikeGeo = getCachedGeo('hollow_rook_spike', () =>
+      new THREE.ConeGeometry(0.028, 0.16, 6)
+    );
+    for (let i = 0; i < 6; i++) {
+      const ang = (i / 6) * Math.PI * 2;
+      const sp = new THREE.Mesh(spikeGeo, forgedSteelMat);
+      sp.position.set(Math.cos(ang) * 0.185, 0.82, Math.sin(ang) * 0.185);
+      rig.add(sp);
+    }
+
+    // Twin Spectral Guardian Arms & Clawed Hands emerging from the Crypt Tower flanks
+    for (const s of [-1, 1]) {
+      rig.add(
+        buildReaperArmWithHand(
+          s,
+          [s * 0.16, 0.54, 0.02],
+          [s * 0.22, 0.48, 0.08],
+          [s * 0.20, 0.46, 0.15],
+          primaryMat,
+          goldTrimMat,
+          forgedSteelMat,
+          false,
+          [0.1, s * -0.25, 0]
+        )
+      );
+    }
+
+    // Stationary Cursed Jack-o'-Lantern Crown seated firmly on the Crypt Belfry (no bobbing)
+    const cryptLantern = buildCarvedJackOLantern(0.125, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
+    cryptLantern.position.set(0, 0.86, 0);
+    rig.add(cryptLantern);
+
+    // Orbiting spectral ectoplasm halo ring around the turret
+    const ectoRingGeo = getCachedGeo('hollow_rook_ecto_ring', () =>
+      new THREE.TorusGeometry(0.21, 0.012, 8, 28)
+    );
+    const ectoRing = new THREE.Mesh(ectoRingGeo, forgedSteelMat);
+    ectoRing.rotation.x = Math.PI / 2;
+    ectoRing.position.y = 0.76;
+    rig.add(ectoRing);
+    animParts.push({ mesh: ectoRing, kind: 'orbitRing', baseY: 0.76, speed: 2.2 });
+  } else if (pieceType === 'knight') {
+    // =========================================================================
+    // KNIGHT — DETAILED HEADLESS HORSEMAN RIDING A REARING NIGHTMARE WARHORSE
+    // =========================================================================
+    // 1. REARING NIGHTMARE WARHORSE BODY (Hindquarters, Barrel Ribcage, Chest & Shoulders)
+    const horseBodyGeo = getCachedGeo('hollow_horseman_steed_body_v2', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.27, -0.14), // Croup / Hindquarters
+          new THREE.Vector3(0, 0.38, -0.05), // Loin / Saddle Back
+          new THREE.Vector3(0, 0.50, 0.05),  // Barrel Ribcage
+          new THREE.Vector3(0, 0.58, 0.12)   // Muscular Chest / Withers
+        ],
+        0.135,
+        0.125,
+        20,
+        14
+      )
+    );
+    rig.add(new THREE.Mesh(horseBodyGeo, primaryMat));
+
+    // Muscular Haunches (Croup) & Chest Pectorals
+    const haunchGeo = getCachedGeo('hollow_horseman_haunch_v2', () => {
+      const g = new THREE.SphereGeometry(0.115, 16, 14);
+      g.scale(1.08, 0.95, 1.18);
+      return g;
+    });
+    const haunches = new THREE.Mesh(haunchGeo, primaryMat);
+    haunches.position.set(0, 0.29, -0.13);
+    rig.add(haunches);
+
+    const chestGeo = getCachedGeo('hollow_horseman_chest_v2', () => {
+      const g = new THREE.SphereGeometry(0.118, 16, 14);
+      g.scale(1.12, 0.96, 1.05);
+      return g;
+    });
+    const horseChest = new THREE.Mesh(chestGeo, primaryMat);
+    horseChest.position.set(0, 0.56, 0.11);
+    rig.add(horseChest);
+
+    // Armored Chest Barding Peytral Plate with Gold Trim
+    const peytralGeo = getCachedGeo('hollow_horseman_peytral_v2', () =>
+      new THREE.TorusGeometry(0.118, 0.014, 10, 24, Math.PI)
+    );
+    const peytral = new THREE.Mesh(peytralGeo, goldTrimMat);
+    peytral.position.set(0, 0.55, 0.12);
+    peytral.rotation.x = Math.PI * 0.42;
+    rig.add(peytral);
+
+    // 2. TWO PLANTED HIND LEGS (Thigh/Gaskin, Hock Joint, Cannon & Iron-Shod Hooves on the Pedestal)
+    const hoofGeo = getCachedGeo('hollow_horse_hoof_v2', () =>
+      new THREE.CylinderGeometry(0.026, 0.036, 0.042, 10)
+    );
+    for (const s of [-1, 1]) {
+      const hindLegGeo = getCachedGeo(`hollow_horse_hind_leg_${s}`, () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(s * 0.088, 0.31, -0.13), // Hip / Thigh
+            new THREE.Vector3(s * 0.095, 0.23, -0.19), // Hock joint
+            new THREE.Vector3(s * 0.085, 0.18, -0.13)  // Fetlock / Pastern
+          ],
+          0.056,
+          0.024,
+          14,
+          10
+        )
+      );
+      rig.add(new THREE.Mesh(hindLegGeo, primaryMat));
+
+      const rearHoof = new THREE.Mesh(hoofGeo, goldTrimMat);
+      rearHoof.position.set(s * 0.085, 0.175, -0.12);
+      rig.add(rearHoof);
+    }
+
+    // 3. TWO REARING ARTICULATED FORELEGS PAWING THE AIR (Shoulder, Knee, Cannon & Cloven Iron Hooves)
+    for (const s of [-1, 1]) {
+      const liftOffset = s > 0 ? 0.035 : 0.0;
+      const foreLegGeo = getCachedGeo(`hollow_horse_fore_leg_${s}`, () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(s * 0.092, 0.55, 0.12),                     // Muscular Shoulder
+            new THREE.Vector3(s * 0.105, 0.59 + liftOffset, 0.24),        // Raised Knee
+            new THREE.Vector3(s * 0.092, 0.47 + liftOffset, 0.27),        // Lower Cannon
+            new THREE.Vector3(s * 0.088, 0.42 + liftOffset, 0.23)         // Fetlock
+          ],
+          0.044,
+          0.021,
+          16,
+          10
+        )
+      );
+      rig.add(new THREE.Mesh(foreLegGeo, primaryMat));
+
+      const frontHoof = new THREE.Mesh(hoofGeo, goldTrimMat);
+      frontHoof.position.set(s * 0.088, 0.40 + liftOffset, 0.22);
+      frontHoof.rotation.x = 0.55;
+      rig.add(frontHoof);
+    }
+
+    // 4. SWEEPING NIGHTMARE TAIL
+    const tailGeo = getCachedGeo('hollow_horse_tail_v2', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.30, -0.21),
+          new THREE.Vector3(0, 0.24, -0.29),
+          new THREE.Vector3(0.02, 0.18, -0.26)
+        ],
+        0.042,
+        0.008,
+        14,
+        8
+      )
+    );
+    rig.add(new THREE.Mesh(tailGeo, goldTrimMat));
+
+    // 5. ARCHED WARHORSE NECK, SPIKED CHAMFRON & SCULPTED NIGHTMARE HORSE HEAD
+    const steedNeckGeo = getCachedGeo('hollow_horse_neck_v2', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.56, 0.10),
+          new THREE.Vector3(0, 0.68, 0.15),
+          new THREE.Vector3(0, 0.78, 0.16)
+        ],
+        0.095,
+        0.064,
+        14,
+        12
+      )
+    );
+    rig.add(new THREE.Mesh(steedNeckGeo, primaryMat));
+
+    // Flowing 7-Lock Jagged Mane along the arched neck spine
+    const maneLockGeo = getCachedGeo('hollow_horse_mane_lock_v2', () => {
+      const g = new THREE.ConeGeometry(0.028, 0.095, 6);
+      g.scale(0.55, 1.0, 1.25);
+      return g;
+    });
+    for (let m = 0; m < 7; m++) {
+      const u = m / 6;
+      const lock = new THREE.Mesh(maneLockGeo, m % 2 === 0 ? goldTrimMat : primaryMat);
+      lock.position.set(0, 0.57 + u * 0.22, 0.05 + u * 0.06);
+      lock.rotation.x = -0.75;
+      rig.add(lock);
+    }
+
+    // Nightmare Warhorse Head Group (Stationary on the steed's neck)
+    const horseHeadGroup = new THREE.Group();
+    horseHeadGroup.position.set(0, 0.79, 0.17);
+    rig.add(horseHeadGroup);
+
+    const skullSnoutGeo = getCachedGeo('hollow_horse_skull_snout_v2', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.02, -0.02),
+          new THREE.Vector3(0, -0.02, 0.09),
+          new THREE.Vector3(0, -0.07, 0.19)
+        ],
+        0.068,
+        0.036,
+        14,
+        12
+      )
+    );
+    horseHeadGroup.add(new THREE.Mesh(skullSnoutGeo, primaryMat));
+
+    // Lower Parted Equine Jaw
+    const lowerJawGeo = getCachedGeo('hollow_horse_lower_jaw_v2', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, -0.02, 0.0),
+          new THREE.Vector3(0, -0.07, 0.08),
+          new THREE.Vector3(0, -0.10, 0.16)
+        ],
+        0.044,
+        0.022,
+        10,
+        8
+      )
+    );
+    horseHeadGroup.add(new THREE.Mesh(lowerJawGeo, primaryMat));
+
+    // Spiked Armored Chamfron Face-Plate & Horn on the Steed's Brow
+    const chamfronSpike = new THREE.Mesh(
+      getCachedGeo('hollow_horse_chamfron_spike_v2', () => new THREE.ConeGeometry(0.018, 0.085, 6)),
+      forgedSteelMat
+    );
+    chamfronSpike.position.set(0, 0.04, 0.08);
+    chamfronSpike.rotation.x = 0.85;
+    horseHeadGroup.add(chamfronSpike);
+
+    // Glowing Nightmare Eyes, Alert Ears & Bridle Bit Rings
+    const horseEyeGeo = getCachedGeo('hollow_knight_eye', () => new THREE.OctahedronGeometry(0.018, 0));
+    const bitRingGeo = getCachedGeo('hollow_horse_bit_ring_v2', () => new THREE.TorusGeometry(0.022, 0.005, 8, 16));
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(horseEyeGeo, pumpkinGlowMat);
+      eye.position.set(s * 0.048, 0.015, 0.055);
+      eye.userData.isDragonFire = true;
+      horseHeadGroup.add(eye);
+
+      const ear = new THREE.Mesh(
+        getCachedGeo('hollow_knight_ear', () => new THREE.ConeGeometry(0.020, 0.085, 6)),
+        goldTrimMat
+      );
+      ear.position.set(s * 0.040, 0.075, -0.02);
+      ear.rotation.set(-0.22, 0, s * -0.18);
+      horseHeadGroup.add(ear);
+
+      const bit = new THREE.Mesh(bitRingGeo, goldTrimMat);
+      bit.position.set(s * 0.042, -0.075, 0.15);
+      bit.rotation.y = Math.PI / 2;
+      horseHeadGroup.add(bit);
+
+      // Bridle Reins running from the horse's bit rings back to the Headless Horseman's hands!
+      const reinGeo = getCachedGeo(`hollow_horseman_rein_v2_${s}`, () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(s * 0.042, 0.715, 0.32),
+            new THREE.Vector3(s * 0.11, 0.67, 0.16),
+            new THREE.Vector3(-0.11, 0.70, 0.03)
+          ],
+          0.0065,
+          0.0065,
+          14,
+          6
+        )
+      );
+      rig.add(new THREE.Mesh(reinGeo, goldTrimMat));
+    }
+
+    // 6. GOTHIC WAR-SADDLE, POMMEL & CANTLE
+    const saddleGeo = getCachedGeo('hollow_horse_saddle_v2', () => {
+      const g = new THREE.CylinderGeometry(0.095, 0.115, 0.14, 12);
+      g.scale(1.05, 0.65, 1.15);
+      return g;
+    });
+    const saddle = new THREE.Mesh(saddleGeo, goldTrimMat);
+    saddle.position.set(0, 0.45, -0.03);
+    saddle.rotation.x = 0.45;
+    rig.add(saddle);
+
+    // =========================================================================
+    // 7. THE HEADLESS HORSEMAN RIDER MOUNTED IN THE SADDLE
+    // =========================================================================
+    const riderGroup = new THREE.Group();
+    rig.add(riderGroup);
+
+    // A. Rider's Armored Legs, Knee-Cop Greaves & Spurred Boots in the Stirrups
+    const bootGeo = getCachedGeo('hollow_rider_boot_v2', () => {
+      const g = new THREE.ConeGeometry(0.028, 0.075, 8);
+      g.rotateX(Math.PI / 2);
+      return g;
+    });
+    const stirrupGeo = getCachedGeo('hollow_rider_stirrup_v2', () =>
+      new THREE.TorusGeometry(0.024, 0.0045, 8, 14)
+    );
+    for (const s of [-1, 1]) {
+      const riderLegGeo = getCachedGeo(`hollow_rider_leg_v2_${s}`, () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(s * 0.075, 0.49, -0.04), // Hip in saddle
+            new THREE.Vector3(s * 0.128, 0.42, 0.04),  // Armored Knee gripping flank
+            new THREE.Vector3(s * 0.118, 0.30, 0.00)   // Lower Greave / Ankle
+          ],
+          0.044,
+          0.024,
+          12,
+          10
+        )
+      );
+      riderGroup.add(new THREE.Mesh(riderLegGeo, primaryMat));
+
+      const boot = new THREE.Mesh(bootGeo, forgedSteelMat);
+      boot.position.set(s * 0.118, 0.29, 0.02);
+      riderGroup.add(boot);
+
+      const stirrup = new THREE.Mesh(stirrupGeo, goldTrimMat);
+      stirrup.position.set(s * 0.120, 0.295, 0.03);
+      riderGroup.add(stirrup);
+    }
+
+    // B. Rider's Sculpted Breastplate Cuirass Torso (Seated upright on the rearing steed)
+    const riderTorsoGeo = getCachedGeo('hollow_rider_cuirass_v2', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.46],
+          [0.105, 0.48],
+          [0.088, 0.58],
+          [0.122, 0.72],
+          [0.132, 0.80],
+          [0.075, 0.85],
+          [0.0, 0.85]
+        ],
+        {
+          sampleCount: 24,
+          radialSegments: 24,
+          fluteCount: 8,
+          fluteDepth: 0.008,
+          fluteYMin: 0.50,
+          fluteYMax: 0.82
+        }
+      )
+    );
+    const riderTorso = new THREE.Mesh(riderTorsoGeo, primaryMat);
+    riderTorso.position.set(0, 0, -0.05);
+    riderGroup.add(riderTorso);
+
+    // Gold Ribbed Plackart Belt & Breastplate Trim
+    const beltRing = new THREE.Mesh(
+      getCachedGeo('hollow_rider_belt_v2', () => new THREE.TorusGeometry(0.094, 0.012, 8, 20)),
+      goldTrimMat
+    );
+    beltRing.rotation.x = Math.PI / 2;
+    beltRing.position.set(0, 0.56, -0.05);
+    riderGroup.add(beltRing);
+
+    // C. Billowing Tattered Riding Cloak sweeping back from the Horseman's shoulders
+    const capeGeo = getCachedGeo('hollow_rider_cape_v2', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.81, -0.09),
+          new THREE.Vector3(0, 0.64, -0.20),
+          new THREE.Vector3(0, 0.42, -0.27)
+        ],
+        0.115,
+        0.165,
+        14,
+        10
+      )
+    );
+    const capeMesh = new THREE.Mesh(capeGeo, primaryMat);
+    capeMesh.scale.set(1.15, 1.0, 0.32);
+    riderGroup.add(capeMesh);
+
+    // D. Spiked Gothic Pauldrons on the Horseman's Shoulders
+    const riderPauldronGeo = getCachedGeo('hollow_rider_pauldron_v2', () =>
+      new THREE.SphereGeometry(0.068, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.62)
+    );
+    const pauldronSpikeGeo = getCachedGeo('hollow_rider_p_spike_v2', () =>
+      new THREE.ConeGeometry(0.015, 0.055, 6)
+    );
+    for (const s of [-1, 1]) {
+      const pauldron = new THREE.Mesh(riderPauldronGeo, goldTrimMat);
+      pauldron.position.set(s * 0.125, 0.80, -0.05);
+      pauldron.rotation.z = s * -0.45;
+      riderGroup.add(pauldron);
+
+      const pSpike = new THREE.Mesh(pauldronSpikeGeo, forgedSteelMat);
+      pSpike.position.set(s * 0.145, 0.85, -0.05);
+      pSpike.rotation.z = s * -0.35;
+      riderGroup.add(pSpike);
+    }
+
+    // E. High Gothic Gorget Collar & SEVERED HEADLESS NECK STUMP (with glowing ectoplasm soul-flame!)
+    const collarRing = new THREE.Mesh(
+      getCachedGeo('hollow_knight_collar_v2', () => new THREE.TorusGeometry(0.064, 0.015, 10, 22)),
+      goldTrimMat
+    );
+    collarRing.rotation.x = Math.PI / 2;
+    collarRing.position.set(0, 0.85, -0.05);
+    riderGroup.add(collarRing);
+
+    const neckFlameGeo = getCachedGeo('hollow_neck_soul_flame_v2', () =>
+      new THREE.ConeGeometry(0.032, 0.085, 7)
+    );
+    const neckFlame = new THREE.Mesh(neckFlameGeo, ectoGlowMat);
+    neckFlame.userData.isDragonFire = true;
+    neckFlame.position.set(0, 0.89, -0.05);
+    riderGroup.add(neckFlame);
+
+    // F. LEFT ARM, GAUNTLET & 5-FINGERED CLAWED HAND holding the Blazing Carved Jack-o'-Lantern Head aloft!
+    riderGroup.add(
+      buildReaperArmWithHand(
+        -1,
+        [-0.12, 0.78, -0.05],
+        [-0.18, 0.72, 0.01],
+        [-0.15, 0.76, 0.09],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        false,
+        [-Math.PI / 2, 0, 0.25]
+      )
+    );
+
+    // Stationary Carved Grinning Jack-o'-Lantern Head resting squarely in the Horseman's Left Clawed Hand!
+    const horsemanPumpkin = buildCarvedJackOLantern(0.086, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
+    horsemanPumpkin.position.set(-0.15, 0.85, 0.10);
+    horsemanPumpkin.rotation.y = 0.22;
+    riderGroup.add(horsemanPumpkin);
+
+    // G. RIGHT ARM, GAUNTLET & 5-FINGERED CLAWED HAND gripping the Horseman's Top-Bladed Reaper Scythe!
+    riderGroup.add(
+      buildReaperArmWithHand(
+        1,
+        [0.12, 0.78, -0.05],
+        [0.18, 0.68, 0.00],
+        [0.17, 0.62, 0.05],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        false,
+        [0.2, -0.3, -0.2]
+      )
+    );
+
+    const horsemanScythe = buildReaperScythe(0.76, primaryMat, forgedSteelMat, goldTrimMat, false, true);
+    horsemanScythe.position.set(0.17, 0.60, 0.05);
+    horsemanScythe.rotation.set(0.24, -0.28, -0.18);
+    riderGroup.add(horsemanScythe);
+    animParts.push({
+      mesh: horsemanScythe,
+      kind: 'reaperScythe',
+      baseX: 0.17,
+      baseY: 0.60,
+      baseZ: 0.05,
+      baseRotX: 0.24,
+      baseRotY: -0.28,
+      baseRotZ: -0.18
+    });
+  } else if (pieceType === 'bishop') {
+    // BISHOP — SOUL-HARVESTER WRAITH: Hooded wraith with Left & Right Arms + Clawed Hands, Soul Talisman & Top-Bladed Reaper Scythe
+    const wraithRobeGeo = getCachedGeo('hollow_bishop_robe', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.16],
+          [0.22, 0.18],
+          [0.17, 0.38],
+          [0.14, 0.62],
+          [0.16, 0.78],
+          [0.11, 0.94],
+          [0.0, 1.02]
+        ],
+        {
+          sampleCount: 30,
+          radialSegments: 28,
+          fluteCount: 10,
+          fluteDepth: 0.014,
+          fluteYMin: 0.20,
+          fluteYMax: 0.90
+        }
+      )
+    );
+    rig.add(new THREE.Mesh(wraithRobeGeo, primaryMat));
+
+    // Deep Void Hood Cavity + Glowing Ectoplasm Wraith Eyes
+    const hoodVoidGeo = getCachedGeo('hollow_bishop_hood_void', () =>
+      new THREE.SphereGeometry(0.075, 14, 12)
+    );
+    const hoodVoid = new THREE.Mesh(
+      hoodVoidGeo,
+      new THREE.MeshBasicMaterial({ color: 0x050308 })
+    );
+    hoodVoid.position.set(0, 0.89, 0.045);
+    rig.add(hoodVoid);
+
+    const wraithEyeGeo = getCachedGeo('hollow_wraith_eye', () => new THREE.OctahedronGeometry(0.018, 0));
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(wraithEyeGeo, ectoGlowMat);
+      eye.position.set(s * 0.032, 0.90, 0.105);
+      eye.userData.isDragonFire = true;
+      rig.add(eye);
+    }
+
+    // Stationary Mini Jack-o'-Lantern Reliquary Crown seated above the Wraith Cowl
+    const bishopLantern = buildCarvedJackOLantern(0.068, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
+    bishopLantern.position.set(0, 1.06, 0);
+    rig.add(bishopLantern);
+
+    // Left Arm & Splayed 5-Fingered Clawed Hand channeling a Soul-Lantern Orb
+    rig.add(
+      buildReaperArmWithHand(
+        -1,
+        [-0.13, 0.74, 0.0],
+        [-0.19, 0.62, 0.05],
+        [-0.15, 0.64, 0.14],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        false,
+        [-0.35, 0.35, 0.2]
+      )
+    );
+
+    const soulOrb = new THREE.Mesh(
+      getCachedGeo('hollow_bishop_soul_orb_v2', () => new THREE.OctahedronGeometry(0.032, 1)),
+      ectoGlowMat
+    );
+    soulOrb.userData.isDragonFire = true;
+    soulOrb.position.set(-0.15, 0.69, 0.16);
+    rig.add(soulOrb);
+
+    // Right Arm & Clawed Hand gripping the Top-Bladed Soul-Harvester Scythe
+    rig.add(
+      buildReaperArmWithHand(
+        1,
+        [0.13, 0.74, 0.0],
+        [0.19, 0.60, 0.04],
+        [0.17, 0.50, 0.07],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        false,
+        [0.18, -0.32, -0.15]
+      )
+    );
+
+    const bishopScythe = buildReaperScythe(0.85, goldTrimMat, forgedSteelMat, primaryMat, false, true);
+    bishopScythe.position.set(0.17, 0.48, 0.06);
+    bishopScythe.rotation.set(0.18, -0.32, -0.15);
+    rig.add(bishopScythe);
+    animParts.push({
+      mesh: bishopScythe,
+      kind: 'reaperScythe',
+      baseX: 0.17,
+      baseY: 0.48,
+      baseZ: 0.06,
+      baseRotX: 0.18,
+      baseRotY: -0.32,
+      baseRotZ: -0.15
+    });
+  } else if (pieceType === 'queen') {
+    // QUEEN — BANSHEE SCYTHE EMPRESS: Spectral matriarch with stationary Carved Jack-o'-Lantern head, Left & Right Clawed Hands, bat-wing mantle & Top-Bladed Double War-Scythe
+    const gownGeo = getCachedGeo('hollow_queen_gown', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.16],
+          [0.25, 0.17],
+          [0.19, 0.40],
+          [0.13, 0.62],
+          [0.16, 0.80],
+          [0.12, 0.94],
+          [0.0, 0.96]
+        ],
+        {
+          sampleCount: 32,
+          radialSegments: 30,
+          fluteCount: 12,
+          fluteDepth: 0.015,
+          fluteYMin: 0.19,
+          fluteYMax: 0.88
+        }
+      )
+    );
+    rig.add(new THREE.Mesh(gownGeo, primaryMat));
+
+    // Stationary Carved Empress Jack-o'-Lantern Head with Bat Coronet (no bobbing or bubbly scaling!)
+    const empressPumpkin = buildCarvedJackOLantern(0.098, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
+    empressPumpkin.position.set(0, 1.02, 0);
+    rig.add(empressPumpkin);
+
+    const coronetGeo = getCachedGeo('hollow_queen_coronet', () =>
+      new THREE.TorusGeometry(0.088, 0.014, 10, 24)
+    );
+    const coronet = new THREE.Mesh(coronetGeo, forgedSteelMat);
+    coronet.rotation.x = Math.PI / 2;
+    coronet.position.set(0, 1.10, 0);
+    rig.add(coronet);
+
+    // Pair of Bat-Wing Shadow Mantles on shoulders
+    const wingGeo = getCachedGeo('hollow_queen_wing', () => {
+      const g = new THREE.ConeGeometry(0.11, 0.38, 5);
+      g.scale(0.32, 1.0, 1.15);
+      return g;
+    });
+    for (const s of [-1, 1]) {
+      const wing = new THREE.Mesh(wingGeo, goldTrimMat);
+      wing.position.set(s * 0.18, 0.82, -0.06);
+      wing.rotation.set(-0.22, 0, s * -0.58);
+      rig.add(wing);
+      animParts.push({ mesh: wing, kind: 'wingPulse' });
+    }
+
+    // Left Arm & 5-Fingered Clawed Hand poised in a Banshee Spell-Weaving Gesture
+    rig.add(
+      buildReaperArmWithHand(
+        -1,
+        [-0.14, 0.80, 0.0],
+        [-0.21, 0.68, 0.05],
+        [-0.17, 0.70, 0.14],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        false,
+        [-0.4, 0.35, 0.25]
+      )
+    );
+
+    // Right Arm & 5-Fingered Clawed Hand gripping the Twin-Headed Banshee War-Scythe
+    rig.add(
+      buildReaperArmWithHand(
+        1,
+        [0.14, 0.80, 0.0],
+        [0.21, 0.65, 0.04],
+        [0.19, 0.56, 0.08],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        false,
+        [0.2, -0.35, -0.18]
+      )
+    );
+
+    const queenScythe = buildReaperScythe(0.96, goldTrimMat, forgedSteelMat, primaryMat, true, true);
+    queenScythe.position.set(0.19, 0.54, 0.07);
+    queenScythe.rotation.set(0.20, -0.35, -0.18);
+    rig.add(queenScythe);
+    animParts.push({
+      mesh: queenScythe,
+      kind: 'reaperScythe',
+      baseX: 0.19,
+      baseY: 0.54,
+      baseZ: 0.07,
+      baseRotX: 0.20,
+      baseRotY: -0.35,
+      baseRotZ: -0.18
+    });
+  } else {
+    // KING — PUMPKIN LORD SOVEREIGN: Towering dread monarch with stationary Carved Jack-o'-Lantern head, spiked crown, Left & Right Clawed Gauntlet Hands & Top-Bladed Great Scythe of Samhain
+    const armorBodyGeo = getCachedGeo('hollow_king_body', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.16],
+          [0.26, 0.17],
+          [0.21, 0.42],
+          [0.16, 0.66],
+          [0.20, 0.86],
+          [0.15, 0.98],
+          [0.0, 1.00]
+        ],
+        {
+          sampleCount: 32,
+          radialSegments: 30,
+          fluteCount: 12,
+          fluteDepth: 0.016,
+          fluteYMin: 0.20,
+          fluteYMax: 0.92
+        }
+      )
+    );
+    rig.add(new THREE.Mesh(armorBodyGeo, primaryMat));
+
+    // Spiked Pauldrons
+    const pauldronGeo = getCachedGeo('hollow_king_pauldron', () =>
+      new THREE.SphereGeometry(0.095, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.6)
+    );
+    for (const s of [-1, 1]) {
+      const pMesh = new THREE.Mesh(pauldronGeo, goldTrimMat);
+      pMesh.position.set(s * 0.17, 0.86, 0);
+      pMesh.rotation.z = s * -0.45;
+      rig.add(pMesh);
+    }
+
+    // Stationary Sovereign Carved Jack-o'-Lantern Head + Spiked Samhain Iron Crown (zero wobble/bubbly scaling!)
+    const kingPumpkin = buildCarvedJackOLantern(0.112, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
+    kingPumpkin.position.set(0, 1.08, 0);
+    rig.add(kingPumpkin);
+
+    const crownSpikeGeo = getCachedGeo('hollow_king_crown_spike', () =>
+      new THREE.ConeGeometry(0.022, 0.11, 6)
+    );
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      const sp = new THREE.Mesh(crownSpikeGeo, forgedSteelMat);
+      sp.position.set(Math.cos(ang) * 0.092, 1.20, Math.sin(ang) * 0.092);
+      rig.add(sp);
+    }
+
+    // Left Arm & 5-Fingered Clawed Gauntlet Hand holding a Cursed Jack-o'-Lantern Orb
+    rig.add(
+      buildReaperArmWithHand(
+        -1,
+        [-0.16, 0.84, 0.0],
+        [-0.23, 0.70, 0.05],
+        [-0.19, 0.68, 0.14],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        true,
+        [-0.25, 0.3, 0.15]
+      )
+    );
+    mountHalloweenModel(rig, 'lantern_hanging', {
+      scale: 0.16,
+      position: [-0.19, 0.66, 0.15],
+      excludeFromBounds: true
+    });
+
+    // Right Arm & 5-Fingered Clawed Gauntlet Hand gripping the Top-Bladed Great Scythe of Samhain
+    rig.add(
+      buildReaperArmWithHand(
+        1,
+        [0.16, 0.84, 0.0],
+        [0.23, 0.68, 0.04],
+        [0.21, 0.60, 0.08],
+        primaryMat,
+        goldTrimMat,
+        forgedSteelMat,
+        false,
+        [0.22, -0.38, -0.16]
+      )
+    );
+
+    const kingScythe = buildReaperScythe(1.08, goldTrimMat, forgedSteelMat, primaryMat, true, true);
+    kingScythe.position.set(0.21, 0.58, 0.08);
+    kingScythe.rotation.set(0.22, -0.38, -0.16);
+    rig.add(kingScythe);
+    animParts.push({
+      mesh: kingScythe,
+      kind: 'reaperScythe',
+      baseX: 0.21,
+      baseY: 0.58,
+      baseZ: 0.08,
+      baseRotX: 0.22,
+      baseRotY: -0.38,
+      baseRotZ: -0.16
+    });
+
+    // Actual 3D Skull Candles (`skull_candle.gltf`) & Triple Candles (`candle_triple.gltf`) on the Sovereign's crypt base
+    mountHalloweenModel(rig, 'skull_candle', {
+      scale: 0.125,
+      position: [-0.15, 0.17, 0.15],
+      rotationY: 0.4,
+      excludeFromBounds: true
+    });
+    mountHalloweenModel(rig, 'candle_triple', {
+      scale: 0.15,
+      position: [0.15, 0.17, -0.14],
+      excludeFromBounds: true
+    });
+  }
 }
 
 export function buildProceduralPieceGroup(archetypeId, pieceType, color, mats) {
@@ -132,6 +1508,8 @@ export function buildProceduralPieceGroup(archetypeId, pieceType, color, mats) {
     buildArcaneCyberPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
   } else if (archetypeId === 'dragon_elemental') {
     buildDragonElementalPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
+  } else if (archetypeId === 'hollow_reapers') {
+    buildHollowReapersPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
   } else {
     buildStauntonPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
   }
@@ -815,112 +2193,9 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
 
   // ==========================================================================
   // CYBER-ARCANE LASER SHADER & MULTI-STAGE 3D LASER BEAM EMITTER SYSTEM
-  // (Replaces all melee swords/daggers/halberds with detailed sci-fi laser cannons)
+  // (Shared cached materials & hidden-when-idle beamDischargeGroup so idle pieces issue 0 beam draw calls)
   // ==========================================================================
-  const createCyberLaserMaterials = () => {
-    const createBeamShader = (coreHex, midHex, edgeHex, speedMul = 1.0, opacity = 0.94) => {
-      const uniforms = {
-        uTime: { value: 0 },
-        uPulse: { value: 1.0 },
-        uCoreColor: { value: new THREE.Color(coreHex) },
-        uMidColor: { value: new THREE.Color(midHex) },
-        uEdgeColor: { value: new THREE.Color(edgeHex) },
-        uSpeed: { value: speedMul },
-        uOpacity: { value: opacity }
-      };
-      dragonFireUniformsList.push(uniforms);
-
-      return new THREE.ShaderMaterial({
-        uniforms,
-        vertexShader: `
-          varying vec2 vUv;
-          varying vec3 vNormal;
-          varying vec3 vViewPosition;
-          void main() {
-            vUv = uv;
-            vNormal = normalize(normalMatrix * normal);
-            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            vViewPosition = -mvPosition.xyz;
-            gl_Position = projectionMatrix * mvPosition;
-          }
-        `,
-        fragmentShader: `
-          uniform float uTime;
-          uniform float uPulse;
-          uniform vec3 uCoreColor;
-          uniform vec3 uMidColor;
-          uniform vec3 uEdgeColor;
-          uniform float uSpeed;
-          uniform float uOpacity;
-          varying vec2 vUv;
-          varying vec3 vNormal;
-          varying vec3 vViewPosition;
-
-          void main() {
-            vec3 normal = normalize(vNormal);
-            vec3 viewDir = normalize(vViewPosition);
-            float fresnel = clamp(abs(dot(normal, viewDir)), 0.0, 1.0);
-
-            // High-speed photon wave packets racing along the laser beam (+Y in cylinder UV)
-            float wave1 = 0.5 + 0.5 * sin(vUv.y * 42.0 - uTime * 34.0 * uSpeed);
-            float wave2 = 0.5 + 0.5 * cos(vUv.y * 78.0 - uTime * 52.0 * uSpeed + vUv.x * 12.566);
-            float hexBand = smoothstep(0.25, 0.95, wave1 * 0.65 + wave2 * 0.35);
-
-            float tipFade = smoothstep(0.0, 0.06, vUv.y) * (1.0 - smoothstep(0.86, 1.0, vUv.y));
-            float coreFactor = pow(fresnel, 1.65);
-
-            vec3 col = mix(uEdgeColor, uMidColor, smoothstep(0.1, 0.65, fresnel));
-            col = mix(col, uCoreColor, coreFactor * (0.65 + 0.35 * hexBand));
-
-            float alpha = clamp(tipFade * pow(fresnel, 0.55) * (0.72 + 0.28 * hexBand) * uOpacity * uPulse, 0.0, 1.0);
-            if (alpha < 0.01) discard;
-            gl_FragColor = vec4(col * (2.15 + 0.65 * hexBand), alpha);
-          }
-        `,
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide
-      });
-    };
-
-    return {
-      coreBeamMat: createBeamShader('#ffffff', '#b8fff9', '#00f5d4', 1.25, 0.98),
-      sheathBeamMat: createBeamShader('#00f5d4', '#00bbf9', '#7209b7', 0.95, 0.86),
-      helixMat: new THREE.MeshBasicMaterial({
-        color: 0x80ffea,
-        transparent: true,
-        opacity: 0.92,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      }),
-      reticleCyanMat: new THREE.MeshBasicMaterial({
-        color: 0x00f5d4,
-        transparent: true,
-        opacity: 0.94,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      }),
-      reticleVioletMat: new THREE.MeshBasicMaterial({
-        color: 0x9d4edd,
-        transparent: true,
-        opacity: 0.90,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      }),
-      sparkWhiteMat: new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.96,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      })
-    };
-  };
-
-  const cyberLaserMats = createCyberLaserMaterials();
+  const cyberLaserMats = getCyberLaserMaterials();
 
   const markAsCyberLaserVfx = (obj) => {
     obj.userData.excludeFromBounds = true;
@@ -935,8 +2210,8 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
 
   /**
    * Builds a multi-stage 3D Laser Beam Emitter assembly anchored at a cannon muzzle (+Z forward):
-   * 1. Muzzle Overcharge Capacitor Sphere & Inward-Imploding Charge Particles
-   * 2. 3 Staggered Holographic Hexagonal Target-Lock & Collimator Lenses
+   * 1. Muzzle Overcharge Capacitor Sphere
+   * 2. 3 Staggered Holographic Hexagonal Target-Lock & Collimator Lenses (inside beamDischargeGroup)
    * 3. Coherent White-Cyan Inner Laser Core Beam
    * 4. Scrolling GLSL Plasma-Laser Outer Sheath
    * 5. Dual Counter-Rotating Helical Laser Coils wrapping the beam
@@ -946,15 +2221,20 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
     const emitterGroup = new THREE.Group();
     emitterGroup.scale.setScalar(beamScale);
 
-    // 1. Muzzle Capacitor Charge Orb
-    const chargeOrbGeo = getCachedGeo('cyber_laser_charge_orb', () => new THREE.OctahedronGeometry(0.036, 2));
+    // 1. Muzzle Capacitor Charge Orb (visible in standby)
+    const chargeOrbGeo = getCachedGeo('cyber_laser_charge_orb', () => new THREE.OctahedronGeometry(0.036, 1));
     const chargeOrb = new THREE.Mesh(chargeOrbGeo, cyberLaserMats.coreBeamMat);
     chargeOrb.scale.setScalar(0.18);
     emitterGroup.add(chargeOrb);
 
+    // Active discharge container: strictly hidden (`visible = false`) during idle/move so WebGL skips all beam draw calls
+    const beamDischargeGroup = new THREE.Group();
+    beamDischargeGroup.visible = false;
+    emitterGroup.add(beamDischargeGroup);
+
     // 2. 3 Holographic Hexagonal Target-Lock & Collimator Lens Rings in front of muzzle
     const hexLensGeo = getCachedGeo('cyber_laser_hex_lens', () => new THREE.RingGeometry(0.034, 0.052, 6));
-    const innerTickGeo = getCachedGeo('cyber_laser_circle_lens', () => new THREE.RingGeometry(0.022, 0.028, 24));
+    const innerTickGeo = getCachedGeo('cyber_laser_circle_lens', () => new THREE.RingGeometry(0.022, 0.028, 16));
     const reticleRings = [];
     for (let r = 0; r < 3; r++) {
       const rGroup = new THREE.Group();
@@ -967,7 +2247,7 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
       innerRing.position.z = 0.002;
       rGroup.add(hexRing, innerRing);
       rGroup.scale.setScalar(0.01);
-      emitterGroup.add(rGroup);
+      beamDischargeGroup.add(rGroup);
       reticleRings.push({
         group: rGroup,
         baseZ: 0.03 + r * 0.075,
@@ -977,13 +2257,13 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
 
     // 3. Coherent Inner Laser Core Beam & Scrolling GLSL Outer Plasma Sheath (extending forward along +Z)
     const coreCylGeo = getCachedGeo('cyber_laser_core_cyl_v2', () => {
-      const g = new THREE.CylinderGeometry(0.018, 0.022, 1.0, 16, 12, true);
+      const g = new THREE.CylinderGeometry(0.018, 0.022, 1.0, 12, 6, true);
       g.translate(0, 0.5, 0);
       g.rotateX(Math.PI / 2);
       return g;
     });
     const sheathCylGeo = getCachedGeo('cyber_laser_sheath_cyl_v2', () => {
-      const g = new THREE.CylinderGeometry(0.044, 0.052, 1.0, 20, 16, true);
+      const g = new THREE.CylinderGeometry(0.044, 0.052, 1.0, 14, 8, true);
       g.translate(0, 0.5, 0);
       g.rotateX(Math.PI / 2);
       return g;
@@ -991,44 +2271,44 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
 
     const coreBeamMesh = new THREE.Mesh(coreCylGeo, cyberLaserMats.coreBeamMat);
     coreBeamMesh.scale.set(0.001, 0.001, 0.001);
-    emitterGroup.add(coreBeamMesh);
+    beamDischargeGroup.add(coreBeamMesh);
 
     const sheathBeamMesh = new THREE.Mesh(sheathCylGeo, cyberLaserMats.sheathBeamMat);
     sheathBeamMesh.scale.set(0.001, 0.001, 0.001);
-    emitterGroup.add(sheathBeamMesh);
+    beamDischargeGroup.add(sheathBeamMesh);
 
     // 4. Dual Counter-Rotating Helical Laser Coils wrapping the main beam
     const helixGeoA = getCachedGeo('cyber_laser_helix_a', () => {
       const pts = [];
-      for (let i = 0; i <= 36; i++) {
-        const u = i / 36;
+      for (let i = 0; i <= 28; i++) {
+        const u = i / 28;
         const ang = u * Math.PI * 8.0;
         const r = 0.036 * (0.65 + 0.35 * Math.sin(u * Math.PI));
         pts.push(new THREE.Vector3(Math.cos(ang) * r, Math.sin(ang) * r, u * 1.0));
       }
-      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 64, 0.0055, 8, false);
+      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.0055, 6, false);
     });
     const helixGeoB = getCachedGeo('cyber_laser_helix_b', () => {
       const pts = [];
-      for (let i = 0; i <= 36; i++) {
-        const u = i / 36;
+      for (let i = 0; i <= 28; i++) {
+        const u = i / 28;
         const ang = -u * Math.PI * 8.0 + Math.PI;
         const r = 0.042 * (0.65 + 0.35 * Math.sin(u * Math.PI));
         pts.push(new THREE.Vector3(Math.cos(ang) * r, Math.sin(ang) * r, u * 1.0));
       }
-      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 64, 0.0045, 8, false);
+      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.0045, 6, false);
     });
 
     const helixMeshA = new THREE.Mesh(helixGeoA, cyberLaserMats.helixMat);
     helixMeshA.scale.set(0.001, 0.001, 0.001);
-    emitterGroup.add(helixMeshA);
+    beamDischargeGroup.add(helixMeshA);
 
     const helixMeshB = new THREE.Mesh(helixGeoB, cyberLaserMats.reticleVioletMat);
     helixMeshB.scale.set(0.001, 0.001, 0.001);
-    emitterGroup.add(helixMeshB);
+    beamDischargeGroup.add(helixMeshB);
 
     // 5. 6 Travelling Collimator Shockwave Pulse Rings racing down the beam
-    const pulseRingGeo = getCachedGeo('cyber_laser_pulse_torus', () => new THREE.TorusGeometry(0.048, 0.005, 10, 24));
+    const pulseRingGeo = getCachedGeo('cyber_laser_pulse_torus', () => new THREE.TorusGeometry(0.048, 0.005, 8, 18));
     const pulseRings = [];
     for (let p = 0; p < 6; p++) {
       const pr = new THREE.Mesh(
@@ -1036,17 +2316,17 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
         p % 2 === 0 ? cyberLaserMats.sparkWhiteMat : cyberLaserMats.reticleCyanMat
       );
       pr.scale.setScalar(0.001);
-      emitterGroup.add(pr);
+      beamDischargeGroup.add(pr);
       pulseRings.push({
         mesh: pr,
         phaseOffset: p / 6
       });
     }
 
-    // 6. Target-End Impact Supernova Flare & 10 Ricocheting Laser Ion Sparks
+    // 6. Target-End Impact Supernova Flare & 8 Ricocheting Laser Ion Sparks
     const impactGroup = new THREE.Group();
     impactGroup.scale.setScalar(0.001);
-    emitterGroup.add(impactGroup);
+    beamDischargeGroup.add(impactGroup);
 
     const impactCore = new THREE.Mesh(chargeOrbGeo, cyberLaserMats.sparkWhiteMat);
     impactCore.scale.setScalar(1.45);
@@ -1062,7 +2342,7 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
       return g;
     });
     const ionSparks = [];
-    for (let s = 0; s < 10; s++) {
+    for (let s = 0; s < 8; s++) {
       const sp = new THREE.Mesh(
         ionSparkGeo,
         s % 2 === 0 ? cyberLaserMats.sparkWhiteMat : cyberLaserMats.reticleCyanMat
@@ -1070,8 +2350,8 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
       impactGroup.add(sp);
       ionSparks.push({
         mesh: sp,
-        angle: (s / 10) * Math.PI * 2,
-        phase: s / 10,
+        angle: (s / 8) * Math.PI * 2,
+        phase: s / 8,
         speed: 2.6 + (s % 3) * 0.55
       });
     }
@@ -1079,6 +2359,7 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
     markAsCyberLaserVfx(emitterGroup);
     animParts.push({
       mesh: emitterGroup,
+      beamDischargeGroup,
       kind: 'cyberLaserBeam',
       beamLength,
       chargeOrb,
@@ -2139,6 +3420,113 @@ function buildArcaneCyberPiece(rig, type, primaryMat, trimMat, bladeMat, animPar
 // ============================================================================
 const dragonFireUniformsList = [];
 let cachedDragonFireMats = null;
+let cachedCyberLaserMats = null;
+let cachedPyroluxBreathMats = null;
+let lastUniformElapsedTotal = -1;
+
+function getCyberLaserMaterials() {
+  if (cachedCyberLaserMats) return cachedCyberLaserMats;
+  const createBeamShader = (coreHex, midHex, edgeHex, speedMul = 1.0, opacity = 0.94) => {
+    const uniforms = {
+      uTime: { value: 0 },
+      uPulse: { value: 1.0 },
+      uCoreColor: { value: new THREE.Color(coreHex) },
+      uMidColor: { value: new THREE.Color(midHex) },
+      uEdgeColor: { value: new THREE.Color(edgeHex) },
+      uSpeed: { value: speedMul },
+      uOpacity: { value: opacity }
+    };
+    dragonFireUniformsList.push(uniforms);
+
+    return new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+        void main() {
+          vUv = uv;
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          vViewPosition = -mvPosition.xyz;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uPulse;
+        uniform vec3 uCoreColor;
+        uniform vec3 uMidColor;
+        uniform vec3 uEdgeColor;
+        uniform float uSpeed;
+        uniform float uOpacity;
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vViewPosition;
+
+        void main() {
+          vec3 normal = normalize(vNormal);
+          vec3 viewDir = normalize(vViewPosition);
+          float fresnel = clamp(abs(dot(normal, viewDir)), 0.0, 1.0);
+
+          float wave1 = 0.5 + 0.5 * sin(vUv.y * 42.0 - uTime * 34.0 * uSpeed);
+          float wave2 = 0.5 + 0.5 * cos(vUv.y * 78.0 - uTime * 52.0 * uSpeed + vUv.x * 12.566);
+          float hexBand = smoothstep(0.25, 0.95, wave1 * 0.65 + wave2 * 0.35);
+
+          float tipFade = smoothstep(0.0, 0.06, vUv.y) * (1.0 - smoothstep(0.86, 1.0, vUv.y));
+          float coreFactor = pow(fresnel, 1.65);
+
+          vec3 col = mix(uEdgeColor, uMidColor, smoothstep(0.1, 0.65, fresnel));
+          col = mix(col, uCoreColor, coreFactor * (0.65 + 0.35 * hexBand));
+
+          float alpha = clamp(tipFade * pow(fresnel, 0.55) * (0.72 + 0.28 * hexBand) * uOpacity * uPulse, 0.0, 1.0);
+          if (alpha < 0.01) discard;
+          gl_FragColor = vec4(col * (2.15 + 0.65 * hexBand), alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+  };
+
+  cachedCyberLaserMats = {
+    coreBeamMat: createBeamShader('#ffffff', '#b8fff9', '#00f5d4', 1.25, 0.98),
+    sheathBeamMat: createBeamShader('#00f5d4', '#00bbf9', '#7209b7', 0.95, 0.86),
+    helixMat: new THREE.MeshBasicMaterial({
+      color: 0x80ffea,
+      transparent: true,
+      opacity: 0.92,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }),
+    reticleCyanMat: new THREE.MeshBasicMaterial({
+      color: 0x00f5d4,
+      transparent: true,
+      opacity: 0.94,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }),
+    reticleVioletMat: new THREE.MeshBasicMaterial({
+      color: 0x9d4edd,
+      transparent: true,
+      opacity: 0.90,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }),
+    sparkWhiteMat: new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.96,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  };
+  return cachedCyberLaserMats;
+}
 
 function getDragonFireMaterials() {
   if (cachedDragonFireMats) return cachedDragonFireMats;
@@ -2462,158 +3850,247 @@ function buildDragonFirePlumeGroup(animParts, options = {}) {
   return fireGroup;
 }
 
+let cachedPyroluxFlameTex = null;
+function getPyroluxFireFlameTexture() {
+  if (cachedPyroluxFlameTex || typeof document === 'undefined') return cachedPyroluxFlameTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    const cx = 64;
+    const cy = 64;
+    const baseGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, 60);
+    baseGrad.addColorStop(0.0, 'rgba(255,255,255,1.0)');
+    baseGrad.addColorStop(0.28, 'rgba(255,245,210,0.92)');
+    baseGrad.addColorStop(0.58, 'rgba(255,180,90,0.48)');
+    baseGrad.addColorStop(0.82, 'rgba(255,90,30,0.16)');
+    baseGrad.addColorStop(1.0, 'rgba(255,40,0,0.0)');
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, 128, 128);
+
+    const lobes = [
+      { ox: -12, oy: -8, r: 34 },
+      { ox: 14, oy: -6, r: 32 },
+      { ox: -8, oy: 14, r: 30 },
+      { ox: 10, oy: 12, r: 34 },
+      { ox: 0, oy: -16, r: 28 }
+    ];
+    for (const lb of lobes) {
+      const lg = ctx.createRadialGradient(cx + lb.ox, cy + lb.oy, 1, cx + lb.ox, cy + lb.oy, lb.r);
+      lg.addColorStop(0.0, 'rgba(255,255,255,0.55)');
+      lg.addColorStop(0.5, 'rgba(255,220,140,0.25)');
+      lg.addColorStop(1.0, 'rgba(255,120,20,0.0)');
+      ctx.fillStyle = lg;
+      ctx.beginPath();
+      ctx.arc(cx + lb.ox, cy + lb.oy, lb.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  cachedPyroluxFlameTex = new THREE.CanvasTexture(canvas);
+  cachedPyroluxFlameTex.needsUpdate = true;
+  return cachedPyroluxFlameTex;
+}
+
+function createPyroluxFireBreathShader(coreHex = 0xfff8d6, midHex = 0xff9e00, outerHex = 0xff2a00) {
+  const uniforms = {
+    uTime: { value: 0 },
+    uProgress: { value: 0 },
+    uCoreColor: { value: new THREE.Color(coreHex) },
+    uMidColor: { value: new THREE.Color(midHex) },
+    uOuterColor: { value: new THREE.Color(outerHex) }
+  };
+  dragonFireUniformsList.push(uniforms);
+
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms,
+    vertexShader: `
+      uniform float uTime;
+      uniform float uProgress;
+      varying vec2 vUv;
+      varying float vAxial;
+      varying vec3 vNormalView;
+      varying vec3 vViewDir;
+
+      void main() {
+        vUv = uv;
+        float axial = clamp(1.0 - uv.y, 0.0, 1.0);
+        vAxial = axial;
+
+        vec3 pos = position;
+        float billow = pow(axial, 1.15);
+        float wave1 = sin(axial * 14.0 - uTime * 22.0 + uv.x * 6.28318) * 0.032 * billow;
+        float wave2 = cos(axial * 23.0 - uTime * 31.0 - uv.x * 12.56636) * 0.020 * billow;
+        pos.x += wave1 + wave2;
+        pos.y += wave2 - wave1 * 0.6;
+
+        vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+        vNormalView = normalize(normalMatrix * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uProgress;
+      uniform vec3 uCoreColor;
+      uniform vec3 uMidColor;
+      uniform vec3 uOuterColor;
+      varying vec2 vUv;
+      varying float vAxial;
+      varying vec3 vNormalView;
+      varying vec3 vViewDir;
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(234.34, 435.345));
+        p += dot(p, p + 34.23);
+        return fract(p.x * p.y);
+      }
+      float valueNoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+      float fbmNoise(vec2 p) {
+        float v = 0.0;
+        float amp = 0.5;
+        for (int i = 0; i < 3; i++) {
+          v += amp * valueNoise(p);
+          p *= 2.04;
+          amp *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        float reach = smoothstep(0.0, 0.22, uProgress);
+        float axialMask = 1.0 - smoothstep(reach * 0.82, reach + 0.18, vAxial);
+        float throatSoft = smoothstep(0.0, 0.10, vAxial);
+
+        vec2 flowUv1 = vec2(vUv.x * 5.0 + sin(vAxial * 6.0 - uTime * 8.0) * 0.25, vAxial * 4.5 - uTime * 6.8);
+        vec2 flowUv2 = vec2(vUv.x * 9.0 - cos(vAxial * 9.0 - uTime * 11.0) * 0.20, vAxial * 8.5 - uTime * 10.5);
+        float n1 = fbmNoise(flowUv1);
+        float n2 = fbmNoise(flowUv2);
+        float turb = mix(n1, n2, 0.48);
+
+        float facing = abs(dot(normalize(vNormalView), normalize(vViewDir)));
+        float softCylinder = pow(clamp(facing, 0.0, 1.0), 0.55);
+
+        float flameDensity = clamp((turb * 1.25 - vAxial * 0.30) * softCylinder, 0.0, 1.0);
+        float tailErode = smoothstep(max(0.0, uProgress - 0.35) * 1.1, 1.0, turb + (1.0 - vAxial) * 0.45);
+
+        vec3 col = mix(uOuterColor, uMidColor, smoothstep(0.18, 0.58, flameDensity));
+        col = mix(col, uCoreColor, smoothstep(0.58, 0.92, flameDensity + (1.0 - vAxial) * 0.35));
+
+        float fadeOut = 1.0 - pow(clamp((uProgress - 0.58) / 0.42, 0.0, 1.0), 1.6);
+        float alpha = flameDensity * axialMask * throatSoft * tailErode * fadeOut * 1.55;
+        if (alpha < 0.015) discard;
+        gl_FragColor = vec4(col * 1.65, min(1.0, alpha));
+      }
+    `
+  });
+}
+
 /**
- * Builds a multi-stage, sustained 3D Dragon-Breath Flamethrower Jet inside the dragon's parted fanged jaws:
- * 1. Throat Ignition Furnace Core Orb (swells white-hot as the dragon inhales)
- * 2. Volumetric Inner White-Hot & Outer Roaring Dragon-Breath Flame Cone Streams
- * 3. Dual Counter-Rotating Helical Fire-Vortex Coils wrapping the breath stream
- * 4. 7 Spiraling Licking Dragon-Flame Tongues
- * 5. 18 Pressurized Fireball Globules & Ember Sparks + Target-End Inferno Fireball Bloom
+ * Builds the ONE single unified PYROLUX Volumetric Fire-Breathing Stream directly inside the Dragon's mouth:
+ * - Parented directly to the Dragon's `head` at `(0, -0.005, 0.175)` (right between the upper & lower fangs),
+ *   so whenever the Dragon piece moves, hovers in mid-air, recoils, or sweeps its head, the fire breath
+ *   moves 100% locked to the Dragon's mouth (never detached at the chest!).
  */
 function buildDragonJawBreathFire(animParts) {
-  const { coreMat, outerMat, emberSparkMat } = getDragonFireMaterials();
+  const { coreMat } = getDragonFireMaterials();
   const breathGroup = new THREE.Group();
-  // Positioned in the throat/parted jaws (+Z is forward out of the snout)
-  breathGroup.position.set(0, -0.010, 0.105);
+  // Anchored inside the parted fanged mouth (+Z is forward out of the snout, tilted slightly downward toward the enemy)
+  breathGroup.position.set(0, -0.005, 0.175);
+  breathGroup.rotation.x = 0.28;
   breathGroup.userData.excludeFromBounds = true;
 
-  // 1. Throat Ignition Furnace Core Orb
-  const throatOrbGeo = getCachedGeo('dragon_jaw_throat_orb', () => new THREE.DodecahedronGeometry(0.032, 1));
+  // 1. Throat Ignition Furnace Core Orb (deep inside the gullet)
+  const throatOrbGeo = getCachedGeo('dragon_jaw_throat_orb', () => new THREE.DodecahedronGeometry(0.028, 1));
   const throatOrb = new THREE.Mesh(throatOrbGeo, coreMat);
-  throatOrb.scale.setScalar(0.55);
+  throatOrb.scale.setScalar(0.35);
   breathGroup.add(throatOrb);
 
-  // 2. Volumetric Inner & Outer Dragon-Breath Flame Cone Stream (erupts forward along +Z)
-  const breathStreamConeGeo = getCachedGeo('dragon_jaw_breath_cone_v2', () => {
-    const g = new THREE.ConeGeometry(0.072, 0.36, 20, 12, true);
-    // Cone tip at origin (throat), flaring open forward along +Z
-    g.translate(0, -0.18, 0);
+  // 2. Active PYROLUX Fire-Breath Stream Container (hidden during idle/move, ignites when jaws unhinge in attack)
+  const streamContainer = new THREE.Group();
+  streamContainer.visible = false;
+  streamContainer.userData.excludeFromBounds = true;
+  breathGroup.add(streamContainer);
+
+  const jetConeGeo = getCachedGeo('dragon_pyrolux_breath_cone', () => {
+    const g = new THREE.ConeGeometry(0.38, 1.32, 28, 18, true);
+    // Tip at origin (0,0,0 = Dragon's mouth), flaring outward along +Z toward target
+    g.translate(0, -0.66, 0);
     g.rotateX(-Math.PI / 2);
     return g;
   });
 
-  const innerStreamCone = new THREE.Mesh(breathStreamConeGeo, coreMat);
-  innerStreamCone.scale.set(0.32, 0.32, 0.42);
-  breathGroup.add(innerStreamCone);
+  if (!cachedPyroluxBreathMats) {
+    cachedPyroluxBreathMats = {
+      outerFireMat: createPyroluxFireBreathShader(0xfff3b0, 0xff6d00, 0xd90429),
+      innerFireMat: createPyroluxFireBreathShader(0xffffff, 0xffd166, 0xff5400)
+    };
+  }
+  const { outerFireMat, innerFireMat } = cachedPyroluxBreathMats;
 
-  const outerStreamCone = new THREE.Mesh(breathStreamConeGeo, outerMat);
-  outerStreamCone.scale.set(0.46, 0.46, 0.52);
-  breathGroup.add(outerStreamCone);
+  const outerBreathCone = new THREE.Mesh(jetConeGeo, outerFireMat);
+  streamContainer.add(outerBreathCone);
 
-  // 3. Dual Counter-Rotating Helical Fire-Vortex Coils spiraling down the breath stream
-  const fireHelixGeoA = getCachedGeo('dragon_jaw_fire_helix_a', () => {
-    const pts = [];
-    for (let i = 0; i <= 32; i++) {
-      const u = i / 32;
-      const ang = u * Math.PI * 6.5;
-      const r = (0.018 + u * 0.095) * Math.sin(Math.min(1, u * 1.4) * Math.PI * 0.85);
-      pts.push(new THREE.Vector3(Math.cos(ang) * r, Math.sin(ang) * r, u * 0.38));
-    }
-    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.009, 8, false);
-  });
-  const fireHelixGeoB = getCachedGeo('dragon_jaw_fire_helix_b', () => {
-    const pts = [];
-    for (let i = 0; i <= 32; i++) {
-      const u = i / 32;
-      const ang = -u * Math.PI * 6.5 + Math.PI;
-      const r = (0.022 + u * 0.11) * Math.sin(Math.min(1, u * 1.4) * Math.PI * 0.85);
-      pts.push(new THREE.Vector3(Math.cos(ang) * r, Math.sin(ang) * r, u * 0.38));
-    }
-    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.008, 8, false);
-  });
+  const innerBreathCone = new THREE.Mesh(jetConeGeo, innerFireMat);
+  innerBreathCone.scale.set(0.62, 0.62, 0.95);
+  streamContainer.add(innerBreathCone);
 
-  const fireHelixA = new THREE.Mesh(fireHelixGeoA, coreMat);
-  fireHelixA.scale.set(0.25, 0.25, 0.25);
-  breathGroup.add(fireHelixA);
-
-  const fireHelixB = new THREE.Mesh(fireHelixGeoB, outerMat);
-  fireHelixB.scale.set(0.25, 0.25, 0.25);
-  breathGroup.add(fireHelixB);
-
-  // 4. Spiraling Licking Dragon-Flame Tongues shooting out of the jaws
-  const jetTongueGeo = getCachedGeo('dragon_jaw_breath_tongue', () =>
-    buildTaperedCurveGeo(
-      [
-        new THREE.Vector3(0, 0.0, 0.0),
-        new THREE.Vector3(0, 0.006, 0.085),
-        new THREE.Vector3(0, 0.024, 0.185),
-        new THREE.Vector3(0, 0.055, 0.285)
-      ],
-      0.034,
-      0.003,
-      20,
-      12
-    )
-  );
-
-  const tongues = [];
-  const configs = [
-    { rotY: 0.0, rotZ: 0.0, scale: 0.58, mat: coreMat },
-    { rotY: 0.20, rotZ: -0.25, scale: 0.50, mat: outerMat },
-    { rotY: -0.20, rotZ: 0.25, scale: 0.50, mat: outerMat },
-    { rotY: 0.09, rotZ: 0.45, scale: 0.45, mat: coreMat },
-    { rotY: -0.09, rotZ: -0.45, scale: 0.45, mat: outerMat },
-    { rotY: 0.32, rotZ: 0.15, scale: 0.42, mat: outerMat },
-    { rotY: -0.32, rotZ: -0.15, scale: 0.42, mat: coreMat }
-  ];
-
-  configs.forEach((cfg, idx) => {
-    const pivot = new THREE.Group();
-    pivot.rotation.y = cfg.rotY;
-    pivot.rotation.z = cfg.rotZ;
-    const m = new THREE.Mesh(jetTongueGeo, cfg.mat);
-    m.scale.setScalar(cfg.scale);
-    pivot.add(m);
-    breathGroup.add(pivot);
-    tongues.push({
-      mesh: m,
-      pivot,
-      baseScale: cfg.scale,
-      baseRotY: cfg.rotY,
-      phase: idx * 1.15
+  // 3. 16 Billowing PYROLUX Soft-Particle Flame, Ember & Smoke Billboards pouring directly out of the Dragon's Jaws
+  const flameTex = getPyroluxFireFlameTexture();
+  const flameParticles = [];
+  const particleCount = 16;
+  for (let i = 0; i < particleCount; i++) {
+    const fMat = new THREE.SpriteMaterial({
+      map: flameTex,
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      rotation: (i / particleCount) * Math.PI * 2
     });
-  });
-
-  // 5. 18 Pressurized Fireball Globules & Molten Ember Sparks streaming forward from the dragon's maw
-  const jawEmberGeo = getCachedGeo('dragon_jaw_breath_ember', () => {
-    const g = new THREE.OctahedronGeometry(0.016, 1);
-    g.scale(0.85, 0.85, 1.85);
-    return g;
-  });
-  const jawSparks = [];
-  for (let i = 0; i < 18; i++) {
-    const sp = new THREE.Mesh(jawEmberGeo, i % 3 === 0 ? coreMat : i % 2 === 0 ? outerMat : emberSparkMat);
-    breathGroup.add(sp);
-    jawSparks.push({
-      mesh: sp,
-      phaseOffset: i / 18,
-      angleOffset: (i / 18) * Math.PI * 2,
-      spreadR: 0.022 + (i % 4) * 0.018,
-      reachZ: 0.24 + (i % 5) * 0.055,
-      speed: 2.3 + (i % 4) * 0.45
+    const fSp = new THREE.Sprite(fMat);
+    fSp.userData.excludeFromBounds = true;
+    fSp.userData.isDragonFire = true;
+    streamContainer.add(fSp);
+    flameParticles.push({
+      sprite: fSp,
+      phase: i / particleCount,
+      speed: 1.95 + (i % 5) * 0.28,
+      swirlAngle: (i / particleCount) * Math.PI * 2 * 3.0,
+      swirlRadius: 0.048 + (i % 7) * 0.038,
+      rotSpeed: (i % 2 === 0 ? 1 : -1) * (2.4 + (i % 4) * 0.75),
+      baseScale: 0.24 + (i % 4) * 0.09
     });
   }
-
-  // 6. Target-End Rolling Inferno Fireball Bloom at the end of the breath stream
-  const impactFireball = new THREE.Mesh(throatOrbGeo, outerMat);
-  impactFireball.scale.setScalar(0.001);
-  breathGroup.add(impactFireball);
 
   breathGroup.traverse((ch) => {
     ch.userData.excludeFromBounds = true;
   });
   markAsDragonFire(breathGroup);
+
   animParts.push({
     mesh: breathGroup,
     kind: 'dragonBreathJet',
     throatOrb,
-    innerStreamCone,
-    outerStreamCone,
-    fireHelixA,
-    fireHelixB,
-    tongues,
-    jawSparks,
-    impactFireball
+    streamContainer,
+    outerBreathCone,
+    innerBreathCone,
+    flameParticles
   });
 
   return breathGroup;
@@ -3211,37 +4688,6 @@ function buildDragonElementalPiece(rig, type, primaryMat, trimMat, bladeMat, ani
     });
     kingInfernoCrown.position.set(0, 0.15, -0.02);
     head.add(kingInfernoCrown);
-
-    // Twin Flanking Wyvern Shoulder-Heads (-X and +X) so the Dragon Sovereign unleashes a 3-Headed Hellfire Breath Torrent!
-    const shoulderNeckGeo = getCachedGeo('dragon_king_shoulder_neck', () =>
-      buildTaperedCurveGeo(
-        [
-          new THREE.Vector3(0, 0, -0.02),
-          new THREE.Vector3(0.11, 0.08, 0.02),
-          new THREE.Vector3(0.19, 0.19, 0.06)
-        ],
-        0.068,
-        0.042,
-        20,
-        14
-      )
-    );
-
-    for (const s of [-1, 1]) {
-      const shoulderPivot = new THREE.Group();
-      shoulderPivot.position.set(0, 0.54 * h, 0.0);
-      rig.add(shoulderPivot);
-
-      const sNeck = new THREE.Mesh(shoulderNeckGeo, primaryMat);
-      sNeck.scale.x = s;
-      shoulderPivot.add(sNeck);
-
-      const flankWyvernHead = buildDragonHeadGroup(0.68, 2);
-      flankWyvernHead.position.set(s * 0.20, 0.20, 0.07);
-      flankWyvernHead.rotation.y = -s * 0.16;
-      shoulderPivot.add(flankWyvernHead);
-      animParts.push({ mesh: flankWyvernHead, kind: 'headNod' });
-    }
   }
 }
 
@@ -3262,9 +4708,12 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
   const isAttacking = mode === 'attack';
   const atkIntensity = isAttacking ? Math.sin(Math.min(1, state.clipTime / 0.86) * Math.PI) : 0;
 
-  // Update shared GLSL Dragonfire & Cyber-Laser shader time uniforms
-  for (let i = 0; i < dragonFireUniformsList.length; i++) {
-    dragonFireUniformsList[i].uTime.value = elapsedTotal;
+  // Update shared GLSL Dragonfire & Cyber-Laser shader time uniforms once per frame
+  if (lastUniformElapsedTotal !== elapsedTotal) {
+    lastUniformElapsedTotal = elapsedTotal;
+    for (let i = 0; i < dragonFireUniformsList.length; i++) {
+      dragonFireUniformsList[i].uTime.value = elapsedTotal;
+    }
   }
 
   // Also update any cloned showcase shader uniforms attached to the piece root
@@ -3314,86 +4763,84 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
         }
       }
     } else if (part.kind === 'dragonBreathJet') {
-      // Sustained Roaring Dragon-Breath Flamethrower Stream when jaws unhinge during attack
+      // ONE Single Unified PYROLUX Volumetric Fire-Breathing Stream locked directly to the Dragon's moving jaws!
       const inhaleWindow =
-        isAttacking && state.clipTime < 0.24
-          ? Math.sin((state.clipTime / 0.24) * (Math.PI * 0.5))
+        isAttacking && state.clipTime < 0.20
+          ? Math.sin((state.clipTime / 0.20) * (Math.PI * 0.5))
           : 0;
-      const breathWindow =
-        isAttacking && state.clipTime >= 0.22 && state.clipTime <= 0.92
-          ? Math.sin(((state.clipTime - 0.22) / 0.70) * Math.PI)
+      const breathProgress =
+        isAttacking && state.clipTime >= 0.16 && state.clipTime <= 1.05
+          ? Math.min(1, (state.clipTime - 0.16) / 0.84)
           : 0;
-      const breathSurge = 1.0 + breathWindow * 4.25;
+      const breathActive = isAttacking && state.clipTime >= 0.16 && state.clipTime <= 1.02;
+      const breathEnv = breathActive ? Math.sin(breathProgress * Math.PI) : 0;
 
       if (part.throatOrb) {
-        const orbScale = 0.45 + inhaleWindow * 1.35 + breathWindow * 1.85 + Math.sin(elapsedTotal * 26.0) * 0.12;
+        const orbScale = 0.28 + inhaleWindow * 1.15 + breathEnv * 1.45 + Math.sin(elapsedTotal * 26.0) * 0.08;
         part.throatOrb.scale.setScalar(orbScale);
         part.throatOrb.rotation.y += dt * 14.0;
         part.throatOrb.rotation.z -= dt * 11.0;
       }
 
-      if (part.innerStreamCone) {
-        const cRadius = (0.28 + breathWindow * 2.25) * (0.9 + Math.sin(elapsedTotal * 22.0 + phaseSeed) * 0.16);
-        const cLen = (0.34 + breathWindow * 4.15) * (0.92 + Math.cos(elapsedTotal * 26.0 + phaseSeed) * 0.15);
-        part.innerStreamCone.scale.set(cRadius, cRadius, cLen);
-        part.innerStreamCone.rotation.z = elapsedTotal * (7.5 + breathWindow * 18.0);
+      if (part.streamContainer) {
+        part.streamContainer.visible = breathActive;
       }
-      if (part.outerStreamCone) {
-        const oRadius = (0.42 + breathWindow * 2.95) * (0.9 + Math.cos(elapsedTotal * 19.0 + phaseSeed) * 0.18);
-        const oLen = (0.46 + breathWindow * 4.65) * (0.9 + Math.sin(elapsedTotal * 23.0 + phaseSeed) * 0.18);
-        part.outerStreamCone.scale.set(oRadius, oRadius, oLen);
-        part.outerStreamCone.rotation.z = -elapsedTotal * (6.2 + breathWindow * 16.0);
-      }
-      if (part.fireHelixA && part.fireHelixB) {
-        const hRad = 0.20 + breathWindow * 2.35;
-        const hLen = 0.22 + breathWindow * 3.95;
-        part.fireHelixA.scale.set(hRad, hRad, hLen);
-        part.fireHelixA.rotation.z = elapsedTotal * (10.0 + breathWindow * 24.0);
-        part.fireHelixB.scale.set(hRad * 1.12, hRad * 1.12, hLen * 1.04);
-        part.fireHelixB.rotation.z = -elapsedTotal * (12.0 + breathWindow * 26.0);
-      }
-      if (part.tongues) {
-        for (let i = 0; i < part.tongues.length; i++) {
-          const t = part.tongues[i];
-          const p = elapsedTotal * (10.5 + breathWindow * 14.0) + t.phase + phaseSeed;
-          const surge = t.baseScale * (0.85 + Math.sin(p) * 0.28 + Math.cos(p * 1.6) * 0.14) * breathSurge;
-          t.mesh.scale.set(
-            t.baseScale * (0.75 + breathWindow * 1.85),
-            t.baseScale * (0.75 + breathWindow * 1.85),
-            surge
-          );
-          t.pivot.rotation.y = t.baseRotY + Math.sin(p * 0.75) * (0.09 + breathWindow * 0.26);
+
+      if (breathActive) {
+        const outerU = part.outerBreathCone?.material?.uniforms;
+        if (outerU) {
+          if (outerU.uTime) outerU.uTime.value = elapsedTotal;
+          if (outerU.uProgress) outerU.uProgress.value = breathProgress;
         }
-      }
-      if (part.jawSparks) {
-        for (let i = 0; i < part.jawSparks.length; i++) {
-          const jsp = part.jawSparks[i];
-          const prog = (elapsedTotal * jsp.speed * (1.0 + breathWindow * 2.8) + jsp.phaseOffset + phaseSeed * 0.17) % 1.0;
-          const ang = jsp.angleOffset + elapsedTotal * 9.5 + prog * 4.8;
-          const r = jsp.spreadR * (0.35 + prog * 1.65) * (0.55 + breathWindow * 2.95);
-          const zDist = prog * jsp.reachZ * (0.45 + breathWindow * 4.35);
-          jsp.mesh.position.set(
-            Math.cos(ang) * r,
-            Math.sin(ang) * r - prog * 0.08 * breathWindow,
-            zDist
-          );
-          const s = Math.sin(prog * Math.PI) * (0.55 + breathWindow * 2.45);
-          jsp.mesh.scale.setScalar(Math.max(0.01, s));
+        const innerU = part.innerBreathCone?.material?.uniforms;
+        if (innerU) {
+          if (innerU.uTime) innerU.uTime.value = elapsedTotal;
+          if (innerU.uProgress) innerU.uProgress.value = breathProgress;
         }
-      }
-      if (part.impactFireball) {
-        if (breathWindow > 0.05) {
-          const fbScale = breathWindow * (3.2 + Math.sin(elapsedTotal * 32.0) * 0.65);
-          part.impactFireball.scale.setScalar(fbScale);
-          part.impactFireball.position.set(
-            Math.sin(elapsedTotal * 18.0) * 0.05,
-            -0.06 * breathWindow,
-            0.35 + breathWindow * 0.92
-          );
-          part.impactFireball.rotation.y += dt * 16.0;
-          part.impactFireball.rotation.x -= dt * 12.0;
-        } else {
-          part.impactFireball.scale.setScalar(0.001);
+
+        const swell = 0.72 + breathEnv * 0.65;
+        const reachZ = 0.78 + Math.min(1, breathProgress * 1.85) * 0.45;
+        if (part.outerBreathCone) {
+          part.outerBreathCone.scale.set(swell, swell, reachZ);
+          part.outerBreathCone.rotation.z += dt * 9.5;
+        }
+        if (part.innerBreathCone) {
+          part.innerBreathCone.scale.set(swell * 0.62, swell * 0.62, reachZ * 0.96);
+          part.innerBreathCone.rotation.z -= dt * 13.5;
+        }
+
+        if (part.flameParticles) {
+          const lifeFade = 1.0 - Math.pow(breathProgress, 1.45);
+          for (let i = 0; i < part.flameParticles.length; i++) {
+            const fp = part.flameParticles[i];
+            const spMat = fp.sprite.material;
+            const prog = (elapsedTotal * fp.speed + fp.phase) % 1.0;
+            const zDist = prog * 1.32;
+            const spread = Math.pow(prog, 1.1) * fp.swirlRadius * (0.95 + breathProgress * 0.55);
+            const swAng = fp.swirlAngle + elapsedTotal * 8.5 + prog * 3.8;
+            const lift = Math.pow(prog, 1.65) * 0.16;
+            fp.sprite.position.set(
+              Math.cos(swAng) * spread,
+              Math.sin(swAng) * spread + lift,
+              zDist
+            );
+            const s = fp.baseScale * (0.35 + prog * 1.65) * (0.72 + 0.48 * breathEnv);
+            fp.sprite.scale.setScalar(Math.max(0.01, s));
+            if (spMat) {
+              spMat.rotation += fp.rotSpeed * dt;
+              if (prog < 0.28) {
+                const uCol = prog / 0.28;
+                spMat.color.setRGB(1.0, 0.97 - uCol * 0.22, 0.84 - uCol * 0.80);
+              } else if (prog < 0.68) {
+                const uCol = (prog - 0.28) / 0.40;
+                spMat.color.setRGB(1.0, 0.75 - uCol * 0.45, 0.04);
+              } else {
+                const uCol = (prog - 0.68) / 0.32;
+                spMat.color.setRGB(1.0 - uCol * 0.38, 0.30 * (1.0 - uCol), 0.04 + uCol * 0.04);
+              }
+              spMat.opacity = Math.max(0, Math.sin(prog * Math.PI) * lifeFade * 0.95);
+            }
+          }
         }
       }
     } else if (part.kind === 'dragonLowerJaw') {
@@ -3544,6 +4991,9 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       // Stage 2 (0.24..0.86): Blinding Coherent Laser Core + Plasma Sheath + Helical Coils + Shockwave Rings + Target Impact Flare
       // Stage 3 (0.86..1.05): Beam Constriction & Afterglow
       if (isAttacking) {
+        if (part.beamDischargeGroup) {
+          part.beamDischargeGroup.visible = true;
+        }
         const t = state.clipTime;
         const chargePhase = t < 0.24 ? t / 0.24 : 1.0;
         const beamActive =
@@ -3643,26 +5093,12 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
           }
         }
       } else {
-        // Idle standby state: subtle glowing pilot crystal at barrel tip, beam & lenses retracted
+        // Idle standby state: hide entire beamDischargeGroup so WebGL skips all beam draw calls
+        if (part.beamDischargeGroup && part.beamDischargeGroup.visible) {
+          part.beamDischargeGroup.visible = false;
+        }
         if (part.chargeOrb) {
           part.chargeOrb.scale.setScalar(0.18 + Math.sin(elapsedTotal * 4.0 + phaseSeed) * 0.04);
-        }
-        if (part.reticleRings) {
-          for (let r = 0; r < part.reticleRings.length; r++) {
-            part.reticleRings[r].group.scale.setScalar(0.001);
-          }
-        }
-        part.coreBeamMesh.scale.set(0.001, 0.001, 0.001);
-        part.sheathBeamMesh.scale.set(0.001, 0.001, 0.001);
-        part.helixMeshA.scale.set(0.001, 0.001, 0.001);
-        part.helixMeshB.scale.set(0.001, 0.001, 0.001);
-        if (part.pulseRings) {
-          for (let p = 0; p < part.pulseRings.length; p++) {
-            part.pulseRings[p].mesh.scale.setScalar(0.001);
-          }
-        }
-        if (part.impactGroup) {
-          part.impactGroup.scale.setScalar(0.001);
         }
       }
     } else if (part.kind === 'cyberShield') {
@@ -3730,6 +5166,59 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       const flapAmp = isAttacking ? 0.32 : 0.07;
       const flap = Math.sin(elapsedTotal * flapFreq + phaseSeed) * flapAmp + atkIntensity * 0.26;
       part.mesh.scale.set(1 + flap, 1 + atkIntensity * 0.18, 1 - flap * 0.35);
+    } else if (part.kind === 'pumpkinLantern') {
+      // Keep Jack-o'-Lantern heads 100% stationary (zero bobbing, twisting, or bubbly scaling)
+      part.mesh.position.y = part.baseY;
+      part.mesh.rotation.y = 0;
+      part.mesh.scale.setScalar(1.0);
+    } else if (part.kind === 'reaperScythe') {
+      if (isAttacking) {
+        const t = state.clipTime;
+        if (t < 0.28) {
+          const u = t / 0.28;
+          const ease = u * u * (3 - 2 * u);
+          part.mesh.position.set(
+            part.baseX + 0.06 * ease,
+            part.baseY + 0.18 * ease,
+            part.baseZ - 0.08 * ease
+          );
+          part.mesh.rotation.set(
+            part.baseRotX - 0.65 * ease,
+            part.baseRotY - 0.85 * ease,
+            part.baseRotZ - 0.55 * ease
+          );
+        } else if (t < 0.72) {
+          const u = (t - 0.28) / 0.44;
+          const slash = Math.sin(u * Math.PI);
+          const sweep = u * u * (3 - 2 * u);
+          part.mesh.position.set(
+            part.baseX + 0.06 - 0.22 * sweep,
+            part.baseY + 0.18 * (1 - sweep) + 0.06 * slash,
+            part.baseZ + 0.24 * slash
+          );
+          part.mesh.rotation.set(
+            part.baseRotX - 0.65 + 1.55 * sweep,
+            part.baseRotY - 0.85 + 2.15 * sweep,
+            part.baseRotZ - 0.55 + 1.25 * sweep
+          );
+        } else {
+          const u = Math.min(1, (t - 0.72) / 0.28);
+          const ease = 1 - u;
+          part.mesh.position.set(
+            part.baseX - 0.16 * ease,
+            part.baseY,
+            part.baseZ + 0.08 * ease
+          );
+          part.mesh.rotation.set(
+            part.baseRotX + 0.90 * ease,
+            part.baseRotY + 1.30 * ease,
+            part.baseRotZ + 0.70 * ease
+          );
+        }
+      } else {
+        part.mesh.position.set(part.baseX, part.baseY, part.baseZ);
+        part.mesh.rotation.set(part.baseRotX, part.baseRotY, part.baseRotZ);
+      }
     } else if (part.kind === 'headNod') {
       if (isAttacking) {
         const t = state.clipTime;
@@ -3766,22 +5255,26 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
           }
         }
       } else {
-        part.mesh.rotation.set(Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.055, 0, 0);
+        part.mesh.rotation.set(
+          arch === 'hollow_reapers' ? 0 : Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.055,
+          0,
+          0
+        );
       }
     }
   }
 
   if (mode === 'idle') {
-    const breath = 1.0 + Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.018;
+    const breath = arch === 'hollow_reapers' ? 1.0 : 1.0 + Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.018;
     rig.position.set(0, 0, 0);
     rig.rotation.set(0, 0, 0);
     rig.scale.set(1, breath, 1);
   } else if (mode === 'move') {
-    if (arch === 'arcane_cyber') {
-      // Zero-gravity cyber hover glide with slight forward pitch
-      const hover = 0.07 + Math.sin(state.clipTime * 12.0) * 0.025;
+    if (arch === 'arcane_cyber' || arch === 'hollow_reapers') {
+      // Spectral wraith / zero-gravity hover glide with slight forward pitch
+      const hover = 0.075 + Math.sin(state.clipTime * 11.0) * 0.028;
       rig.position.set(0, hover, 0);
-      rig.rotation.set(0.18, 0, Math.sin(state.clipTime * 6.0) * 0.06);
+      rig.rotation.set(0.16, 0, Math.sin(state.clipTime * 6.0) * 0.06);
       rig.scale.set(1, 1, 1);
     } else if (arch === 'dragon_elemental') {
       // Winged bounding stride
@@ -3901,6 +5394,33 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
         rig.rotation.set(0.06 * (1 - ease), 0, 0);
         rig.scale.set(1, 1, 1);
       }
+    } else if (arch === 'hollow_reapers') {
+      // PATTERN 4 — HOLLOW JACK & WRAITH REAPERS:
+      // "SPECTRAL WRAITH LEVITATION, 360° REAPER SCYTHE SOUL-HARVEST CLEAVE & PUMPKIN HELLFIRE SURGE"
+      if (t < 0.28) {
+        const u = t / 0.28;
+        const ease = u * u * (3 - 2 * u);
+        rig.position.set(0, 0.26 * powerMul * ease, 0.08 * ease);
+        rig.rotation.set(-0.08 * ease, -0.45 * ease, 0);
+        rig.scale.set(1 + 0.06 * ease, 1 + 0.09 * ease, 1 + 0.06 * ease);
+      } else if (t < 0.74) {
+        const u = (t - 0.28) / 0.46;
+        const sweep = u * u * (3 - 2 * u);
+        const cleaveArc = Math.sin(u * Math.PI);
+        rig.position.set(
+          Math.sin(u * Math.PI * 2.0) * 0.05,
+          0.26 * powerMul + 0.06 * cleaveArc,
+          0.08 + 0.16 * cleaveArc
+        );
+        rig.rotation.set(0.12 * cleaveArc, -0.45 + sweep * (Math.PI * 2.0 + 0.45), -0.08 * cleaveArc);
+        rig.scale.set(1.08, 1.06, 1.08);
+      } else {
+        const u = Math.min(1, (t - 0.74) / 0.26);
+        const ease = u * u * (3 - 2 * u);
+        rig.position.set(0, 0.26 * powerMul * (1 - ease), 0.08 * (1 - ease));
+        rig.rotation.set(0, 0, 0);
+        rig.scale.set(1, 1, 1);
+      }
     } else {
       // Fallback procedural attack
       if (t < 0.34) {
@@ -3938,7 +5458,14 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
  * - 'crystal_sanctum'
  * - 'lava_forge'
  */
-export function rebuildBoardArchitectureGroup(boardArchGroup, boardSkin, BOARD_SQ_SIZE, BOARD_SURFACE_Y, boardBorderMat) {
+export function rebuildBoardArchitectureGroup(
+  boardArchGroup,
+  boardSkin,
+  BOARD_SQ_SIZE,
+  BOARD_SURFACE_Y,
+  boardBorderMat,
+  contextId = 'main'
+) {
   while (boardArchGroup.children.length > 0) {
     const ch = boardArchGroup.children.pop();
     if (ch) boardArchGroup.remove(ch);
@@ -3946,6 +5473,7 @@ export function rebuildBoardArchitectureGroup(boardArchGroup, boardSkin, BOARD_S
   boardArchGroup.userData.dynamicNodes = [];
 
   const archType = boardSkin?.archType || 'gothic';
+  const boardPresets = resolveBoardPoliigonPresets(boardSkin?.id || 'obsidian_sanctum', archType);
   const halfB = 4.0 * BOARD_SQ_SIZE;
   const accentColor = new THREE.Color(boardSkin?.accentHex || '#ff9f1c');
   const borderColor = new THREE.Color(boardSkin?.borderHex || '#d4af37');
@@ -3957,11 +5485,25 @@ export function rebuildBoardArchitectureGroup(boardArchGroup, boardSkin, BOARD_S
     roughness: 0.2,
     metalness: 0.75
   });
+  applyPoliigonPbrToMaterial(accentMat, boardPresets.accentPreset, {
+    contextId,
+    repeatX: 2,
+    repeatY: 2,
+    normalScale: boardPresets.normalScaleVal * 0.75,
+    envMapIntensity: 1.25
+  });
 
   const frameSecondaryMat = new THREE.MeshStandardMaterial({
     color: borderColor,
     roughness: archType === 'wood_table' ? 0.30 : 0.24,
     metalness: archType === 'wood_table' ? 0.12 : 0.65
+  });
+  applyPoliigonPbrToMaterial(frameSecondaryMat, boardPresets.borderPreset, {
+    contextId,
+    repeatX: boardPresets.repeatBorder,
+    repeatY: boardPresets.repeatBorder,
+    normalScale: boardPresets.normalScaleVal,
+    envMapIntensity: 1.2
   });
 
   if (archType === 'wood_table') {
@@ -4138,6 +5680,137 @@ export function rebuildBoardArchitectureGroup(boardArchGroup, boardSkin, BOARD_S
           mesh: ember,
           baseY,
           phase: sx + sz * 2
+        });
+      }
+    }
+  } else if (archType === 'haunted_crypt') {
+    // Cursed Jack-o'-Lantern Crypt Board:
+    // Mounts actual 3D GLTF/GLB Halloween assets around the board perimeter:
+    // - Wrought-Iron Graveyard Fences (`fence.gltf`, `fence_pillar.gltf`)
+    // - Carved Stone Gravestones & Crosses (`gravestone.gltf`, `gravemarker_A.gltf`, `gravemarker_B.gltf`)
+    // - Skull Candles & Triple Candles (`skull_candle.gltf`, `candle_triple.gltf`)
+    // - 4 Corner Bubbling Witch Cauldrons (`cauldron.glb`) & Levitating Jack-o'-Lanterns (`pumpkin_orange_jackolantern.gltf`)
+    preloadHalloween3DAssets();
+
+    const rimW = 0.14;
+    const rimH = 0.056;
+    const horizGeo = new THREE.BoxGeometry(halfB * 2 + rimW * 2, rimH, rimW);
+    const vertGeo = new THREE.BoxGeometry(rimW, rimH, halfB * 2);
+    const emberStripH = new THREE.BoxGeometry(halfB * 2 + rimW * 1.35, rimH + 0.005, 0.032);
+    const emberStripV = new THREE.BoxGeometry(0.032, rimH + 0.005, halfB * 2);
+
+    for (const s of [-1, 1]) {
+      const hBar = new THREE.Mesh(horizGeo, frameSecondaryMat);
+      hBar.position.set(0, BOARD_SURFACE_Y - rimH * 0.45, s * (halfB + rimW * 0.5));
+      boardArchGroup.add(hBar);
+
+      const hEmber = new THREE.Mesh(emberStripH, accentMat);
+      hEmber.position.set(0, BOARD_SURFACE_Y - rimH * 0.42, s * (halfB + rimW * 0.5));
+      boardArchGroup.add(hEmber);
+
+      const vBar = new THREE.Mesh(vertGeo, frameSecondaryMat);
+      vBar.position.set(s * (halfB + rimW * 0.5), BOARD_SURFACE_Y - rimH * 0.45, 0);
+      boardArchGroup.add(vBar);
+
+      const vEmber = new THREE.Mesh(emberStripV, accentMat);
+      vEmber.position.set(s * (halfB + rimW * 0.5), BOARD_SURFACE_Y - rimH * 0.42, 0);
+      boardArchGroup.add(vEmber);
+    }
+
+    const potionGreenMat = new THREE.MeshStandardMaterial({
+      color: 0x00e676,
+      emissive: 0x00e676,
+      emissiveIntensity: 1.45,
+      roughness: 0.2
+    });
+    const pumpkinGlowMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+
+    // Mount actual 3D Gravestones, Cross Gravemarkers, Wrought-Iron Fence Pillars & Skull Candles along the 4 edges
+    const edgeDist = halfB + rimW * 0.62;
+    for (const s of [-1, 1]) {
+      for (let k = -3; k <= 3; k++) {
+        const offset = k * (BOARD_SQ_SIZE * 0.95);
+        if (k % 2 === 0) {
+          const gravestoneModel = k === 0 ? 'gravestone' : k > 0 ? 'gravemarker_A' : 'gravemarker_B';
+          const gScale = k === 0 ? 0.12 : 0.14;
+
+          mountHalloweenModel(boardArchGroup, gravestoneModel, {
+            scale: gScale,
+            position: [offset, BOARD_SURFACE_Y - 0.01, s * edgeDist],
+            rotationY: s > 0 ? 0 : Math.PI
+          });
+
+          mountHalloweenModel(boardArchGroup, gravestoneModel, {
+            scale: gScale,
+            position: [s * edgeDist, BOARD_SURFACE_Y - 0.01, offset],
+            rotationY: s > 0 ? Math.PI / 2 : -Math.PI / 2
+          });
+
+          // Actual 3D Skull with Melted Candle (`skull_candle.gltf`) perched beside the outer headstones
+          if (Math.abs(k) === 2) {
+            mountHalloweenModel(boardArchGroup, 'skull_candle', {
+              scale: 0.095,
+              position: [offset + 0.08 * s, BOARD_SURFACE_Y - 0.005, s * edgeDist],
+              rotationY: s > 0 ? 0.2 : Math.PI - 0.2
+            });
+          }
+        } else {
+          // Actual 3D Wrought-Iron & Stone Fence Pillar (`fence_pillar.gltf`)
+          mountHalloweenModel(boardArchGroup, 'fence_pillar', {
+            scale: 0.085,
+            position: [offset, BOARD_SURFACE_Y - 0.01, s * edgeDist]
+          });
+          mountHalloweenModel(boardArchGroup, 'fence_pillar', {
+            scale: 0.085,
+            position: [s * edgeDist, BOARD_SURFACE_Y - 0.01, offset]
+          });
+        }
+      }
+    }
+
+    // 4 Corner Crypt Plinths topped with Actual 3D Bubbling Witch Cauldrons (`cauldron.glb`), Triple Candles & Levitating 3D Jack-o'-Lanterns
+    const cryptPillarGeo = new THREE.CylinderGeometry(0.072, 0.096, 0.12, 8);
+    const cauldronLiquidGeo = new THREE.CircleGeometry(0.068, 14);
+    const cornerOff = halfB + rimW * 0.74;
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const pillar = new THREE.Mesh(cryptPillarGeo, frameSecondaryMat);
+        pillar.position.set(sx * cornerOff, BOARD_SURFACE_Y + 0.02, sz * cornerOff);
+        boardArchGroup.add(pillar);
+
+        // Actual 3D Witch Cauldron (`cauldron.glb`) sitting on each corner plinth
+        mountHalloweenModel(boardArchGroup, 'cauldron', {
+          scale: 0.145,
+          position: [sx * cornerOff, BOARD_SURFACE_Y + 0.065, sz * cornerOff]
+        });
+
+        const cLiquid = new THREE.Mesh(cauldronLiquidGeo, potionGreenMat);
+        cLiquid.rotation.x = -Math.PI / 2;
+        cLiquid.position.set(sx * cornerOff, BOARD_SURFACE_Y + 0.20, sz * cornerOff);
+        boardArchGroup.add(cLiquid);
+
+        // Companion 3D Triple Candles (`candle_triple.gltf`) at each corner
+        mountHalloweenModel(boardArchGroup, 'candle_triple', {
+          scale: 0.11,
+          position: [sx * (halfB + rimW * 0.36), BOARD_SURFACE_Y - 0.005, sz * (halfB + rimW * 0.36)]
+        });
+
+        // Levitating 3D Carved Jack-o'-Lantern (`pumpkin_orange_jackolantern.gltf` / `pumpkin_yellow_jackolantern.gltf`)
+        const lanternNode = buildCarvedJackOLantern(
+          0.092,
+          accentMat,
+          pumpkinGlowMat,
+          frameSecondaryMat,
+          sx * sz > 0 ? 'orange' : 'yellow'
+        );
+        const baseY = BOARD_SURFACE_Y + 0.34;
+        lanternNode.position.set(sx * cornerOff, baseY, sz * cornerOff);
+        lanternNode.lookAt(0, baseY, 0);
+        boardArchGroup.add(lanternNode);
+        boardArchGroup.userData.dynamicNodes.push({
+          mesh: lanternNode,
+          baseY,
+          phase: sx * 1.4 + sz * 0.9
         });
       }
     }

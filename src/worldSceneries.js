@@ -1,4 +1,5 @@
 import * as THREE_NS from 'three';
+import { mountHalloweenModel, preloadHalloween3DAssets } from './halloweenAssetLoader.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -156,6 +157,48 @@ function createSkyDomeMaterial() {
           return;
         }
 
+        if (uMode == 3) {
+          // ------------------------------------------------------------------
+          // MODE 3: HAUNTED BLOOD-MOON GRAVEYARD (Crimson Blood Moon & Ecto Fog)
+          // ------------------------------------------------------------------
+          vec3 zenithNight = vec3(0.025, 0.012, 0.055);
+          vec3 midHaunted = vec3(0.11, 0.035, 0.16);
+          vec3 horizonBlood = vec3(0.48, 0.08, 0.12);
+          vec3 pumpkinAmber = vec3(1.0, 0.43, 0.0);
+          vec3 ectoGreen = vec3(0.0, 0.90, 0.46);
+
+          vec3 skyCol = mix(horizonBlood, midHaunted, smoothstep(-0.05, 0.38, y));
+          skyCol = mix(skyCol, zenithNight, smoothstep(0.32, 0.88, up));
+
+          // Colossal Crimson-Orange Blood Moon Disk in the Samhain Sky
+          vec3 moonDir = normalize(vec3(-0.36, 0.34, -0.86));
+          float moonDot = max(0.0, dot(dir, moonDir));
+          float moonHalo = pow(moonDot, 6.0);
+          float moonDisk = smoothstep(0.986, 0.990, moonDot);
+          float moonCrater = fbm(dir * 18.0);
+          vec3 moonCol = mix(vec3(0.88, 0.14, 0.06), vec3(1.0, 0.58, 0.14), smoothstep(0.3, 0.75, moonCrater));
+          skyCol += mix(vec3(0.85, 0.12, 0.08), pumpkinAmber, 0.45) * moonHalo * 0.65;
+          skyCol = mix(skyCol, moonCol, moonDisk);
+
+          // Eerie drifting Samhain cloud wisps & spectral ectoplasm mist ribbons
+          vec3 mistCoord = dir * 3.2 + vec3(uTime * 0.022, -uTime * 0.008, uTime * 0.015);
+          float m1 = fbm(mistCoord);
+          float m2 = fbm(mistCoord * 2.1 - vec3(m1 * 1.3));
+          float cloudBand = smoothstep(0.42, 0.78, m1) * (1.0 - smoothstep(0.58, 0.92, up));
+          skyCol += mix(vec3(0.36, 0.06, 0.24), pumpkinAmber, smoothstep(0.45, 0.85, m2)) * cloudBand * 0.42;
+
+          // Subtle spectral green ectoplasm aurora near the horizon
+          float ectoRibbon = smoothstep(0.64, 0.92, sin(dir.x * 5.0 - dir.z * 4.0 + uTime * 0.5 + m1 * 3.5)) * exp(-abs(y - 0.06) * 8.0);
+          skyCol += ectoGreen * ectoRibbon * 0.28;
+
+          // Crisp autumn night stars
+          float starVal = smoothstep(0.994, 0.9998, hash3(floor(dir * 230.0))) * (1.0 - moonDisk) * smoothstep(0.08, 0.55, up);
+          skyCol += vec3(1.0, 0.88, 0.72) * starVal * 1.25;
+
+          gl_FragColor = vec4(skyCol, 1.0);
+          return;
+        }
+
         // --------------------------------------------------------------------
         // MODE 2: VOLCANIC TITAN FORGE (Smoldering Caldera & Ash Storm Sky)
         // --------------------------------------------------------------------
@@ -291,6 +334,24 @@ function createHorizonSeaMaterial() {
           col = mix(col, cloudGold, smoothstep(0.55, 0.88, crest));
           float alpha = radialMask * smoothstep(0.22, 0.55, crest) * 0.92;
           gl_FragColor = vec4(col, alpha);
+          return;
+        }
+
+        if (uMode == 3) {
+          // Mode 3: Swirling Graveyard Ectoplasm & Pumpkin-Ember Mist Sea
+          vec2 mistUv = vLocalPos.xz * 0.095 + vec2(uTime * 0.035, -uTime * 0.028);
+          float m1 = fbm2(mistUv);
+          float m2 = fbm2(mistUv * 2.2 - vec2(uTime * 0.04, uTime * 0.03));
+          float fogMask = smoothstep(0.28, 0.76, m1 * 0.6 + m2 * 0.4);
+
+          vec3 cryptViolet = vec3(0.08, 0.03, 0.14);
+          vec3 ectoMist = vec3(0.0, 0.78, 0.42);
+          vec3 pumpkinGlow = vec3(1.0, 0.45, 0.04);
+
+          vec3 col = mix(cryptViolet, ectoMist * 0.55, smoothstep(0.35, 0.75, m1));
+          col = mix(col, pumpkinGlow * 0.75, smoothstep(0.65, 0.92, m2));
+          float alpha = radialMask * (0.35 + 0.55 * fogMask);
+          gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.86));
           return;
         }
 
@@ -953,6 +1014,317 @@ function buildVolcanicTitanForgeGroup() {
 }
 
 // ============================================================================
+// Realm 4 Builder: Haunted Blood-Moon Graveyard (Halloween Samhain Realm)
+// Enriched with Cozy Cartoon Halloween 3D Asset Pack props:
+// Crooked Haunted Houses, Bubbling Witch Cauldrons, Floating Sheet Ghosts,
+// Pumpkin Scarecrows, Coffins, Skull Candles, Potion Bottles, Candy & Cobwebs
+// ============================================================================
+function buildHauntedBloodGraveyardGroup() {
+  preloadHalloween3DAssets();
+
+  const group = new THREE.Group();
+  group.name = 'Realm_HauntedBloodGraveyard';
+
+  const cryptSlateMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1524,
+    roughness: 0.68,
+    metalness: 0.22
+  });
+  const pumpkinShellMat = new THREE.MeshStandardMaterial({
+    color: 0xff6d00,
+    roughness: 0.38,
+    metalness: 0.15,
+    emissive: 0x7c2d12,
+    emissiveIntensity: 0.55
+  });
+  const ectoCrystalMat = new THREE.MeshStandardMaterial({
+    color: 0x00e676,
+    roughness: 0.2,
+    metalness: 0.3,
+    emissive: 0x00e676,
+    emissiveIntensity: 1.85
+  });
+  const potionMagentaMat = new THREE.MeshStandardMaterial({
+    color: 0xd946ef,
+    roughness: 0.15,
+    metalness: 0.2,
+    emissive: 0xc026d3,
+    emissiveIntensity: 1.35
+  });
+
+  // 1. Cracked Cobblestone Cemetery Courtyard Platform
+  const cemeteryDeck = new THREE.Mesh(new THREE.CylinderGeometry(11.0, 11.8, 0.54, 16), cryptSlateMat);
+  cemeteryDeck.position.set(0, -0.27, 0);
+  cemeteryDeck.receiveShadow = true;
+  group.add(cemeteryDeck);
+
+  // Glowing Samhain Hexagram & Ecto Rune Ring on the cemetery floor
+  const samhainRing = new THREE.Mesh(new THREE.TorusGeometry(6.8, 0.065, 10, 64), pumpkinShellMat);
+  samhainRing.rotation.x = Math.PI / 2;
+  samhainRing.position.y = 0.01;
+  group.add(samhainRing);
+
+  const ectoOuterRing = new THREE.Mesh(new THREE.TorusGeometry(9.6, 0.045, 10, 64), ectoCrystalMat);
+  ectoOuterRing.rotation.x = Math.PI / 2;
+  ectoOuterRing.position.y = 0.01;
+  group.add(ectoOuterRing);
+
+  // Helper: Actual 3D Cauldron GLB + Animated Potion Bubbles + Candle Props
+  function buildActualWitchCauldronStation(cauldronBubblesArr) {
+    const cGroup = new THREE.Group();
+
+    // Mount actual 3D cauldron.glb model
+    mountHalloweenModel(cGroup, 'cauldron', {
+      scale: 0.95,
+      position: [0, 0, 0]
+    });
+
+    // Glowing neon-green witch potion liquid surface inside the 3D cauldron
+    const liquidDisc = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20), ectoCrystalMat);
+    liquidDisc.rotation.x = -Math.PI / 2;
+    liquidDisc.position.y = 0.88;
+    cGroup.add(liquidDisc);
+
+    // 4 Animated rising 3D potion bubbles
+    const bGeo = new THREE.SphereGeometry(0.075, 10, 8);
+    for (let b = 0; b < 4; b++) {
+      const bAng = (b / 4) * Math.PI * 2;
+      const bRad = 0.12 + (b % 2) * 0.14;
+      const bubble = new THREE.Mesh(bGeo, b % 2 === 0 ? ectoCrystalMat : potionMagentaMat);
+      const baseY = 0.90 + (b % 3) * 0.12;
+      bubble.position.set(Math.cos(bAng) * bRad, baseY, Math.sin(bAng) * bRad);
+      cGroup.add(bubble);
+      cauldronBubblesArr.push({
+        mesh: bubble,
+        baseY: 0.90,
+        phase: b * 1.35,
+        speed: 1.8 + (b % 2) * 0.45
+      });
+    }
+
+    // Companion actual 3D triple candles & small pumpkin beside the cauldron
+    mountHalloweenModel(cGroup, 'candle_triple', {
+      scale: 0.85,
+      position: [0.68, 0, 0.25]
+    });
+    mountHalloweenModel(cGroup, 'pumpkin_orange_small', {
+      scale: 0.85,
+      position: [-0.62, 0, 0.32],
+      rotationY: 0.5
+    });
+
+    return cGroup;
+  }
+
+  // 2. Perimeter Graveyard Sectors with Actual Loaded 3D GLTF/GLB Halloween Assets
+  const floatingPumpkins = [];
+  const floatingGhosts = [];
+  const cauldronBubbles = [];
+  const treeCount = 8;
+
+  for (let i = 0; i < treeCount; i++) {
+    const ang = (i / treeCount) * Math.PI * 2 + Math.PI / 8;
+    const r = 10.2;
+    const nodeGroup = new THREE.Group();
+    nodeGroup.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
+    nodeGroup.rotation.y = -ang - Math.PI / 2;
+
+    // A. Actual 3D Dead Graveyard Oak Tree (decorated with hanging lanterns on even sectors)
+    const treeModelName = i % 2 === 0 ? 'tree_dead_large_decorated' : 'tree_dead_medium';
+    mountHalloweenModel(nodeGroup, treeModelName, {
+      scale: i % 2 === 0 ? 0.92 : 1.05,
+      position: [0, 0, 0],
+      rotationY: (i % 3) * 0.4
+    });
+
+    // B. Actual 3D Wrought-Iron Cemetery Fence & Pillar flanking each sector
+    mountHalloweenModel(nodeGroup, i % 3 === 0 ? 'fence_broken' : 'fence', {
+      scale: 0.72,
+      position: [2.1, 0, 0.15],
+      rotationY: -0.18
+    });
+    mountHalloweenModel(nodeGroup, 'fence_pillar', {
+      scale: 0.82,
+      position: [3.55, 0, 0.35]
+    });
+
+    // C. Actual 3D Gravestones, Graves, Cross Gravemarkers, Decorated Coffins & Skull Candles
+    mountHalloweenModel(nodeGroup, i % 2 === 0 ? 'grave_A' : 'grave_B', {
+      scale: 0.78,
+      position: [-1.15, 0, 0.85],
+      rotationY: 0.25
+    });
+    mountHalloweenModel(nodeGroup, 'gravestone', {
+      scale: 0.82,
+      position: [0.95, 0, 0.92],
+      rotationY: -0.22
+    });
+    mountHalloweenModel(nodeGroup, i % 2 === 0 ? 'gravemarker_A' : 'gravemarker_B', {
+      scale: 0.85,
+      position: [-0.35, 0, 1.35],
+      rotationY: 0.15
+    });
+    mountHalloweenModel(nodeGroup, i % 2 === 0 ? 'coffin_decorated' : 'coffin', {
+      scale: 0.62,
+      position: [1.35, 0, 0.65],
+      rotationY: -0.42
+    });
+    mountHalloweenModel(nodeGroup, 'skull_candle', {
+      scale: 0.55,
+      position: [0.95, 1.26, 0.92],
+      rotationY: 0.3
+    });
+
+    // D. Alternate Actual 3D Bubbling Witch Cauldrons & Gothic Shrines / Lantern Posts
+    if (i % 2 === 0) {
+      const cauldronStation = buildActualWitchCauldronStation(cauldronBubbles);
+      cauldronStation.position.set(-1.55, 0, -0.25);
+      nodeGroup.add(cauldronStation);
+      mountHalloweenModel(nodeGroup, 'post_skull', {
+        scale: 0.85,
+        position: [-2.25, 1.12, 0.45],
+        rotationY: 0.4
+      });
+    } else {
+      mountHalloweenModel(nodeGroup, 'shrine_candles', {
+        scale: 0.85,
+        position: [-1.55, 0, -0.25],
+        rotationY: 0.35
+      });
+      mountHalloweenModel(nodeGroup, 'bench_decorated', {
+        scale: 0.72,
+        position: [1.85, 0, 0.95],
+        rotationY: -0.35
+      });
+      mountHalloweenModel(nodeGroup, 'lantern_standing', {
+        scale: 0.88,
+        position: [-0.85, 0, 1.45]
+      });
+    }
+
+    // E. Drifting 3D Skeleton Wraith / Haunted Lantern Spirit patrolling the graveyard ring
+    const ghostHolder = new THREE.Group();
+    const gBaseY = 0.65 + (i % 3) * 0.35;
+    const gRad = 8.1 + (i % 2) * 0.95;
+    ghostHolder.position.set(Math.cos(ang + 0.22) * gRad, gBaseY, Math.sin(ang + 0.22) * gRad);
+    ghostHolder.lookAt(0, gBaseY, 0);
+    mountHalloweenModel(
+      ghostHolder,
+      i % 2 === 0 ? 'character_skeleton_minion' : 'lantern_hanging',
+      {
+        scale: i % 2 === 0 ? 0.52 : 0.78,
+        position: [0, i % 2 === 0 ? -0.45 : 0.65, 0]
+      }
+    );
+    group.add(ghostHolder);
+    floatingGhosts.push({
+      mesh: ghostHolder,
+      baseAngle: ang + 0.22,
+      orbitR: gRad,
+      baseY: gBaseY,
+      speed: (i % 2 === 0 ? 1 : -1) * 0.22,
+      phase: i * 0.95
+    });
+
+    // F. Floating Actual 3D Carved Jack-o'-Lantern (`pumpkin_orange_jackolantern.gltf` / `pumpkin_yellow_jackolantern.gltf`)
+    const lanternGroup = new THREE.Group();
+    const baseY = 2.45 + (i % 3) * 0.42;
+    lanternGroup.position.set(-0.55, baseY, 0.75);
+    mountHalloweenModel(
+      lanternGroup,
+      i % 2 === 0 ? 'pumpkin_orange_jackolantern' : 'pumpkin_yellow_jackolantern',
+      {
+        scale: 0.58,
+        position: [0, -0.35, 0]
+      }
+    );
+    nodeGroup.add(lanternGroup);
+    floatingPumpkins.push({
+      mesh: lanternGroup,
+      baseY,
+      phase: i * 0.85,
+      speed: 1.5 + (i % 3) * 0.25
+    });
+
+    group.add(nodeGroup);
+  }
+
+  // 2b. Four Grand 3D Haunted Crypt Mausoleums (`crypt.gltf`), Arch Gates (`arch_gate.gltf`) & Autumn Pines on the Outer Hills
+  for (let h = 0; h < 4; h++) {
+    const hAng = (h / 4) * Math.PI * 2 + Math.PI / 4;
+    const hDist = 17.6;
+    const cryptCompound = new THREE.Group();
+    cryptCompound.position.set(Math.cos(hAng) * hDist, -0.35, Math.sin(hAng) * hDist);
+    cryptCompound.lookAt(0, 0.8, 0);
+
+    // Actual 3D Haunted Crypt Building (`crypt.gltf`)
+    mountHalloweenModel(cryptCompound, 'crypt', {
+      scale: 0.88,
+      position: [0, 0, 0]
+    });
+
+    // Actual 3D Graveyard Entrance Arch Gate (`arch_gate.gltf`) in front of the crypt
+    mountHalloweenModel(cryptCompound, 'arch_gate', {
+      scale: 1.05,
+      position: [0, 0, 4.2]
+    });
+
+    // Actual 3D Halloween Autumn Pine Trees (`tree_pine_orange_large.gltf` & `tree_pine_yellow_large.gltf`) flanking the crypt
+    mountHalloweenModel(cryptCompound, 'tree_pine_orange_large', {
+      scale: 0.85,
+      position: [-4.2, 0, -1.2],
+      rotationY: h * 0.7
+    });
+    mountHalloweenModel(cryptCompound, 'tree_pine_yellow_large', {
+      scale: 0.78,
+      position: [4.2, 0, -1.0],
+      rotationY: -h * 0.6
+    });
+
+    // Actual 3D Candle Plaque & Jack-o'-Lanterns at the crypt steps
+    mountHalloweenModel(cryptCompound, 'plaque_candles', {
+      scale: 0.85,
+      position: [-1.6, 0, 3.4]
+    });
+    mountHalloweenModel(cryptCompound, 'pumpkin_orange_jackolantern', {
+      scale: 0.55,
+      position: [1.5, 0, 3.6],
+      rotationY: -0.35
+    });
+
+    group.add(cryptCompound);
+  }
+
+  // 3. Six Circling Vampire Bats & Phantom Wraiths in the Blood-Moon Sky
+  const circlingBats = [];
+  for (let i = 0; i < 6; i++) {
+    const batGroup = createSculptedSkyDragon(
+      0.58 + (i % 3) * 0.12,
+      0x140d1f,
+      i % 2 === 0 ? 0xff6d00 : 0x00e676,
+      0xffe066
+    );
+    group.add(batGroup);
+    circlingBats.push({
+      mesh: batGroup,
+      orbitR: 18.5 + (i % 3) * 4.8,
+      baseY: 7.5 + (i % 3) * 2.6,
+      speed: (i % 2 === 0 ? 1 : -1) * (0.28 + (i % 3) * 0.06),
+      phase: i * 1.05
+    });
+  }
+
+  group.userData = {
+    floatingPumpkins,
+    floatingGhosts,
+    cauldronBubbles,
+    circlingBats
+  };
+
+  return group;
+}
+
+// ============================================================================
 // GPU Particle Weather System (Stardust, Sun-Motes/Mist, Volcanic Embers)
 // ============================================================================
 function createWeatherParticleSystem() {
@@ -1011,8 +1383,9 @@ export function createWorldSceneryManager(scene) {
   const celestialGroup = buildCelestialObservatoryGroup();
   const dragonCitadelGroup = buildDragonSkyCitadelGroup();
   const titanForgeGroup = buildVolcanicTitanForgeGroup();
+  const hauntedGraveyardGroup = buildHauntedBloodGraveyardGroup();
 
-  rootGroup.add(celestialGroup, dragonCitadelGroup, titanForgeGroup);
+  rootGroup.add(celestialGroup, dragonCitadelGroup, titanForgeGroup, hauntedGraveyardGroup);
 
   const weather = createWeatherParticleSystem();
   rootGroup.add(weather.points);
@@ -1032,6 +1405,7 @@ export function createWorldSceneryManager(scene) {
     celestialGroup.visible = id === 'celestial_observatory';
     dragonCitadelGroup.visible = id === 'dragon_sky_citadel';
     titanForgeGroup.visible = id === 'volcanic_titan_forge';
+    hauntedGraveyardGroup.visible = id === 'haunted_blood_graveyard';
 
     if (id === 'celestial_observatory') {
       skyDomeMat.uniforms.uMode.value = 0;
@@ -1048,6 +1422,11 @@ export function createWorldSceneryManager(scene) {
       horizonSeaMat.uniforms.uMode.value = 2;
       weather.mat.color.setHex(0xff5400);
       weather.mat.size = 0.18;
+    } else if (id === 'haunted_blood_graveyard') {
+      skyDomeMat.uniforms.uMode.value = 3;
+      horizonSeaMat.uniforms.uMode.value = 3;
+      weather.mat.color.setHex(0xff6d00);
+      weather.mat.size = 0.17;
     }
   }
 
@@ -1116,20 +1495,63 @@ export function createWorldSceneryManager(scene) {
       }
     }
 
+    // 3b. Animate Haunted Blood-Moon Graveyard (Bobbing Jack-o'-Lanterns, Sheet Ghosts, Bubbling Cauldrons & Circling Vampire Bats)
+    if (hauntedGraveyardGroup.visible) {
+      const { floatingPumpkins, floatingGhosts, cauldronBubbles, circlingBats } = hauntedGraveyardGroup.userData;
+      for (const fp of floatingPumpkins) {
+        fp.mesh.position.y = fp.baseY + Math.sin(elapsedTotal * fp.speed + fp.phase) * 0.34;
+        fp.mesh.rotation.y = Math.sin(elapsedTotal * 0.9 + fp.phase) * 0.35;
+      }
+      if (floatingGhosts) {
+        for (const fg of floatingGhosts) {
+          const ang = fg.baseAngle + Math.sin(elapsedTotal * fg.speed + fg.phase) * 0.25;
+          fg.mesh.position.x = Math.cos(ang) * fg.orbitR;
+          fg.mesh.position.z = Math.sin(ang) * fg.orbitR;
+          fg.mesh.position.y = fg.baseY + Math.sin(elapsedTotal * 2.1 + fg.phase) * 0.38;
+          fg.mesh.rotation.z = Math.sin(elapsedTotal * 1.6 + fg.phase) * 0.12;
+        }
+      }
+      if (cauldronBubbles) {
+        for (const cb of cauldronBubbles) {
+          const cycle = (elapsedTotal * cb.speed + cb.phase) % 1.0;
+          cb.mesh.position.y = cb.baseY + cycle * 0.48;
+          const s = Math.sin(cycle * Math.PI) * 1.15;
+          cb.mesh.scale.setScalar(Math.max(0.05, s));
+        }
+      }
+      for (const bat of circlingBats) {
+        const theta = elapsedTotal * bat.speed + bat.phase;
+        const nextTheta = theta + (bat.speed >= 0 ? 0.06 : -0.06);
+        const x = Math.cos(theta) * bat.orbitR;
+        const z = Math.sin(theta) * bat.orbitR;
+        const y = bat.baseY + Math.sin(elapsedTotal * 1.8 + bat.phase) * 1.15;
+        bat.mesh.position.set(x, y, z);
+        bat.mesh.lookAt(
+          Math.cos(nextTheta) * bat.orbitR,
+          y + Math.cos(elapsedTotal * 1.8 + bat.phase) * 0.15,
+          Math.sin(nextTheta) * bat.orbitR
+        );
+        const flap = Math.sin(elapsedTotal * 7.5 + bat.phase) * 0.52;
+        if (bat.mesh.userData.leftWing) bat.mesh.userData.leftWing.rotation.z = flap;
+        if (bat.mesh.userData.rightWing) bat.mesh.userData.rightWing.rotation.z = -flap;
+      }
+    }
+
     // 4. Animate Particle Weather
     const posArr = weather.positions;
     const phaseArr = weather.phases;
     const isVolcanic = activeSceneryId === 'volcanic_titan_forge';
     const isSkyCitadel = activeSceneryId === 'dragon_sky_citadel';
+    const isGraveyard = activeSceneryId === 'haunted_blood_graveyard';
 
     for (let i = 0; i < weather.count; i++) {
       const idx = i * 3;
       const ph = phaseArr[i];
-      if (isVolcanic) {
-        // Fast rising volcanic embers
-        posArr[idx + 1] += dt * (1.65 + (i % 5) * 0.25);
-        posArr[idx] += Math.sin(elapsedTotal * 2.2 + ph) * dt * 0.45;
-        posArr[idx + 2] += Math.cos(elapsedTotal * 1.9 + ph) * dt * 0.45;
+      if (isVolcanic || isGraveyard) {
+        // Rising volcanic embers or floating Halloween Jack-o'-Lantern cinders
+        posArr[idx + 1] += dt * (1.35 + (i % 5) * 0.22);
+        posArr[idx] += Math.sin(elapsedTotal * 2.0 + ph) * dt * 0.42;
+        posArr[idx + 2] += Math.cos(elapsedTotal * 1.8 + ph) * dt * 0.42;
         if (posArr[idx + 1] > 14.0) posArr[idx + 1] = -2.0;
       } else if (isSkyCitadel) {
         // Wind-swept sun-motes & alpine mist

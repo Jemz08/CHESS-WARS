@@ -7,6 +7,12 @@ import {
   updateProceduralPieceAnimation,
   rebuildBoardArchitectureGroup
 } from './customBoardAndPieceModels.js';
+import {
+  applyPoliigonPbrToMaterial,
+  resolvePiecePoliigonPresets,
+  resolveBoardPoliigonPresets,
+  ensureGeometryHasUVs
+} from './poliigonPbrTextures.js';
 import { createWorldSceneryManager } from './worldSceneries.js';
 import { createSoundAndVfxManager, PIECE_KILL_PROFILES, getArchetypeKillProfile } from './soundAndVfxEngine.js';
 
@@ -871,11 +877,19 @@ export function initWizardChess() {
 
     // =========================================================================
     // Materials for White & Black Sculpted Stone Chess Pieces (Independent Per-Side Support)
+    // Enhanced with Poliigon Free PBR Texture Suites (Albedo, NormalGL, Roughness)
     // =========================================================================
     const whitePieceMat = new THREE.MeshStandardMaterial({
       color: 0xe6dfd0,
       roughness: 0.34,
       metalness: 0.06
+    });
+    applyPoliigonPbrToMaterial(whitePieceMat, 'travertine_limestone', {
+      contextId: 'main',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: 0.88,
+      envMapIntensity: 1.35
     });
 
     const blackPieceMat = new THREE.MeshStandardMaterial({
@@ -883,16 +897,40 @@ export function initWizardChess() {
       roughness: 0.28,
       metalness: 0.24
     });
+    applyPoliigonPbrToMaterial(blackPieceMat, 'marble_nero_marquina', {
+      contextId: 'main',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: 0.88,
+      envMapIntensity: 1.45
+    });
 
     const whiteTrimMat = new THREE.MeshStandardMaterial({
       color: 0xd4af37,
       roughness: 0.26,
       metalness: 0.86
     });
+    applyPoliigonPbrToMaterial(whiteTrimMat, 'metal_gold_hammered', {
+      contextId: 'main',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: 0.68,
+      envMapIntensity: 1.6,
+      useNormalMap: false
+    });
+
     const blackTrimMat = new THREE.MeshStandardMaterial({
       color: 0xd4af37,
       roughness: 0.26,
       metalness: 0.86
+    });
+    applyPoliigonPbrToMaterial(blackTrimMat, 'metal_gold_hammered', {
+      contextId: 'main',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: 0.68,
+      envMapIntensity: 1.6,
+      useNormalMap: false
     });
     const goldTrimMat = whiteTrimMat;
 
@@ -903,12 +941,29 @@ export function initWizardChess() {
       emissive: 0x222832,
       emissiveIntensity: 0.25
     });
+    applyPoliigonPbrToMaterial(whiteBladeMat, 'metal_steel_brushed', {
+      contextId: 'main',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: 0.72,
+      envMapIntensity: 1.65,
+      useNormalMap: false
+    });
+
     const blackBladeMat = new THREE.MeshStandardMaterial({
       color: 0xdce4ee,
       roughness: 0.20,
       metalness: 0.88,
       emissive: 0x222832,
       emissiveIntensity: 0.25
+    });
+    applyPoliigonPbrToMaterial(blackBladeMat, 'metal_steel_brushed', {
+      contextId: 'main',
+      repeatX: 2,
+      repeatY: 2,
+      normalScale: 0.72,
+      envMapIntensity: 1.65,
+      useNormalMap: false
     });
     const forgedSteelMat = whiteBladeMat;
 
@@ -941,15 +996,38 @@ export function initWizardChess() {
       roughness: 0.38,
       metalness: 0.06
     });
+    applyPoliigonPbrToMaterial(lightSqMat, 'marble_calacatta', {
+      contextId: 'main',
+      repeatX: 1.25,
+      repeatY: 1.25,
+      normalScale: 0.8,
+      envMapIntensity: 1.35
+    });
+
     const darkSqMat = new THREE.MeshStandardMaterial({
       color: 0x14171f,
       roughness: 0.28,
       metalness: 0.18
     });
+    applyPoliigonPbrToMaterial(darkSqMat, 'marble_nero_marquina', {
+      contextId: 'main',
+      repeatX: 1.25,
+      repeatY: 1.25,
+      normalScale: 0.8,
+      envMapIntensity: 1.45
+    });
+
     const boardBorderMat = new THREE.MeshStandardMaterial({
       color: 0xd4af37,
       roughness: 0.26,
       metalness: 0.86
+    });
+    applyPoliigonPbrToMaterial(boardBorderMat, 'metal_gold_hammered', {
+      contextId: 'main',
+      repeatX: 2.5,
+      repeatY: 2.5,
+      normalScale: 0.72,
+      envMapIntensity: 1.55
     });
 
     function buildChessBoardGrid() {
@@ -969,51 +1047,94 @@ export function initWizardChess() {
         }
       }
 
-      rebuildBoardArchitectureGroup(boardArchGroup, null, BOARD_SQ_SIZE, BOARD_SURFACE_Y, boardBorderMat);
+      rebuildBoardArchitectureGroup(boardArchGroup, null, BOARD_SQ_SIZE, BOARD_SURFACE_Y, boardBorderMat, 'main');
     }
 
     buildChessBoardGrid();
 
     function applySkinToSideMaterials(side, skin) {
       if (!skin) return;
+      const sideArch = side === 'w' ? whitePieceArchetype : blackPieceArchetype;
+      const pbrPresets = resolvePiecePoliigonPresets(skin.id || 'classic_stone', sideArch);
+
       if (side === 'w') {
         whitePieceMat.color.set(skin.whiteHex || '#e6dfd0');
         whitePieceMat.roughness = skin.whiteRoughness ?? 0.34;
         whitePieceMat.metalness = skin.whiteMetalness ?? 0.06;
         whitePieceMat.emissive.set(skin.whiteEmissiveHex || '#000000');
         whitePieceMat.emissiveIntensity = skin.whiteEmissiveIntensity ?? 0;
-        whitePieceMat.needsUpdate = true;
+        applyPoliigonPbrToMaterial(whitePieceMat, pbrPresets.whitePreset, {
+          contextId: 'main',
+          repeatX: 2,
+          repeatY: 2,
+          normalScale: pbrPresets.normalScaleVal,
+          envMapIntensity: 1.38
+        });
 
         whiteTrimMat.color.set(skin.trimHex || '#d4af37');
         whiteTrimMat.roughness = skin.trimRoughness ?? 0.26;
         whiteTrimMat.metalness = skin.trimMetalness ?? 0.86;
-        whiteTrimMat.needsUpdate = true;
+        applyPoliigonPbrToMaterial(whiteTrimMat, pbrPresets.trimPreset, {
+          contextId: 'main',
+          repeatX: 2,
+          repeatY: 2,
+          normalScale: pbrPresets.normalScaleVal * 0.78,
+          envMapIntensity: 1.6,
+          useNormalMap: false
+        });
 
         whiteBladeMat.color.set(skin.bladeHex || '#dce4ee');
         whiteBladeMat.roughness = skin.bladeRoughness ?? 0.20;
         whiteBladeMat.metalness = skin.bladeMetalness ?? 0.88;
         whiteBladeMat.emissive.set(skin.bladeEmissiveHex || '#222832');
         whiteBladeMat.emissiveIntensity = skin.bladeEmissiveIntensity ?? 0.25;
-        whiteBladeMat.needsUpdate = true;
+        applyPoliigonPbrToMaterial(whiteBladeMat, pbrPresets.bladePreset, {
+          contextId: 'main',
+          repeatX: 2,
+          repeatY: 2,
+          normalScale: pbrPresets.normalScaleVal * 0.82,
+          envMapIntensity: 1.65,
+          useNormalMap: false
+        });
       } else {
         blackPieceMat.color.set(skin.blackHex || '#222630');
         blackPieceMat.roughness = skin.blackRoughness ?? 0.28;
         blackPieceMat.metalness = skin.blackMetalness ?? 0.24;
         blackPieceMat.emissive.set(skin.blackEmissiveHex || '#000000');
         blackPieceMat.emissiveIntensity = skin.blackEmissiveIntensity ?? 0;
-        blackPieceMat.needsUpdate = true;
+        applyPoliigonPbrToMaterial(blackPieceMat, pbrPresets.blackPreset, {
+          contextId: 'main',
+          repeatX: 2,
+          repeatY: 2,
+          normalScale: pbrPresets.normalScaleVal,
+          envMapIntensity: 1.48
+        });
 
         blackTrimMat.color.set(skin.trimHex || '#d4af37');
         blackTrimMat.roughness = skin.trimRoughness ?? 0.26;
         blackTrimMat.metalness = skin.trimMetalness ?? 0.86;
-        blackTrimMat.needsUpdate = true;
+        applyPoliigonPbrToMaterial(blackTrimMat, pbrPresets.trimPreset, {
+          contextId: 'main',
+          repeatX: 2,
+          repeatY: 2,
+          normalScale: pbrPresets.normalScaleVal * 0.78,
+          envMapIntensity: 1.6,
+          useNormalMap: false
+        });
 
         blackBladeMat.color.set(skin.bladeHex || '#dce4ee');
         blackBladeMat.roughness = skin.bladeRoughness ?? 0.20;
         blackBladeMat.metalness = skin.bladeMetalness ?? 0.88;
         blackBladeMat.emissive.set(skin.bladeEmissiveHex || '#222832');
         blackBladeMat.emissiveIntensity = skin.bladeEmissiveIntensity ?? 0.25;
-        blackBladeMat.needsUpdate = true;
+        applyPoliigonPbrToMaterial(blackBladeMat, pbrPresets.bladePreset, {
+          contextId: 'main',
+          repeatX: 2,
+          repeatY: 2,
+          normalScale: pbrPresets.normalScaleVal * 0.82,
+          envMapIntensity: 1.65,
+          useNormalMap: false
+        });
       }
       renderer.shadowMap.needsUpdate = true;
     }
@@ -1031,24 +1152,49 @@ export function initWizardChess() {
       }
     }
 
+    let lastBuiltBoardArchKey = '';
     function applyBoardSkin(boardSkin) {
       if (!boardSkin) return;
       currentBoardSkinObj = boardSkin;
+      const bPresets = resolveBoardPoliigonPresets(boardSkin.id || 'obsidian_sanctum', boardSkin.archType || 'gothic');
+
       lightSqMat.color.set(boardSkin.lightSqHex || '#dcd3c2');
       lightSqMat.roughness = boardSkin.lightRoughness ?? 0.38;
       lightSqMat.metalness = boardSkin.lightMetalness ?? 0.06;
-      lightSqMat.needsUpdate = true;
+      applyPoliigonPbrToMaterial(lightSqMat, bPresets.lightPreset, {
+        contextId: 'main',
+        repeatX: bPresets.repeatSq,
+        repeatY: bPresets.repeatSq,
+        normalScale: bPresets.normalScaleVal,
+        envMapIntensity: 1.38
+      });
 
       darkSqMat.color.set(boardSkin.darkSqHex || '#14171f');
       darkSqMat.roughness = boardSkin.darkRoughness ?? 0.28;
       darkSqMat.metalness = boardSkin.darkMetalness ?? 0.18;
-      darkSqMat.needsUpdate = true;
+      applyPoliigonPbrToMaterial(darkSqMat, bPresets.darkPreset, {
+        contextId: 'main',
+        repeatX: bPresets.repeatSq,
+        repeatY: bPresets.repeatSq,
+        normalScale: bPresets.normalScaleVal,
+        envMapIntensity: 1.48
+      });
 
       boardBorderMat.color.set(boardSkin.borderHex || '#d4af37');
-      boardBorderMat.needsUpdate = true;
+      applyPoliigonPbrToMaterial(boardBorderMat, bPresets.borderPreset, {
+        contextId: 'main',
+        repeatX: bPresets.repeatBorder,
+        repeatY: bPresets.repeatBorder,
+        normalScale: bPresets.normalScaleVal,
+        envMapIntensity: 1.55
+      });
 
-      // 1. Rebuild 3D Board Perimeter Architecture (Wood Table, Runic Pedestal, Crystal Sanctum, Lava Forge, or Gothic)
-      rebuildBoardArchitectureGroup(boardArchGroup, boardSkin, BOARD_SQ_SIZE, BOARD_SURFACE_Y, boardBorderMat);
+      // 1. Rebuild 3D Board Perimeter Architecture when board skin architecture, colors, or table PBR preset changes
+      const nextBoardArchKey = `${boardSkin.id || 'obsidian_sanctum'}_${boardSkin.archType || 'gothic'}_${boardSkin.borderHex || ''}_${boardSkin.accentHex || ''}_${bPresets.borderPreset}_${bPresets.accentPreset}`;
+      if (nextBoardArchKey !== lastBuiltBoardArchKey) {
+        lastBuiltBoardArchKey = nextBoardArchKey;
+        rebuildBoardArchitectureGroup(boardArchGroup, boardSkin, BOARD_SQ_SIZE, BOARD_SURFACE_Y, boardBorderMat, 'main');
+      }
 
       // 2. Transform Full 3D Room Stone Masonry, Fog, Window Lights & Volumetric Brazier Flame Colors
       if (typeof boardSkin.wallLookIndex === 'number' && typeof setWallStoneLook === 'function') {
@@ -1105,6 +1251,7 @@ export function initWizardChess() {
       }
 
       worldSceneryManager.setScenery(scenery);
+      sfxVfxManager.setActiveWorldScenery?.(sceneryId);
 
       if (isIndoorCathedral) {
         hemiLight.color.setHex(0xd8ccb8);
@@ -1659,6 +1806,8 @@ export function initWizardChess() {
                     if (nm.includes('Icosphere') || nm.includes('glTF_not_exported')) {
                       child.visible = false;
                       toRemove.push(child);
+                    } else if (child.isMesh && child.geometry) {
+                      ensureGeometryHasUVs(child.geometry);
                     }
                   });
                   for (const rem of toRemove) {
@@ -1709,6 +1858,83 @@ export function initWizardChess() {
     let playerColor = 'w';   // 'w' | 'b' | 'spectator'
     let aiAutoPlay = true;
     let aiTimer = null;
+
+    // Bullet, Blitz, and Rapid Time Control Presets & Dual Chess Clock State
+    const TIME_CONTROL_PRESETS = {
+      bullet_1: { id: 'bullet_1', category: 'bullet', categoryLabel: 'Bullet', label: 'Bullet • 1 min', shortLabel: 'Bullet 1m', minutes: 1, initialSeconds: 60 },
+      bullet_2: { id: 'bullet_2', category: 'bullet', categoryLabel: 'Bullet', label: 'Bullet • 2 min', shortLabel: 'Bullet 2m', minutes: 2, initialSeconds: 120 },
+      blitz_3:  { id: 'blitz_3',  category: 'blitz',  categoryLabel: 'Blitz',  label: 'Blitz • 3 min',  shortLabel: 'Blitz 3m',  minutes: 3, initialSeconds: 180 },
+      blitz_5:  { id: 'blitz_5',  category: 'blitz',  categoryLabel: 'Blitz',  label: 'Blitz • 5 min',  shortLabel: 'Blitz 5m',  minutes: 5, initialSeconds: 300 },
+      blitz_8:  { id: 'blitz_8',  category: 'blitz',  categoryLabel: 'Blitz',  label: 'Blitz • 8 min',  shortLabel: 'Blitz 8m',  minutes: 8, initialSeconds: 480 },
+      rapid_10: { id: 'rapid_10', category: 'rapid',  categoryLabel: 'Rapid',  label: 'Rapid • 10 min', shortLabel: 'Rapid 10m', minutes: 10, initialSeconds: 600 },
+      rapid_15: { id: 'rapid_15', category: 'rapid',  categoryLabel: 'Rapid',  label: 'Rapid • 15 min', shortLabel: 'Rapid 15m', minutes: 15, initialSeconds: 900 },
+      rapid_30: { id: 'rapid_30', category: 'rapid',  categoryLabel: 'Rapid',  label: 'Rapid • 30 min', shortLabel: 'Rapid 30m', minutes: 30, initialSeconds: 1800 },
+      rapid_60: { id: 'rapid_60', category: 'rapid',  categoryLabel: 'Rapid',  label: 'Rapid • 60 min', shortLabel: 'Rapid 60m', minutes: 60, initialSeconds: 3600 }
+    };
+
+    let timeControlCategory = 'blitz'; // 'bullet' | 'blitz' | 'rapid'
+    let timeControlPresetId = 'blitz_5';
+    let timeControlSeconds = 300;
+    let whiteTimeRemaining = 300;
+    let blackTimeRemaining = 300;
+    let clockEmitAccum = 0;
+    let lastLowTimeBeepSec = -1;
+
+    function resolveTimeControlPreset(input) {
+      if (!input) return TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
+      if (typeof input === 'string') {
+        if (TIME_CONTROL_PRESETS[input]) return TIME_CONTROL_PRESETS[input];
+        if (input === 'bullet') return TIME_CONTROL_PRESETS.bullet_2;
+        if (input === 'blitz') return TIME_CONTROL_PRESETS.blitz_5;
+        if (input === 'rapid') return TIME_CONTROL_PRESETS.rapid_10;
+      }
+      if (typeof input === 'object') {
+        if (input.presetId && TIME_CONTROL_PRESETS[input.presetId]) {
+          return TIME_CONTROL_PRESETS[input.presetId];
+        }
+        if (input.id && TIME_CONTROL_PRESETS[input.id]) {
+          return TIME_CONTROL_PRESETS[input.id];
+        }
+        if (input.category === 'bullet') return TIME_CONTROL_PRESETS.bullet_2;
+        if (input.category === 'blitz') return TIME_CONTROL_PRESETS.blitz_5;
+        if (input.category === 'rapid') return TIME_CONTROL_PRESETS.rapid_10;
+      }
+      return TIME_CONTROL_PRESETS.blitz_5;
+    }
+
+    function emitClockTick() {
+      const preset = TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
+      window.dispatchEvent(
+        new CustomEvent('wizardchess:clocktick', {
+          detail: {
+            whiteTimeRemaining: Math.max(0, whiteTimeRemaining),
+            blackTimeRemaining: Math.max(0, blackTimeRemaining),
+            currentTurn,
+            timeControlCategory,
+            timeControlPresetId,
+            timeControlSeconds,
+            timeControlLabel: preset.label,
+            timeControlShortLabel: preset.shortLabel,
+            gameOver
+          }
+        })
+      );
+    }
+
+    function setTimeControl(input, resetClocks = true) {
+      const preset = resolveTimeControlPreset(input);
+      timeControlCategory = preset.category;
+      timeControlPresetId = preset.id;
+      timeControlSeconds = preset.initialSeconds;
+      if (resetClocks) {
+        whiteTimeRemaining = timeControlSeconds;
+        blackTimeRemaining = timeControlSeconds;
+        lastLowTimeBeepSec = -1;
+      }
+      emitClockTick();
+      updateTurnUI();
+      return preset;
+    }
 
     // Multiplayer & Online Matchmaking State
     let roomCode = null;
@@ -1922,15 +2148,65 @@ export function initWizardChess() {
 
       if (gameMode === 'multi') {
         const mySide = playerColor === 'b' ? 'b' : 'w';
+        const prevArch = mySide === 'w' ? whitePieceArchetype : blackPieceArchetype;
         if (mySide === 'w') whitePieceArchetype = nextId;
         else blackPieceArchetype = nextId;
-        rebuildBoardPieces(mySide);
+        if (currentPieceSkinObj) applySkinToSideMaterials(mySide, currentPieceSkinObj);
+        if (prevArch !== nextId) {
+          rebuildBoardPieces(mySide);
+        }
         broadcastLocalLoadoutToRoom();
       } else {
+        const needsRebuild = whitePieceArchetype !== nextId || blackPieceArchetype !== nextId;
         whitePieceArchetype = nextId;
         blackPieceArchetype = nextId;
-        rebuildBoardPieces(null);
+        if (currentPieceSkinObj) {
+          applySkinToSideMaterials('w', currentPieceSkinObj);
+          applySkinToSideMaterials('b', currentPieceSkinObj);
+        }
+        if (needsRebuild) {
+          rebuildBoardPieces(null);
+        }
       }
+    }
+
+    function refreshPoliigonMaterials() {
+      const fallbackSkin = currentPieceSkinObj || {
+        id: 'classic_stone',
+        whiteHex: '#e6dfd0',
+        whiteRoughness: 0.34,
+        whiteMetalness: 0.06,
+        blackHex: '#222630',
+        blackRoughness: 0.28,
+        blackMetalness: 0.24,
+        trimHex: '#d4af37',
+        trimRoughness: 0.26,
+        trimMetalness: 0.86,
+        bladeHex: '#dce4ee',
+        bladeRoughness: 0.20,
+        bladeMetalness: 0.88,
+        bladeEmissiveHex: '#222832',
+        bladeEmissiveIntensity: 0.25
+      };
+      applySkinToSideMaterials('w', fallbackSkin);
+      applySkinToSideMaterials('b', fallbackSkin);
+      if (currentBoardSkinObj) {
+        applyBoardSkin(currentBoardSkinObj);
+      } else {
+        applyBoardSkin({
+          id: 'obsidian_sanctum',
+          archType: 'gothic',
+          lightSqHex: '#dcd3c2',
+          lightRoughness: 0.38,
+          lightMetalness: 0.06,
+          darkSqHex: '#14171f',
+          darkRoughness: 0.28,
+          darkMetalness: 0.18,
+          borderHex: '#d4af37',
+          accentHex: '#ff9f1c'
+        });
+      }
+      renderer.render(scene, camera);
     }
 
     // Exact per-piece Attack keyframe synchronization (24 fps Blender clips, zero overhead suspension freeze):
@@ -2016,6 +2292,7 @@ export function initWizardChess() {
       defeatedColor: null,
       winnerColor: null,
       isCheckWin: false,
+      isTimeOutWin: false,
       kingFallAngleDeg: 0,
       phase: 'none'
     };
@@ -2141,6 +2418,7 @@ export function initWizardChess() {
       checkmateState.defeatedColor = null;
       checkmateState.winnerColor = null;
       checkmateState.isCheckWin = false;
+      checkmateState.isTimeOutWin = false;
       checkmateState.kingFallAngleDeg = 0;
       checkmateState.phase = 'none';
       checkIndicatorGroup.visible = false;
@@ -2156,6 +2434,8 @@ export function initWizardChess() {
         gameOver,
         capturedByWhite,
         capturedByBlack,
+        whiteTimeRemaining,
+        blackTimeRemaining,
         scriptCursor,
         scriptedGameActive,
         scriptDeviated,
@@ -2198,6 +2478,12 @@ export function initWizardChess() {
       gameOver = snap.gameOver;
       capturedByWhite = snap.capturedByWhite;
       capturedByBlack = snap.capturedByBlack;
+      if (typeof snap.whiteTimeRemaining === 'number') {
+        whiteTimeRemaining = snap.whiteTimeRemaining;
+      }
+      if (typeof snap.blackTimeRemaining === 'number') {
+        blackTimeRemaining = snap.blackTimeRemaining;
+      }
       if (typeof snap.scriptCursor === 'number') {
         scriptCursor = snap.scriptCursor;
       }
@@ -2220,6 +2506,7 @@ export function initWizardChess() {
       }
 
       renderer.shadowMap.needsUpdate = true;
+      emitClockTick();
       updateTurnUI();
       if (typeof updateScriptBarUI === 'function') updateScriptBarUI();
       return true;
@@ -2249,6 +2536,9 @@ export function initWizardChess() {
       gameOver = false;
       capturedByWhite = 0;
       capturedByBlack = 0;
+      whiteTimeRemaining = timeControlSeconds;
+      blackTimeRemaining = timeControlSeconds;
+      lastLowTimeBeepSec = -1;
       moveHistory = [];
       scriptDeviated = false;
       if (!preserveScript) {
@@ -2275,6 +2565,7 @@ export function initWizardChess() {
       }
 
       renderer.shadowMap.needsUpdate = true;
+      emitClockTick();
       updateTurnUI();
       if (typeof updateScriptBarUI === 'function') updateScriptBarUI();
       maybeScheduleAIMove();
@@ -3576,6 +3867,8 @@ export function initWizardChess() {
 
       const aiColor = playerColor === 'w' ? 'b' : 'w';
       if (currentTurn === aiColor) {
+        const aiThinkDelayMs =
+          timeControlCategory === 'bullet' ? 210 : timeControlCategory === 'blitz' ? 360 : 520;
         aiTimer = setTimeout(() => {
           aiTimer = null;
           if (
@@ -3589,7 +3882,7 @@ export function initWizardChess() {
           ) {
             triggerAIMoveNow();
           }
-        }, 540);
+        }, aiThinkDelayMs);
       }
     }
 
@@ -4150,7 +4443,7 @@ export function initWizardChess() {
       impactFlashLight.intensity = 14.0;
     }
 
-    function showCheckmateBanner(winnerColor, defeatedColor, isCheckWin = false) {
+    function showCheckmateBanner(winnerColor, defeatedColor, isCheckWin = false, isTimeOutWin = false) {
       const overlay = document.getElementById('checkmate-overlay');
       const crownEl = document.getElementById('checkmate-crown');
       const titleEl = document.getElementById('checkmate-title');
@@ -4158,15 +4451,22 @@ export function initWizardChess() {
 
       const winnerName = winnerColor === 'w' ? 'White' : 'Black';
       const defeatedName = defeatedColor === 'w' ? 'White' : 'Black';
+      const preset = TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
 
       if (crownEl) crownEl.textContent = winnerColor === 'w' ? '♔' : '♚';
       if (titleEl) {
-        titleEl.textContent = isCheckWin ? 'Check — Victory!' : 'Checkmate';
+        titleEl.textContent = isTimeOutWin
+          ? 'Time Out — Victory!'
+          : isCheckWin
+            ? 'Check — Victory!'
+            : 'Checkmate';
       }
       if (subEl) {
-        subEl.textContent = isCheckWin
-          ? `${winnerName} Wins the Match • The ${defeatedName} King Is Checked & Fallen`
-          : `${winnerName} Triumphs • The ${defeatedName} King Has Fallen`;
+        subEl.textContent = isTimeOutWin
+          ? `${winnerName} Wins on Time (${preset.shortLabel}) • ${defeatedName} Clock Expired`
+          : isCheckWin
+            ? `${winnerName} Wins the Match • The ${defeatedName} King Is Checked & Fallen`
+            : `${winnerName} Triumphs • The ${defeatedName} King Has Fallen`;
       }
       if (overlay) {
         overlay.classList.add('visible');
@@ -4177,6 +4477,7 @@ export function initWizardChess() {
     function triggerCheckmateSequence(defeatedColor = currentTurn, winnerColor = null, options = {}) {
       const actualWinner = winnerColor || (defeatedColor === 'w' ? 'b' : 'w');
       const isCheckWin = Boolean(options && options.isCheckWin);
+      const isTimeOutWin = Boolean(options && options.isTimeOutWin);
 
       // Find the defeated King on the board
       let kingPiece = null;
@@ -4198,12 +4499,13 @@ export function initWizardChess() {
       checkmateState.defeatedColor = defeatedColor;
       checkmateState.winnerColor = actualWinner;
       checkmateState.isCheckWin = isCheckWin;
+      checkmateState.isTimeOutWin = isTimeOutWin;
       checkmateState.kingFallAngleDeg = 0;
       checkmateState.phase = 'stagger';
       updateCheck3DIndicator(defeatedColor);
 
       if (!kingPiece || !kingPiece.mesh) {
-        showCheckmateBanner(actualWinner, defeatedColor, isCheckWin);
+        showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin);
         return false;
       }
 
@@ -4366,7 +4668,7 @@ export function initWizardChess() {
 
         if (!bannerShown && elapsed >= 0.25) {
           bannerShown = true;
-          showCheckmateBanner(actualWinner, defeatedColor, isCheckWin);
+          showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin);
         }
 
         if (elapsed <= tStagger) {
@@ -4413,7 +4715,7 @@ export function initWizardChess() {
           applyKingTopplePose(MAX_FALL_RAD, 0);
           checkmateState.phase = 'fallen';
           if (!bannerShown) {
-            showCheckmateBanner(actualWinner, defeatedColor, isCheckWin);
+            showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin);
           }
           return true;
         }
@@ -4422,6 +4724,65 @@ export function initWizardChess() {
 
       activeMoveTweens.push(stepKingFall);
       return true;
+    }
+
+    function handleTimeOutDefeat(timedOutColor = currentTurn) {
+      if (gameOver) return;
+      gameOver = true;
+      if (aiTimer) {
+        clearTimeout(aiTimer);
+        aiTimer = null;
+      }
+      preMoveHighlightTask = null;
+      clearSquareHighlights();
+      selectedSquare = null;
+      validMoves = [];
+
+      const winnerColor = timedOutColor === 'w' ? 'b' : 'w';
+      const winner = winnerColor === 'w' ? 'White' : 'Black';
+      const defeated = timedOutColor === 'w' ? 'White' : 'Black';
+      const turnText = document.getElementById('turn-text');
+      const preset = TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
+      if (turnText) {
+        turnText.textContent = `Time Out (${preset.shortLabel}) — ${winner} Wins!`;
+      }
+
+      if (!checkmateState.active) {
+        triggerCheckmateSequence(timedOutColor, winnerColor, {
+          isCheckWin: false,
+          isTimeOutWin: true
+        });
+      }
+
+      announceSanctumEvent('check_win', {
+        winner,
+        defeated,
+        isCheckmate: false,
+        isTimeOutWin: true
+      });
+
+      const isHumanWin =
+        gameMode === 'pass' ||
+        (gameMode === 'single' && winnerColor === playerColor) ||
+        (gameMode === 'multi' && winnerColor === playerColor);
+
+      window.dispatchEvent(
+        new CustomEvent('wizardchess:matchwon', {
+          detail: {
+            winnerColor,
+            defeatedColor: timedOutColor,
+            gameMode,
+            botDifficulty,
+            timeControlCategory,
+            timeControlPresetId,
+            isHumanWin,
+            isCheckWin: false,
+            isTimeOutWin: true
+          }
+        })
+      );
+      emitClockTick();
+      updateTurnUI();
     }
 
     // =========================================================================
@@ -4504,15 +4865,16 @@ export function initWizardChess() {
       }
 
       if (modeBadge) {
+        const tcPreset = TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
         if (!matchStarted) {
           modeBadge.textContent = 'Sanctum Lobby';
         } else if (gameMode === 'pass') {
-          modeBadge.textContent = `1-Phone P1 vs P2 • ${currentTurn === 'w' ? 'P1 White' : 'P2 Black'}`;
+          modeBadge.textContent = `${tcPreset.shortLabel} • 2P • ${currentTurn === 'w' ? 'P1 White' : 'P2 Black'}`;
         } else if (gameMode === 'multi') {
-          modeBadge.textContent = `Online PvP ${roomCode ? `[${roomCode}]` : ''} • ${playerColor === 'w' ? 'White' : 'Black'}`;
+          modeBadge.textContent = `${tcPreset.shortLabel} • Online ${roomCode ? `[${roomCode}]` : ''}`;
         } else {
           const diffCap = botDifficulty.charAt(0).toUpperCase() + botDifficulty.slice(1);
-          modeBadge.textContent = `Vs Bot (${diffCap}) • ${playerColor === 'w' ? 'White' : 'Black'}`;
+          modeBadge.textContent = `${tcPreset.shortLabel} • Vs Bot (${diffCap})`;
         }
       }
       if (btnAiMove) {
@@ -4532,6 +4894,7 @@ export function initWizardChess() {
         capturedTray.textContent = '';
       }
       if (typeof updateScriptBarUI === 'function') updateScriptBarUI();
+      emitClockTick();
       window.dispatchEvent(
         new CustomEvent('wizardchess:statechange', {
           detail: {
@@ -4545,18 +4908,212 @@ export function initWizardChess() {
             gameOver,
             inCheck,
             checkedColor: inCheck ? currentTurn : null,
-            winnerColor: checkmateState.winnerColor
+            winnerColor: checkmateState.winnerColor,
+            timeControlCategory,
+            timeControlPresetId,
+            timeControlSeconds,
+            whiteTimeRemaining,
+            blackTimeRemaining
           }
         })
       );
     }
 
     // =========================================================================
-    // Raycasting & Board Interaction
+    // Raycasting & Board Interaction (Two-Tier Cylinder Hitbox + Board Plane Disambiguation)
     // =========================================================================
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let pointerDownPos = { x: 0, y: 0 };
+
+    // Analytical ray-cylinder intersection for upright piece hitboxes so tall back-rank crowns,
+    // wide wings, weapons, or glow sprites never steal clicks from pawns/pieces behind them.
+    function intersectRayVerticalCylinder(ray, cx, cz, radius, yMin, yMax) {
+      const ox = ray.origin.x;
+      const oy = ray.origin.y;
+      const oz = ray.origin.z;
+      const dx = ray.direction.x;
+      const dy = ray.direction.y;
+      const dz = ray.direction.z;
+
+      const rx = ox - cx;
+      const rz = oz - cz;
+      const a = dx * dx + dz * dz;
+      const b = 2 * (rx * dx + rz * dz);
+      const c = rx * rx + rz * rz - radius * radius;
+
+      let tCylMin = -Infinity;
+      let tCylMax = Infinity;
+      if (a < 1e-8) {
+        if (c > 0) return null;
+      } else {
+        const disc = b * b - 4 * a * c;
+        if (disc < 0) return null;
+        const sqrtD = Math.sqrt(disc);
+        tCylMin = (-b - sqrtD) / (2 * a);
+        tCylMax = (-b + sqrtD) / (2 * a);
+      }
+
+      let tYMin = -Infinity;
+      let tYMax = Infinity;
+      if (Math.abs(dy) < 1e-8) {
+        if (oy < yMin || oy > yMax) return null;
+      } else {
+        const t1 = (yMin - oy) / dy;
+        const t2 = (yMax - oy) / dy;
+        tYMin = Math.min(t1, t2);
+        tYMax = Math.max(t1, t2);
+      }
+
+      const tNear = Math.max(tCylMin, tYMin, 0);
+      const tFar = Math.min(tCylMax, tYMax);
+      if (tNear > tFar || tFar <= 0) return null;
+
+      const tMid = 0.5 * (tNear + tFar);
+      const yMid = oy + dy * tMid;
+      const normHeight = Math.max(0, Math.min(1, (yMid - yMin) / Math.max(0.01, yMax - yMin)));
+      const midX = ox + dx * tMid - cx;
+      const midZ = oz + dz * tMid - cz;
+      const normRadial = Math.hypot(midX, midZ) / Math.max(0.01, radius);
+
+      return {
+        tNear,
+        tMid,
+        yMid,
+        normHeight,
+        normRadial
+      };
+    }
+
+    function resolveClickedSquareOnBoard(ray) {
+      // 1. Intersect the 8x8 board square tiles / horizontal board surface plane
+      let sqR = -1;
+      let sqC = -1;
+      const sqHits = raycaster.intersectObjects(boardSquareMeshes, false);
+      if (sqHits.length > 0 && sqHits[0].object?.userData?.isSquare) {
+        sqR = sqHits[0].object.userData.r;
+        sqC = sqHits[0].object.userData.c;
+      } else if (Math.abs(ray.direction.y) > 1e-5) {
+        const tPlane = (BOARD_SURFACE_Y - ray.origin.y) / ray.direction.y;
+        if (tPlane > 0) {
+          const px = ray.origin.x + ray.direction.x * tPlane;
+          const pz = ray.origin.z + ray.direction.z * tPlane;
+          const c = Math.floor(px / BOARD_SQ_SIZE + 4);
+          const r = Math.floor(pz / BOARD_SQ_SIZE + 4);
+          if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+            sqR = r;
+            sqC = c;
+          }
+        }
+      }
+
+      // 2. Test all pieces on the board against Tier 1 (Core Pedestal + Body) and Tier 2 (Upper Crown) cylinders
+      const coreHits = [];
+      const crownHits = [];
+      const coreRadius = BOARD_SQ_SIZE * 0.34;
+      const crownRadius = BOARD_SQ_SIZE * 0.25;
+
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = boardState[r][c];
+          if (!p || !p.mesh) continue;
+          const wPos = boardToWorld(r, c);
+          // Core height is capped at 0.72-0.75 * BOARD_SQ_SIZE so tall back-rank King/Queen crowns
+          // never overhang the line of sight to the Pawn row in front of them.
+          const coreH =
+            p.type === 'pawn'
+              ? BOARD_SQ_SIZE * 0.72
+              : BOARD_SQ_SIZE * 0.75;
+          const hitCore = intersectRayVerticalCylinder(
+            ray,
+            wPos.x,
+            wPos.z,
+            coreRadius,
+            BOARD_SURFACE_Y,
+            BOARD_SURFACE_Y + coreH
+          );
+          if (hitCore) {
+            coreHits.push({
+              r,
+              c,
+              piece: p,
+              ...hitCore,
+              onBoardSquare: r === sqR && c === sqC
+            });
+          } else {
+            const crownMaxH =
+              p.type === 'king' || p.type === 'queen'
+                ? BOARD_SQ_SIZE * 1.16
+                : BOARD_SQ_SIZE * 0.96;
+            const hitCrown = intersectRayVerticalCylinder(
+              ray,
+              wPos.x,
+              wPos.z,
+              crownRadius,
+              BOARD_SURFACE_Y + coreH,
+              BOARD_SURFACE_Y + crownMaxH
+            );
+            if (hitCrown) {
+              crownHits.push({
+                r,
+                c,
+                piece: p,
+                ...hitCrown
+              });
+            }
+          }
+        }
+      }
+
+      // 3. If a piece is currently selected and the ray lands on a valid destination square (sqR, sqC),
+      // check if the user tapped an empty/enemy valid move square (unless they tapped directly onto the base/core of another friendly piece)
+      if (selectedSquare && sqR !== -1 && sqC !== -1) {
+        const isSqValidMove = validMoves.some(
+          (m) =>
+            (m.r === sqR && m.c === sqC) ||
+            (m.castle && m.r === sqR && m.rookFromC === sqC)
+        );
+        if (isSqValidMove) {
+          const directFriendlySwitch = coreHits.find(
+            (h) =>
+              h.piece.color === currentTurn &&
+              (h.r !== selectedSquare.r || h.c !== selectedSquare.c) &&
+              h.onBoardSquare &&
+              h.normHeight < 0.55
+          );
+          if (!directFriendlySwitch) {
+            return { r: sqR, c: sqC };
+          }
+        }
+      }
+
+      // 4. Disambiguate among Tier 1 Core Hits:
+      // When looking down at the board, if a ray clips the upper portion of a closer piece (e.g. King at r=7)
+      // AND hits the lower body/base of the piece behind it (e.g. Pawn at r=6) or the piece standing on (sqR, sqC),
+      // always prefer the piece hit closer to the board surface (lower normHeight / matching sqR, sqC)!
+      if (coreHits.length > 0) {
+        coreHits.sort((a, b) => {
+          const scoreA = a.normHeight * 1.35 + a.normRadial * 0.35 - (a.onBoardSquare ? 0.55 : 0);
+          const scoreB = b.normHeight * 1.35 + b.normRadial * 0.35 - (b.onBoardSquare ? 0.55 : 0);
+          return scoreA - scoreB;
+        });
+        return { r: coreHits[0].r, c: coreHits[0].c };
+      }
+
+      // 5. If no Tier 1 Core Hitbox was hit, check if the intersected board square (sqR, sqC) has a piece on it
+      if (sqR !== -1 && sqC !== -1 && boardState[sqR][sqC]) {
+        return { r: sqR, c: sqC };
+      }
+
+      // 6. Otherwise, if the user clicked the upper crown of a piece (Tier 2) and no piece stood behind it on (sqR, sqC)
+      if (crownHits.length > 0) {
+        crownHits.sort((a, b) => a.tNear - b.tNear);
+        return { r: crownHits[0].r, c: crownHits[0].c };
+      }
+
+      // 7. Fall back to the empty board square hit
+      return { r: sqR, c: sqC };
+    }
 
     renderer.domElement.addEventListener('pointerdown', (e) => {
       pointerDownPos = { x: e.clientX, y: e.clientY };
@@ -4564,7 +5121,7 @@ export function initWizardChess() {
 
     renderer.domElement.addEventListener('pointerup', (e) => {
       const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
-      if (moveDist > 6) return;
+      if (moveDist > 12) return;
       if (!matchStarted || lobbyPaused || isAnimatingMove || gameOver) return;
 
       // Enforce turn ownership in Multiplayer, and in Single Player only block while AI auto-move timer is actively pending
@@ -4577,42 +5134,15 @@ export function initWizardChess() {
 
       raycaster.setFromCamera(pointer, camera);
 
-      const pieceMeshes = [];
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          if (boardState[r][c] && boardState[r][c].mesh) {
-            pieceMeshes.push(boardState[r][c].mesh);
-          }
-        }
-      }
+      const { r: clickedR, c: clickedC } = resolveClickedSquareOnBoard(raycaster.ray);
 
-      const hits = raycaster.intersectObjects([...pieceMeshes, ...boardSquareMeshes], true);
-      if (hits.length === 0) {
+      if (clickedR === -1 || clickedC === -1) {
         if (preMoveHighlightTask) preMoveHighlightTask = null;
         clearSquareHighlights();
         selectedSquare = null;
         validMoves = [];
         return;
       }
-
-      let clickedR = -1;
-      let clickedC = -1;
-      let obj = hits[0].object;
-      while (obj) {
-        if (obj.userData && obj.userData.piece) {
-          clickedR = obj.userData.piece.r;
-          clickedC = obj.userData.piece.c;
-          break;
-        }
-        if (obj.userData && obj.userData.isSquare) {
-          clickedR = obj.userData.r;
-          clickedC = obj.userData.c;
-          break;
-        }
-        obj = obj.parent;
-      }
-
-      if (clickedR === -1) return;
 
       // Cancel any pending scripted pre-move highlight timer when the user manually interacts with the board
       if (preMoveHighlightTask) {
@@ -5286,10 +5816,13 @@ export function initWizardChess() {
       updateTurnUI();
     }
 
-    function startBotMatch(difficulty = 'medium', side = 'w') {
+    function startBotMatch(difficulty = 'medium', side = 'w', timeControlOpt = null) {
       document.getElementById('loading-overlay')?.classList.add('hidden');
       cancelOnlineMatchmaking();
       stopMultiplayerSync();
+      if (timeControlOpt) {
+        setTimeControl(timeControlOpt, false);
+      }
       lobbyPaused = false;
       matchStarted = true;
       orbitControls.enabled = true;
@@ -5315,10 +5848,13 @@ export function initWizardChess() {
       renderer.render(scene, camera);
     }
 
-    function startPassAndPlayMatch(autoFlip = true) {
+    function startPassAndPlayMatch(autoFlip = true, timeControlOpt = null) {
       document.getElementById('loading-overlay')?.classList.add('hidden');
       cancelOnlineMatchmaking();
       stopMultiplayerSync();
+      if (timeControlOpt) {
+        setTimeControl(timeControlOpt, false);
+      }
       lobbyPaused = false;
       matchStarted = true;
       orbitControls.enabled = true;
@@ -5839,6 +6375,8 @@ export function initWizardChess() {
           updateTurnUI();
         }
       },
+      setTimeControl,
+      getTimeControlPresets: () => TIME_CONTROL_PRESETS,
       setPassAutoFlip: (v) => {
         passAutoFlip = Boolean(v);
       },
@@ -5956,6 +6494,10 @@ export function initWizardChess() {
         return fallback.root;
       },
       announceSanctumEvent,
+      refreshPoliigonMaterials,
+      playHalloweenWhisperSfx: (variant = 'whisper') => {
+        sfxVfxManager.playHalloweenWhisperAndWindGustSfx?.(variant);
+      },
       holdCameraKey: (code, down = true) => {
         if (down) heldCameraKeys.add(code);
         else heldCameraKeys.delete(code);
@@ -6069,6 +6611,11 @@ export function initWizardChess() {
         checkmateState: { ...checkmateState },
         capturedByWhite,
         capturedByBlack,
+        timeControlCategory,
+        timeControlPresetId,
+        timeControlSeconds,
+        whiteTimeRemaining,
+        blackTimeRemaining,
         cameraPos: camera.position.toArray(),
         cameraTarget: orbitControls.target.toArray(),
         playerCamSide,
@@ -6240,6 +6787,42 @@ export function initWizardChess() {
     function stepScene(dt, doRender = true) {
       elapsedTotal += dt;
       const prevCamPos = camera.position.clone();
+
+      // Advance Dual Chess Clocks (Bullet, Blitz, Rapid) during active thinking time
+      // Paused while move/capture animations play so 3D combat animations never penalize fast Bullet clocks
+      if (
+        matchStarted &&
+        !lobbyPaused &&
+        !gameOver &&
+        !scriptedGameActive &&
+        !isAnimatingMove &&
+        timeControlSeconds > 0
+      ) {
+        if (currentTurn === 'w') {
+          whiteTimeRemaining = Math.max(0, whiteTimeRemaining - dt);
+        } else {
+          blackTimeRemaining = Math.max(0, blackTimeRemaining - dt);
+        }
+
+        const activeClock = currentTurn === 'w' ? whiteTimeRemaining : blackTimeRemaining;
+        if (activeClock > 0 && activeClock <= 10) {
+          const wholeSec = Math.ceil(activeClock);
+          if (wholeSec !== lastLowTimeBeepSec) {
+            lastLowTimeBeepSec = wholeSec;
+            sfxVfxManager.playLobbyClickSfx?.('tab');
+          }
+        }
+
+        clockEmitAccum += dt;
+        if (clockEmitAccum >= 0.1 || activeClock <= 0) {
+          clockEmitAccum = 0;
+          emitClockTick();
+        }
+
+        if (activeClock <= 0) {
+          handleTimeOutDefeat(currentTurn);
+        }
+      }
 
       for (const mixer of activeMixers) {
         mixer.update(dt);
