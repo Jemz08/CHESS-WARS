@@ -28,16 +28,34 @@ function toStylizedStandardMaterial(srcMat, fallbackHex = 0x94a3b8) {
   let metalness = 0.08;
   let emissive = new THREE.Color(0x000000);
   let emissiveIntensity = 0.0;
+  let polygonOffset = false;
+  let polygonOffsetFactor = 0;
+  let polygonOffsetUnits = 0;
 
-  if (matName.includes('island_grass') || matName.includes('leaf') || matName.includes('bush')) {
+  const isFoliage =
+    matName.includes('leaf') ||
+    matName.includes('bush') ||
+    matName.includes('vegetation');
+
+  if (matName.includes('island_grass') || isFoliage) {
     roughness = 0.72;
     metalness = 0.04;
   } else if (matName.includes('island_path') || matName.includes('wood')) {
     roughness = 0.68;
     metalness = 0.06;
+    if (matName.includes('island_path')) {
+      polygonOffset = true;
+      polygonOffsetFactor = -2;
+      polygonOffsetUnits = -2;
+    }
   } else if (matName.includes('island_dirt') || matName.includes('rock') || matName.includes('stone')) {
     roughness = 0.78;
     metalness = 0.10;
+    if (matName.includes('island_dirt')) {
+      polygonOffset = true;
+      polygonOffsetFactor = 2;
+      polygonOffsetUnits = 2;
+    }
   } else if (matName.includes('windows') || matName.includes('bell')) {
     roughness = 0.25;
     metalness = 0.65;
@@ -59,7 +77,10 @@ function toStylizedStandardMaterial(srcMat, fallbackHex = 0x94a3b8) {
     emissive,
     emissiveIntensity,
     flatShading: true,
-    side: THREE.DoubleSide
+    side: isFoliage ? THREE.DoubleSide : THREE.FrontSide,
+    polygonOffset,
+    polygonOffsetFactor,
+    polygonOffsetUnits
   });
 }
 
@@ -142,32 +163,176 @@ export function preloadDragonPeakWyvern() {
   return wyvernLoadingPromise;
 }
 
+function pointInTriXZ(px, pz, ax, ay, az, bx, by, bz, cx, cy, cz) {
+  const v0x = cx - ax;
+  const v0z = cz - az;
+  const v1x = bx - ax;
+  const v1z = bz - az;
+  const v2x = px - ax;
+  const v2z = pz - az;
+  const dot00 = v0x * v0x + v0z * v0z;
+  const dot01 = v0x * v1x + v0z * v1z;
+  const dot02 = v0x * v2x + v0z * v2z;
+  const dot11 = v1x * v1x + v1z * v1z;
+  const dot12 = v1x * v2x + v1z * v2z;
+  const denom = dot00 * dot11 - dot01 * dot01;
+  if (Math.abs(denom) < 1e-10) return null;
+  const u = (dot11 * dot02 - dot01 * dot12) / denom;
+  const v = (dot00 * dot12 - dot01 * dot02) / denom;
+  if (u >= -1e-4 && v >= -1e-4 && u + v <= 1 + 1e-4) {
+    return ay + u * (cy - ay) + v * (by - ay);
+  }
+  return null;
+}
+
 /**
- * Smoothly levels the upper grass/path surface of a floating island mesh to `y <= 0`
- * using a continuous function of `y` so shared edges between `island_path`, `island_grass`,
- * and `island_dirt` stay 100% seamless and never poke up through the chess board or buildings.
+ * Eliminates Z-fighting between `island_grass`, `island_path`, and `island_dirt` by:
+ * 1. Stripping internal downward-facing underside triangles of `island_grass` and `island_path`.
+ * 2. Stripping underground `island_path` triangles that are buried beneath `island_grass` hills,
+ *    and cleanly separating visible `island_path` surfaces above `island_grass`.
+ * 3. Pushing internal upward-facing `island_dirt` core vertices well below the grass/path crust.
+ * 4. When `flattenTopPlateau` is true, applying a strictly monotonic (never clamping!) vertical
+ *    compression so relative layer heights are 100% preserved and never squashed to the same plane.
  */
-function createFlattenedIslandGroup(templateGroup) {
-  const flatGroup = templateGroup.clone(true);
-  flatGroup.traverse((node) => {
+function sanitizeIslandGroupGeometry(templateGroup, flattenTopPlateau = false) {
+  const outGroup = templateGroup.clone(true);
+  outGroup.traverse((node) => {
     if (!node.isMesh || !node.geometry) return;
     const geo = node.geometry.clone();
     const pos = geo.attributes.position;
+    const mats = Array.isArray(node.material) ? node.material : [node.material];
+    const groups =
+      geo.groups && geo.groups.length > 0
+        ? geo.groups
+        : [{ start: 0, count: pos.count, materialIndex: 0 }];
+
+    let maxRawY = -Infinity;
     for (let i = 0; i < pos.count; i++) {
-      let y = pos.getY(i);
-      if (y > -0.36) {
-        const lift = Math.min(1.0, Math.max(0.0, (y + 0.36) / 0.25));
-        y = Math.min(0.0, y + 0.18 * lift);
-        pos.setY(i, y);
+      const y = pos.getY(i);
+      if (y > maxRawY) maxRawY = y;
+    }
+
+    // Collect upward-facing `island_grass` triangles in raw coordinates
+    const grassTris = [];
+    for (const g of groups) {
+      const mName = (mats[g.materialIndex]?.name || '').toLowerCase();
+      if (!mName.includes('island_grass')) continue;
+      const end = g.start + g.count;
+      for (let i = g.start; i < end; i += 3) {
+        const ax = pos.getX(i), ay = pos.getY(i), az = pos.getZ(i);
+        const bx = pos.getX(i + 1), by = pos.getY(i + 1), bz = pos.getZ(i + 1);
+        const cx = pos.getX(i + 2), cy = pos.getY(i + 2), cz = pos.getZ(i + 2);
+        const ux = bx - ax, uy = by - ay, uz = bz - az;
+        const vx = cx - ax, vy = cy - ay, vz = cz - az;
+        const nx = uy * vz - uz * vy;
+        const ny = uz * vx - ux * vz;
+        const nz = ux * vy - uy * vx;
+        const nY = ny / (Math.hypot(nx, ny, nz) || 1);
+        if (nY > 0.1) {
+          grassTris.push([ax, ay, az, bx, by, bz, cx, cy, cz]);
+        }
       }
     }
+
+    const getRawGrassHeight = (x, z) => {
+      let best = null;
+      for (let t = 0; t < grassTris.length; t++) {
+        const tr = grassTris[t];
+        const h = pointInTriXZ(
+          x, z,
+          tr[0], tr[1], tr[2],
+          tr[3], tr[4], tr[5],
+          tr[6], tr[7], tr[8]
+        );
+        if (h !== null && (best === null || h > best)) best = h;
+      }
+      return best;
+    };
+
+    for (const g of groups) {
+      const mName = (mats[g.materialIndex]?.name || '').toLowerCase();
+      const end = g.start + g.count;
+
+      for (let i = g.start; i < end; i += 3) {
+        const ax = pos.getX(i), ay = pos.getY(i), az = pos.getZ(i);
+        const bx = pos.getX(i + 1), by = pos.getY(i + 1), bz = pos.getZ(i + 1);
+        const cx = pos.getX(i + 2), cy = pos.getY(i + 2), cz = pos.getZ(i + 2);
+        const ux = bx - ax, uy = by - ay, uz = bz - az;
+        const vx = cx - ax, vy = cy - ay, vz = cz - az;
+        const nx = uy * vz - uz * vy;
+        const ny = uz * vx - ux * vz;
+        const nz = ux * vy - uy * vx;
+        const nY = ny / (Math.hypot(nx, ny, nz) || 1);
+
+        // 1. Strip hidden downward-facing underside faces of grass & path shells
+        if ((mName.includes('island_grass') || mName.includes('island_path')) && nY < -0.22) {
+          pos.setXYZ(i, 0, -0.55, 0);
+          pos.setXYZ(i + 1, 0, -0.55, 0);
+          pos.setXYZ(i + 2, 0, -0.55, 0);
+          continue;
+        }
+
+        // 2. Push internal upward-facing dirt core faces well below the grass/path crust
+        if (mName.includes('island_dirt') && nY > 0.12) {
+          for (let k = 0; k < 3; k++) {
+            const vx0 = pos.getX(i + k);
+            const vy0 = pos.getY(i + k);
+            const vz0 = pos.getZ(i + k);
+            if (Math.hypot(vx0, vz0) < 0.86 && vy0 > -0.45) {
+              pos.setY(i + k, vy0 - 0.14);
+            }
+          }
+          continue;
+        }
+
+        // 3. Separate `island_path` from `island_grass` so buried path faces never shimmer through grass
+        if (mName.includes('island_path') && grassTris.length > 0) {
+          const g0 = getRawGrassHeight(ax, az);
+          const g1 = getRawGrassHeight(bx, bz);
+          const g2 = getRawGrassHeight(cx, cz);
+          const b0 = g0 !== null && ay < g0 - 0.005;
+          const b1 = g1 !== null && by < g1 - 0.005;
+          const b2 = g2 !== null && cy < g2 - 0.005;
+          if (b0 && b1 && b2) {
+            pos.setXYZ(i, 0, -0.55, 0);
+            pos.setXYZ(i + 1, 0, -0.55, 0);
+            pos.setXYZ(i + 2, 0, -0.55, 0);
+            continue;
+          }
+          const ys = [ay, by, cy];
+          const gs = [g0, g1, g2];
+          for (let k = 0; k < 3; k++) {
+            const yk = ys[k];
+            const gk = gs[k];
+            const diff = gk !== null ? Math.min(0, yk - gk) : 0;
+            pos.setY(i + k, yk + 0.015 + diff * 1.85);
+          }
+        }
+      }
+    }
+
+    // 4. Strictly monotonic plateau leveling (never clamping multiple heights to the same plane)
+    if (flattenTopPlateau) {
+      const topCeil = Math.max(0.15, maxRawY + 0.025);
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        if (y > -0.16) {
+          const v = (y - -0.16) / (topCeil - -0.16);
+          pos.setY(i, -0.075 + v * 0.073);
+        } else if (y > -0.48) {
+          const u = (y - -0.48) / (-0.16 - -0.48);
+          pos.setY(i, -0.48 + u * 0.405);
+        }
+      }
+    }
+
     pos.needsUpdate = true;
     geo.computeVertexNormals();
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
     node.geometry = geo;
   });
-  return flatGroup;
+  return outGroup;
 }
 
 /**
@@ -214,9 +379,11 @@ export function preloadDragonPeakFloatingIslands() {
                   node.receiveShadow = true;
                 }
               });
-              islandMeshCache.set(key, templateGroup);
               if (key.startsWith('island')) {
-                islandMeshCache.set(`${key}__flat`, createFlattenedIslandGroup(templateGroup));
+                islandMeshCache.set(key, sanitizeIslandGroupGeometry(templateGroup, false));
+                islandMeshCache.set(`${key}__flat`, sanitizeIslandGroupGeometry(templateGroup, true));
+              } else {
+                islandMeshCache.set(key, templateGroup);
               }
             }
 
@@ -283,7 +450,7 @@ function prepareDeformableMesh(srcMesh, material, pivotOffset = null) {
 
 /**
  * Builds an articulated, deformable 3D Wyvern instance from `/assets/dragon_peak/wyvern.obj`
- * (`https://poly.pizza/m/WIOTISRjeX`) with full spine/neck/head/tail undulation and multi-joint wings.
+ * (`https://poly.pizza/m/WIOTISRjeX`) with horizontal serpentine left-right spine undulation and multi-joint wings.
  */
 export function createPolyPizzaWyvern(
   scale = 1.0,
@@ -318,6 +485,8 @@ export function createPolyPizzaWyvern(
     coreGroup,
     leftWing,
     rightWing,
+    leftPivot,
+    rightPivot,
     spineMeshes,
     leftWingMeshes,
     rightWingMeshes
@@ -396,9 +565,9 @@ export function createPolyPizzaWyvern(
 
 /**
  * Animates the Poly Pizza Wyvern (`wyvern.obj`) with:
- * 1. Whole-body flight recoil heave, pitch oscillation, and banking roll (`coreGroup`).
- * 2. Continuous serpentine spine, craning neck/head scan, swinging hind legs, and 3D whip-tail wave.
- * 3. Multi-joint shoulder + elbow + wingtip whip articulation and membrane camber billow.
+ * 1. Continuous horizontal serpentine S-wave ("snake wave left and right") traveling from snout
+ *    to tail tip along the lateral X axis, with zero vertical up-and-down bobbing.
+ * 2. Shoulder pivots locked to the slithering chest + multi-joint wing articulation.
  */
 export function animatePolyPizzaWyvern(dragon, elapsed, phase = 0) {
   if (!dragon || !dragon.userData) return;
@@ -406,36 +575,69 @@ export function animatePolyPizzaWyvern(dragon, elapsed, phase = 0) {
     coreGroup,
     leftWing,
     rightWing,
+    leftPivot,
+    rightPivot,
     spineMeshes,
     leftWingMeshes,
     rightWingMeshes
   } = dragon.userData;
 
-  const cycle = elapsed * 4.2 + phase;
-  const sinC = Math.sin(cycle);
-  const cosC = Math.cos(cycle);
+  const wingCycle = elapsed * 4.0 + phase;
+  const sinW = Math.sin(wingCycle);
+  const cosW = Math.cos(wingCycle);
 
-  // 1. Whole-body flight heave, pitch & aerodynamic banking
+  // Horizontal snake-wave frequency & traveling S-curve wavenumber along the dragon's spine
+  const snakeTime = elapsed * 4.6 + phase;
+  const snakeWaveNum = 3.9;
+
+  // Evaluates the horizontal left-right snake displacement (dx) and local XZ yaw tangent slope
+  // at any spine coordinate (y0, z0), with zero vertical (dy = 0) bobbing.
+  const evalSnakeWave = (y0, z0) => {
+    const s = (0.66 - z0) + Math.max(0, 0.96 - y0) * 0.38;
+    const waveArg = snakeTime - s * snakeWaveNum;
+    const amp = 0.14 + 0.08 * s + 0.075 * s * s;
+    const dx = Math.sin(waveArg) * amp;
+    const slope = -Math.cos(waveArg) * snakeWaveNum * amp * 0.55;
+    return { dx, slope };
+  };
+
+  // 1. Keep vertical height steady (no up-and-down bobbing); gentle horizontal sway & banking
   if (coreGroup) {
-    coreGroup.position.y = -0.85 - cosC * 0.14;
-    coreGroup.rotation.x = Math.sin(cycle - 0.55) * 0.13;
-    coreGroup.rotation.z = Math.sin(cycle * 0.5) * 0.14;
-    coreGroup.rotation.y = Math.cos(cycle * 0.5) * 0.08;
+    coreGroup.position.y = -0.85;
+    coreGroup.position.x = Math.sin(snakeTime) * 0.08;
+    coreGroup.rotation.x = 0;
+    coreGroup.rotation.y = Math.cos(snakeTime) * 0.12;
+    coreGroup.rotation.z = -Math.cos(snakeTime) * 0.10;
   }
 
-  // 2. Shoulder 3-axis wing stroke (power downstroke + swept recovery upstroke + angle of attack)
-  const flapAngle = sinC * 0.48 + Math.sin(cycle * 2.0) * 0.07;
-  const sweepAngle = cosC * 0.16;
-  const pitchAngle = cosC * 0.12;
+  // 2. Anchor wing shoulders to the chest's horizontal snake wave so wings follow the slithering torso
+  const chestWave = evalSnakeWave(1.02, 0.04);
+  const flapAngle = sinW * 0.46 + Math.sin(wingCycle * 2.0) * 0.06;
+  const sweepAngle = cosW * 0.16;
+  const pitchAngle = cosW * 0.10;
 
   if (leftWing) {
+    if (leftPivot) {
+      leftWing.position.set(
+        leftPivot.x + chestWave.dx,
+        leftPivot.y,
+        leftPivot.z - leftPivot.x * chestWave.slope * 0.35
+      );
+    }
     leftWing.rotation.z = flapAngle;
-    leftWing.rotation.y = -sweepAngle;
+    leftWing.rotation.y = -sweepAngle + chestWave.slope * 0.28;
     leftWing.rotation.x = pitchAngle;
   }
   if (rightWing) {
+    if (rightPivot) {
+      rightWing.position.set(
+        rightPivot.x + chestWave.dx,
+        rightPivot.y,
+        rightPivot.z - rightPivot.x * chestWave.slope * 0.35
+      );
+    }
     rightWing.rotation.z = -flapAngle;
-    rightWing.rotation.y = sweepAngle;
+    rightWing.rotation.y = sweepAngle + chestWave.slope * 0.28;
     rightWing.rotation.x = pitchAngle;
   }
 
@@ -456,14 +658,11 @@ export function animatePolyPizzaWyvern(dragon, elapsed, phase = 0) {
         const z0 = rest[i + 2];
 
         const span = Math.abs(x0);
-        // Phase-delayed outer wingtip whip (inner wing leads, wingtip trails and whips at stroke extremes)
-        const whipPhase = cycle - 1.15 - span * 0.85;
+        const whipPhase = wingCycle - 1.15 - span * 0.85;
         const whipY = Math.sin(whipPhase) * (0.20 * span * span);
-        // Trailing-edge membrane camber twist along Z
         const trailing = Math.max(0, 0.08 - z0);
-        const camberY = trailing * Math.cos(cycle - span * 0.65) * (0.22 * span);
-        // Upstroke wing-tuck inward along X and sweep along Z
-        const tuckX = -sideSign * Math.max(0, Math.cos(cycle - 0.35)) * (0.11 * span * span);
+        const camberY = trailing * Math.cos(wingCycle - span * 0.65) * (0.22 * span);
+        const tuckX = -sideSign * Math.max(0, Math.cos(wingCycle - 0.35)) * (0.11 * span * span);
         const flexZ = Math.cos(whipPhase) * (0.07 * span);
 
         arr[i] = x0 + tuckX;
@@ -477,7 +676,7 @@ export function animatePolyPizzaWyvern(dragon, elapsed, phase = 0) {
   deformWingList(leftWingMeshes, 1);
   deformWingList(rightWingMeshes, -1);
 
-  // 4. Continuous serpentine spine, neck, head, hind legs & tail wave
+  // 4. Pure horizontal left-right serpentine S-wave across head, neck, torso, hind legs & tail (dy = 0)
   if (spineMeshes) {
     for (let mIdx = 0; mIdx < spineMeshes.length; mIdx++) {
       const mesh = spineMeshes[mIdx];
@@ -492,34 +691,16 @@ export function animatePolyPizzaWyvern(dragon, elapsed, phase = 0) {
         const y0 = rest[i + 1];
         const z0 = rest[i + 2];
 
-        let dx = 0;
-        let dy = 0;
-        let dz = 0;
+        const s = (0.66 - z0) + Math.max(0, 0.96 - y0) * 0.38;
+        const waveArg = snakeTime - s * snakeWaveNum;
+        const amp = 0.14 + 0.08 * s + 0.075 * s * s;
 
-        if (z0 > 0.12) {
-          // Neck, head, horns, snout & eyes (z0 in [0.12, 0.66])
-          const neckDist = (z0 - 0.12) * 1.85;
-          const neckWave = Math.sin(cycle - 1.05 - neckDist * 1.35);
-          dy = neckWave * (0.14 * neckDist);
-          dx = Math.sin(elapsed * 2.2 + phase - neckDist * 1.1) * (0.12 * neckDist);
-          dz = Math.cos(cycle - neckDist) * (0.035 * neckDist);
-        } else {
-          // Lower spine, hind legs & long tapering tail (z0 <= 0.12, y0 down to 0.0)
-          const backZ = Math.max(0, 0.12 - z0);
-          const dropY = Math.max(0, 0.96 - y0);
-          const spineDist = Math.hypot(backZ, dropY);
-
-          const tailPhaseY = cycle - 0.65 - spineDist * 2.55;
-          const tailPhaseX = elapsed * 3.1 + phase - spineDist * 2.75;
-          const amp = 0.11 * spineDist + 0.13 * spineDist * spineDist;
-
-          dy = Math.sin(tailPhaseY) * amp;
-          dx = Math.sin(tailPhaseX) * amp * 0.95;
-          dz = Math.cos(tailPhaseY) * (0.055 * spineDist * spineDist);
-        }
+        const dx = Math.sin(waveArg) * amp;
+        const slope = -Math.cos(waveArg) * snakeWaveNum * amp * 0.55;
+        const dz = -x0 * slope * 0.42;
 
         arr[i] = x0 + dx;
-        arr[i + 1] = y0 + dy;
+        arr[i + 1] = y0;
         arr[i + 2] = z0 + dz;
       }
       posAttr.needsUpdate = true;

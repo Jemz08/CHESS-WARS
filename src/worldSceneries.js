@@ -12,6 +12,12 @@ import {
   mountDragonPeakObjAsset,
   preloadDragonPeak3DAssets
 } from './dragonPeakAssetLoader.js';
+import {
+  mountInfernoWorldModel,
+  mountFullInfernoWorldScene,
+  preloadInfernoWorld3DAssets,
+  getInfernoWorldMaterials
+} from './infernoWorldAssetLoader.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -675,21 +681,15 @@ function buildDragonSkyCitadelGroup() {
   });
 
   // 1. Central Interdimensional Floating Island Foundation (`/assets/dragon_peak/floating_islands.obj`)
-  // Compact stone sanctuary dais right under the chess board & braziers (stays well inside the grassy island plateau)
-  const courtyardSlab = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.7, 0.08, 24), highlandStoneMat);
-  courtyardSlab.position.set(0, -0.04, 0);
-  courtyardSlab.receiveShadow = true;
-  group.add(courtyardSlab);
-
   const compassRing = new THREE.Mesh(new THREE.TorusGeometry(4.45, 0.055, 10, 64), sovereignBronzeMat);
   compassRing.rotation.x = Math.PI / 2;
-  compassRing.position.y = 0.005;
+  compassRing.position.y = 0.03;
   group.add(compassRing);
 
-  // Mount the flattened-plateau 3D Interdimensional Floating Island directly beneath the central chess courtyard
+  // Mount the sanitized plateau 3D Interdimensional Floating Island directly beneath the central chess courtyard
   mountDragonPeakObjAsset(group, 'island_006', {
     scale: 12.2,
-    position: [0, -0.02, 0],
+    position: [0, 0.0, 0],
     rotationY: 0.35,
     flattenTopPlateau: true
   });
@@ -823,127 +823,304 @@ function buildDragonSkyCitadelGroup() {
 }
 
 // ============================================================================
-// Realm 3 Builder: Volcanic Titan Forge
+// Realm 3 Builder: Volcanic Titan Forge ("Inferno World Free" 76-Asset Pack)
+// Source: https://www.cgtrader.com/free-3d-models/exterior/historic-exterior/inferno-world-free
 // ============================================================================
 function buildVolcanicTitanForgeGroup() {
+  preloadInfernoWorld3DAssets();
+
   const group = new THREE.Group();
   group.name = 'Realm_VolcanicTitanForge';
 
-  const charredBasaltMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1415,
-    roughness: 0.62,
-    metalness: 0.28
-  });
-  const titanIronMat = new THREE.MeshStandardMaterial({
-    color: 0x2b2d38,
-    roughness: 0.34,
-    metalness: 0.86
-  });
-  const moltenMagmaMat = new THREE.MeshStandardMaterial({
-    color: 0xffaa00,
-    roughness: 0.18,
-    metalness: 0.1,
-    emissive: 0xff4800,
-    emissiveIntensity: 2.25
-  });
-  const forgeBronzeMat = new THREE.MeshStandardMaterial({
-    color: 0xc25e00,
-    roughness: 0.28,
-    metalness: 0.82,
-    emissive: 0x5c1900,
-    emissiveIntensity: 0.45
+  const infernoMats = getInfernoWorldMaterials();
+  const forgeGears = [];
+  const floatingCrystals = [];
+  const orbitingLavaIslands = [];
+
+  // 1. Central Inferno World Ritual Platform Foundation beneath the Chessboard (strictly below y = 0, zero Z-fighting)
+  //    - `CirclePlatformSmall_001` (raw height 3.872m -> scale 1.15 = 4.453m height, bottom at y = -4.48 -> top at y = -0.027)
+  //    - `PlatformStar_001.002` (raw height 4.94m -> scale 1.55 = 7.657m height, bottom at y = -7.78 -> top at y = -0.12)
+  mountInfernoWorldModel(group, 'CirclePlatformSmall_001', {
+    scale: 1.15,
+    position: [0, -4.48, 0]
   });
 
-  // 1. Heavy Octagonal Suspended Basalt & Forged-Iron Caldera Platform
-  const anvilDeck = new THREE.Mesh(new THREE.CylinderGeometry(11.0, 9.6, 1.35, 8), charredBasaltMat);
-  anvilDeck.position.set(0, -0.68, 0);
-  anvilDeck.receiveShadow = true;
-  group.add(anvilDeck);
+  mountInfernoWorldModel(group, 'PlatformStar_001.002', {
+    scale: 1.55,
+    position: [0, -7.78, 0],
+    rotationY: Math.PI / 4
+  });
 
-  const ironRim = new THREE.Mesh(new THREE.TorusGeometry(10.8, 0.26, 8, 8), titanIronMat);
-  ironRim.rotation.x = Math.PI / 2;
-  ironRim.position.y = -0.05;
-  group.add(ironRim);
+  // 2. Mount the Complete 288-Node Official "Inferno World Free" Volcanic Island & Mountain Caldera Scene
+  //    (`Platform_003`, `PlatformStar_001`, `StatueKnight_002`, `Axe_001`, `PedestalBig_001`, `WellSmall_001`,
+  //     `Bone_003..006`, `Gear_001..002`, `ChestBig_001`, `Brazier_002..004`, `ColumnBig_001`, `StairsMiddle_001`,
+  //     `Crag_001..003`, `RockBig_001..004`, `RockMid_001..004`, `Stone_001..006`, `Grass_001..004`, `Cliff_003..005`)
+  mountFullInfernoWorldScene(group, {
+    sceneScale: 0.28,
+    plazaCenter: [0.0, 15.22, -2.0],
+    yOffset: -0.04,
+    minClearanceRadius: 10.4,
+    animatedGearsOut: forgeGears
+  });
 
-  // 8 Radial Glowing Magma Conduits inlaid across the forge deck
-  for (let i = 0; i < 8; i++) {
-    const ang = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    const channel = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.04, 6.2), moltenMagmaMat);
-    channel.position.set(Math.cos(ang) * 6.8, -0.005, Math.sin(ang) * 6.8);
-    channel.rotation.y = -ang + Math.PI / 2;
-    group.add(channel);
-  }
+  // 3. Eight Perimeter Inferno Sanctuary Sectors (R = 10.6m) Showcasing All Key Modular Assets from the 76-Asset Pack:
+  //    - Cardinal Sectors (i % 2 === 0): Carved Stone Stairs (`StairsMiddle_001`), Obsidian Pillars (`ColumnBig_001`,
+  //      `ColumnBigBroken_001`, `ColumnBigBroken_002`), Lit Lava Braziers (`Brazier_002` + `Coal_002` + `Spike_001`
+  //      on `Pedestal_001`, `Brazier_004`), Vases (`Vase_001`, `Vase_002`), Chalices (`Cup_001`, `Cup_002`) & Gold Piles
+  //    - Diagonal Sectors (i % 2 === 1):
+  //      * Sectors 1 & 5: Fantasy Inferno Towers (`TowerBig_001`), Rotating Forge Gears (`Gear_001`, `Gear_002`),
+  //        Open Treasure Chests (`ChestBig_001` + `Lid_002` + `GoldPile_002`), Crates (`Box_001`) & Gold Hoards (`GoldPileBig_001`)
+  //      * Sectors 3 & 7: Horned Warrior Knight Statues (`StatueKnight_002`) & Giant Battle Axe Monuments (`Axe_001`)
+  //        on `PedestalBig_001`, Molten Lava Wells (`WellSmall_001`) ringed by Giant Demon Bones (`Bone_003`, `Bone_004`, `Bone_006`)
+  const gemVariants = ['Gem_001', 'Gem_002', 'Gem_003', 'Gem_004', 'Gem_005'];
+  const stoneVariants = ['Stone_001', 'Stone_002', 'Stone_003', 'Stone_004', 'Stone_005', 'Stone_006'];
 
-  // 2. Four Colossal Titan Anchor Chains & Giant Anvil Towers Pouring Lava Falls
-  const lavaFallMeshes = [];
-  for (let i = 0; i < 4; i++) {
-    const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const dirX = Math.cos(ang);
-    const dirZ = Math.sin(ang);
-
-    // Giant Titan Anvil Tower at R = 14.2m
-    const towerGroup = new THREE.Group();
-    towerGroup.position.set(dirX * 14.2, -3.5, dirZ * 14.2);
-    towerGroup.rotation.y = -ang;
-
-    const pillarBase = new THREE.Mesh(new THREE.BoxGeometry(2.8, 9.5, 2.8), charredBasaltMat);
-    pillarBase.position.y = 4.75;
-    towerGroup.add(pillarBase);
-
-    const anvilCrown = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1.8, 2.6), titanIronMat);
-    anvilCrown.position.y = 10.2;
-    towerGroup.add(anvilCrown);
-
-    const magmaSpout = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.55, 1.8), forgeBronzeMat);
-    magmaSpout.position.set(0, 8.8, -1.2);
-    towerGroup.add(magmaSpout);
-
-    // Vertical Molten Lava Fall pouring from the tower spout into the caldera sea
-    const lavaStream = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.52, 9.2, 12), moltenMagmaMat);
-    lavaStream.position.set(0, 4.2, -1.65);
-    towerGroup.add(lavaStream);
-    lavaFallMeshes.push(lavaStream);
-
-    group.add(towerGroup);
-
-    // Colossal Multi-Link Titan Iron Chain stretching from platform rim (R=10.2) up to outer volcano crag (R=34, Y=18)
-    const chainLinks = 14;
-    for (let k = 0; k < chainLinks; k++) {
-      const u = k / (chainLinks - 1);
-      const rPos = 10.2 + u * 23.0;
-      const yPos = 0.6 + u * 17.5 - Math.sin(u * Math.PI) * 1.4; // Catenary sag
-      const link = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.18, 8, 18), titanIronMat);
-      link.position.set(dirX * rPos, yPos, dirZ * rPos);
-      link.rotation.y = -ang;
-      link.rotation.x = 0.62 + (k % 2) * (Math.PI / 2);
-      group.add(link);
-    }
-
-    // Outer Jagged Volcanic Crag Spire anchoring the Titan Chain
-    const crag = new THREE.Mesh(new THREE.ConeGeometry(6.5, 26.0, 6), charredBasaltMat);
-    crag.position.set(dirX * 36.0, 8.5, dirZ * 36.0);
-    group.add(crag);
-  }
-
-  // 3. Eight Heat-Levitated Obsidian Slag Monoliths Orbiting the Caldera
-  const slagBoulders = [];
   for (let i = 0; i < 8; i++) {
     const ang = (i / 8) * Math.PI * 2;
-    const boulderGroup = new THREE.Group();
-    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.15, 0), charredBasaltMat);
-    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.75, 0), moltenMagmaMat);
-    boulderGroup.add(rock, core);
+    const r = 10.65;
+    const sectorGroup = new THREE.Group();
+    sectorGroup.position.set(Math.cos(ang) * r, -0.08, Math.sin(ang) * r);
+    sectorGroup.rotation.y = -ang - Math.PI / 2;
 
-    const orbitR = 20.5 + (i % 2) * 4.0;
-    const baseY = 3.2 + (i % 3) * 2.4;
-    boulderGroup.position.set(Math.cos(ang) * orbitR, baseY, Math.sin(ang) * orbitR);
-    group.add(boulderGroup);
-    slagBoulders.push({ mesh: boulderGroup, orbitR, baseY, ang, speed: 0.12 + (i % 3) * 0.04 });
+    // Stepping stones (`Stone_001`..`Stone_006`) & scorched tufts (`Grass_001`..`Grass_004`) along perimeter rim
+    mountInfernoWorldModel(sectorGroup, stoneVariants[i % stoneVariants.length], {
+      scale: 0.34,
+      position: [0, -0.04, 0.75]
+    });
+    mountInfernoWorldModel(sectorGroup, `Grass_00${(i % 4) + 1}`, {
+      scale: 0.36,
+      position: [-1.85, -0.02, 0.55],
+      rotationY: i * 0.9
+    });
+
+    if (i % 2 === 0) {
+      // Cardinal Sector: Carved Stone Staircase (`StairsMiddle_001`) + Flanking Obsidian Columns & Lit Braziers
+      mountInfernoWorldModel(sectorGroup, 'StairsMiddle_001', {
+        scale: 0.28,
+        position: [0, -0.85, -0.45]
+      });
+
+      for (const side of [-1, 1]) {
+        // Pedestal + Lit Brazier (`Brazier_002` includes `Coal_002.007` and `Spike_001.008`)
+        mountInfernoWorldModel(sectorGroup, 'Pedestal_001', {
+          scale: 0.36,
+          position: [side * 2.25, 0, 0.25]
+        });
+        mountInfernoWorldModel(sectorGroup, 'Brazier_002', {
+          scale: 0.42,
+          position: [side * 2.25, 0.36, 0.25]
+        });
+
+        // Flanking Obsidian Columns (`ColumnBig_001` / `ColumnBigBroken_001` / `ColumnBigBroken_002`)
+        const colName =
+          side === -1
+            ? 'ColumnBig_001'
+            : i === 0 || i === 4
+              ? 'ColumnBigBroken_001'
+              : 'ColumnBigBroken_002';
+        mountInfernoWorldModel(sectorGroup, colName, {
+          scale: 0.34,
+          position: [side * 3.45, 0, -0.35],
+          rotationY: side * 0.4
+        });
+      }
+
+      // Floor Brazier (`Brazier_004`), Ritual Vases (`Vase_001`, `Vase_002`), Chalices (`Cup_001`, `Cup_002`) & Gold Coins
+      mountInfernoWorldModel(sectorGroup, 'Brazier_004', {
+        scale: 0.38,
+        position: [-1.35, 0, 0.65]
+      });
+      mountInfernoWorldModel(sectorGroup, i % 4 === 0 ? 'Vase_001' : 'Vase_002', {
+        scale: 0.48,
+        position: [1.35, 0, 0.65]
+      });
+      mountInfernoWorldModel(sectorGroup, i % 4 === 0 ? 'Cup_001' : 'Cup_002', {
+        scale: 0.65,
+        position: [1.75, 0, 0.82]
+      });
+      mountInfernoWorldModel(sectorGroup, 'GoldPileSmall_001', {
+        scale: 0.45,
+        position: [1.45, 0, 0.95]
+      });
+      mountInfernoWorldModel(sectorGroup, 'Coin_001', {
+        scale: 0.85,
+        position: [1.15, 0.04, 0.98]
+      });
+    } else if (i === 1 || i === 5) {
+      // Diagonal Sector (1 & 5): Dark-Fantasy Inferno Tower (`TowerBig_001`), Rotating Forge Gears (`Gear_001`, `Gear_002`) & Treasure Chest
+      mountInfernoWorldModel(sectorGroup, 'BaseSmall_001', {
+        scale: 0.48,
+        position: [0, -0.45, -2.1]
+      });
+      mountInfernoWorldModel(sectorGroup, 'TowerBig_001', {
+        scale: 0.25,
+        position: [0, 0.15, -2.1]
+      });
+
+      // Rotating Heavy Iron Forge Gears (`Gear_001` & `Gear_002`) mounted on the tower flanks
+      const gear1Holder = mountInfernoWorldModel(sectorGroup, 'Gear_001', {
+        scale: 0.26,
+        position: [-2.35, 1.35, -1.25],
+        normMode: 'origin'
+      });
+      const gear2Holder = mountInfernoWorldModel(sectorGroup, 'Gear_002', {
+        scale: 0.28,
+        position: [2.35, 1.65, -1.25],
+        normMode: 'origin'
+      });
+      forgeGears.push(
+        { mesh: gear1Holder, speed: 0.55 },
+        { mesh: gear2Holder, speed: -0.78 }
+      );
+
+      // Open Treasure Chest (`ChestBig_001` includes `Lid_002` + `GoldPile_002`), `Box_001` & `GoldPileBig_001`
+      mountInfernoWorldModel(sectorGroup, 'ChestBig_001', {
+        scale: 0.46,
+        position: [-1.45, 0, 0.35],
+        rotationY: 0.32
+      });
+      mountInfernoWorldModel(sectorGroup, 'GoldPileBig_001', {
+        scale: 0.44,
+        position: [-0.45, 0, 0.55]
+      });
+      mountInfernoWorldModel(sectorGroup, 'Box_001', {
+        scale: 0.48,
+        position: [1.55, 0, 0.35],
+        rotationY: -0.42
+      });
+      mountInfernoWorldModel(sectorGroup, 'Vase_001', {
+        scale: 0.48,
+        position: [2.25, 0, 0.55]
+      });
+    } else {
+      // Diagonal Sector (3 & 7): Colossal Horned Warrior Statue (`StatueKnight_002`), Giant Battle Axe (`Axe_001`),
+      // Molten Lava Well (`WellSmall_001`) & Giant Demon Bones (`Bone_003`, `Bone_004`, `Bone_006`)
+      mountInfernoWorldModel(sectorGroup, 'PedestalBig_001', {
+        scale: 0.22,
+        position: [0, -0.25, -2.55]
+      });
+      mountInfernoWorldModel(sectorGroup, 'StatueKnight_002', {
+        scale: 0.22,
+        position: [0, 1.05, -2.55]
+      });
+      mountInfernoWorldModel(sectorGroup, 'Axe_001', {
+        scale: 0.22,
+        position: [2.15, 2.35, -1.85],
+        rotation: [0.15, 0.35, -0.28]
+      });
+
+      // Molten Lava Well (`WellSmall_001`) in front of the Warrior Statue
+      mountInfernoWorldModel(sectorGroup, 'WellSmall_001', {
+        scale: 0.38,
+        position: [0, 0, 0.45]
+      });
+
+      // Giant Curved Demon Ribs / Teeth (`Bone_003`, `Bone_004`, `Bone_006`) & Volcanic Mounds (`Mound_005`, `Mound_008`)
+      mountInfernoWorldModel(sectorGroup, 'Bone_006', {
+        scale: 0.34,
+        position: [-2.45, -0.1, -0.25],
+        rotationY: 0.45
+      });
+      mountInfernoWorldModel(sectorGroup, 'Bone_003', {
+        scale: 0.32,
+        position: [2.45, -0.1, -0.25],
+        rotationY: -0.45
+      });
+      mountInfernoWorldModel(sectorGroup, 'Bone_004', {
+        scale: 0.32,
+        position: [1.85, -0.1, 0.75],
+        rotationY: -0.85
+      });
+      mountInfernoWorldModel(sectorGroup, i === 3 ? 'Mound_005' : 'Mound_008', {
+        scale: 0.36,
+        position: [-1.85, -0.05, 0.75]
+      });
+    }
+
+    // Hovering Glowing Inferno Crystal (`Gem_001`..`Gem_005`) levitating above each sector
+    const crystalStation = new THREE.Group();
+    const baseY = 2.65 + (i % 2) * 0.85;
+    crystalStation.position.set(0, baseY, 0.55);
+    mountInfernoWorldModel(crystalStation, gemVariants[i % gemVariants.length], {
+      scale: 2.35,
+      position: [0, 0, 0],
+      overrideMaterial: infernoMats.Emission
+    });
+    sectorGroup.add(crystalStation);
+
+    floatingCrystals.push({
+      mesh: crystalStation,
+      baseY,
+      phase: i * 0.85,
+      speed: 1.55 + (i % 3) * 0.22
+    });
+
+    group.add(sectorGroup);
+  }
+
+  // 4. Eight Floating Volcanic Lava Platforms & Crag Spires Orbiting the Caldera
+  const floatingPlatformVariants = [
+    'PlatformSmall_001',
+    'PlatformSmall_002',
+    'PlatformSmall_003',
+    'PlatformSmall_004'
+  ];
+  const cragVariants = [
+    'Crag_001',
+    'Crag_003',
+    'RockBig_001',
+    'RockBig_003',
+    'RockBig_004',
+    'RockMid_001',
+    'RockMid_002',
+    'RockMid_003'
+  ];
+
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2 + 0.38;
+    const islandHolder = new THREE.Group();
+
+    mountInfernoWorldModel(
+      islandHolder,
+      floatingPlatformVariants[i % floatingPlatformVariants.length],
+      {
+        scale: 0.14,
+        position: [0, -0.6, 0],
+        rotationY: i * 0.9
+      }
+    );
+
+    mountInfernoWorldModel(islandHolder, cragVariants[i % cragVariants.length], {
+      scale: 0.16,
+      position: [0, 0.05, 0],
+      rotationY: i * 1.4
+    });
+
+    // Glowing crystal shard (`Gem_001`..`Gem_005`) embedded on the floating lava platform
+    mountInfernoWorldModel(islandHolder, gemVariants[(i + 2) % gemVariants.length], {
+      scale: 2.6,
+      position: [0.85, 0.45, 0.35],
+      overrideMaterial: infernoMats.Emission
+    });
+
+    const orbitR = 21.5 + (i % 2) * 4.5;
+    const baseY = 1.8 + (i % 3) * 1.9;
+    islandHolder.position.set(Math.cos(ang) * orbitR, baseY, Math.sin(ang) * orbitR);
+    group.add(islandHolder);
+
+    orbitingLavaIslands.push({
+      mesh: islandHolder,
+      orbitR,
+      baseY,
+      ang,
+      speed: (i % 2 === 0 ? 1 : -1) * (0.06 + (i % 3) * 0.02)
+    });
   }
 
   group.userData = {
-    lavaFallMeshes,
-    slagBoulders
+    forgeGears,
+    floatingCrystals,
+    orbitingLavaIslands
   };
 
   return group;
@@ -1407,16 +1584,19 @@ export function createWorldSceneryManager(scene) {
       }
       for (const d of soaringDragons) {
         const theta = elapsedTotal * d.speed + d.phase;
-        const nextTheta = theta + (d.speed >= 0 ? 0.05 : -0.05);
-        const x = Math.cos(theta) * d.orbitR;
-        const z = Math.sin(theta) * d.orbitR;
-        const y = d.baseY + Math.sin(elapsedTotal * 1.1 + d.phase) * 1.35;
+        const dtStep = d.speed >= 0 ? 0.04 : -0.04;
+        const nextTheta = theta + dtStep;
+        const weaveR = d.orbitR + Math.sin(elapsedTotal * 2.4 + d.phase) * 1.15;
+        const nextWeaveR = d.orbitR + Math.sin((elapsedTotal + 0.12) * 2.4 + d.phase) * 1.15;
+        const x = Math.cos(theta) * weaveR;
+        const z = Math.sin(theta) * weaveR;
+        const y = d.baseY;
 
         d.mesh.position.set(x, y, z);
         d.mesh.lookAt(
-          Math.cos(nextTheta) * d.orbitR,
-          y + Math.cos(elapsedTotal * 1.1 + d.phase) * 0.15,
-          Math.sin(nextTheta) * d.orbitR
+          Math.cos(nextTheta) * nextWeaveR,
+          y,
+          Math.sin(nextTheta) * nextWeaveR
         );
 
         animatePolyPizzaWyvern(d.mesh, elapsedTotal, d.phase);
@@ -1426,20 +1606,29 @@ export function createWorldSceneryManager(scene) {
       }
     }
 
-    // 3. Animate Volcanic Titan Forge (Orbiting Slag Boulders & Pulsing Lava Falls)
+    // 3. Animate Volcanic Titan Forge ("Inferno World Free" Rotating Forge Gears, Levitating Crystals & Orbiting Lava Islands)
     if (titanForgeGroup.visible) {
-      const { lavaFallMeshes, slagBoulders } = titanForgeGroup.userData;
-      for (const b of slagBoulders) {
-        const a = b.ang + elapsedTotal * b.speed;
-        b.mesh.position.x = Math.cos(a) * b.orbitR;
-        b.mesh.position.z = Math.sin(a) * b.orbitR;
-        b.mesh.position.y = b.baseY + Math.sin(elapsedTotal * 1.6 + b.ang) * 0.42;
-        b.mesh.rotation.x += dt * 0.45;
-        b.mesh.rotation.y += dt * 0.62;
+      const { forgeGears, floatingCrystals, orbitingLavaIslands } = titanForgeGroup.userData;
+      if (forgeGears) {
+        for (const fg of forgeGears) {
+          if (fg.mesh) {
+            fg.mesh.rotation.z += dt * fg.speed;
+          }
+        }
       }
-      for (let i = 0; i < lavaFallMeshes.length; i++) {
-        const pulse = 1.85 + 0.45 * Math.sin(elapsedTotal * 4.8 + i * 1.5);
-        lavaFallMeshes[i].material.emissiveIntensity = pulse;
+      if (floatingCrystals) {
+        for (const fc of floatingCrystals) {
+          fc.mesh.position.y = fc.baseY + Math.sin(elapsedTotal * fc.speed + fc.phase) * 0.28;
+          fc.mesh.rotation.y += dt * 0.85;
+        }
+      }
+      if (orbitingLavaIslands) {
+        for (const isl of orbitingLavaIslands) {
+          const a = isl.ang + elapsedTotal * isl.speed;
+          isl.mesh.position.x = Math.cos(a) * isl.orbitR;
+          isl.mesh.position.z = Math.sin(a) * isl.orbitR;
+          isl.mesh.position.y = isl.baseY + Math.sin(elapsedTotal * 1.3 + isl.ang) * 0.45;
+        }
       }
     }
 

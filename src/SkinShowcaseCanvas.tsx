@@ -37,6 +37,11 @@ import {
   mountDragonPeakObjAsset,
   preloadDragonPeak3DAssets
 } from './dragonPeakAssetLoader.js';
+import {
+  mountInfernoWorldModel,
+  preloadInfernoWorld3DAssets,
+  getInfernoWorldMaterials
+} from './infernoWorldAssetLoader.js';
 
 interface SkinShowcaseCanvasProps {
   activeTab: 'types' | 'sceneries' | 'boards' | 'pieces';
@@ -872,6 +877,13 @@ export default function SkinShowcaseCanvas({
           rotationY: 0.35,
           flattenTopPlateau: true
         });
+      } else if (scenery.id === 'volcanic_titan_forge') {
+        preloadInfernoWorld3DAssets();
+        mountInfernoWorldModel(islandGroup, 'PlatformStar_001', {
+          scale: 0.042,
+          position: [0, -0.82, 0],
+          rotationY: 0.25
+        });
       } else {
         const islandSpire = new THREE.Mesh(new THREE.ConeGeometry(1.18, 0.85, 8), cragMat);
         islandSpire.rotation.x = Math.PI;
@@ -1003,26 +1015,89 @@ export default function SkinShowcaseCanvas({
         subjectGroup.add(wyvernMesh);
         st.floatingNodes.push({ mesh: wyvernMesh, baseY: wyvernBaseY, phase: 0.5 });
       } else if (scenery.id === 'volcanic_titan_forge') {
-        const lavaRing = new THREE.Mesh(
-          new THREE.TorusGeometry(1.48, 0.09, 16, 48),
-          accentGlowMat
-        );
-        lavaRing.rotation.x = Math.PI / 2;
-        lavaRing.position.y = -0.32;
-        subjectGroup.add(lavaRing);
+        preloadInfernoWorld3DAssets();
+        const infernoMats = getInfernoWorldMaterials();
 
-        const basaltSpireGeo = new THREE.ConeGeometry(0.16, 0.85, 5);
+        // Mount Inferno World Free 3D Landmarks on the central Star Platform island:
+        // Horned Warrior Knight Statue (`StatueKnight_002`) + Battle Axe (`Axe_001`),
+        // Fantasy Inferno Tower (`TowerBig_001`), Lava Well (`WellSmall_001`),
+        // Treasure Chest (`ChestBig_001`), Demon Bones (`Bone_006`), Lit Braziers (`Brazier_002`) & Forge Gears (`Gear_001`)
+        mountInfernoWorldModel(islandGroup, 'StatueKnight_002', {
+          scale: 0.024,
+          position: [-0.58, 0.0, -0.64],
+          rotationY: 0.45
+        });
+        mountInfernoWorldModel(islandGroup, 'Axe_001', {
+          scale: 0.026,
+          position: [-0.32, 0.35, -0.58],
+          rotation: [0.15, 0.45, -0.25]
+        });
+        mountInfernoWorldModel(islandGroup, 'TowerBig_001', {
+          scale: 0.022,
+          position: [0.58, 0.0, -0.64],
+          rotationY: -0.42
+        });
+        mountInfernoWorldModel(islandGroup, 'WellSmall_001', {
+          scale: 0.065,
+          position: [0.68, 0.0, 0.54]
+        });
+        mountInfernoWorldModel(islandGroup, 'ChestBig_001', {
+          scale: 0.085,
+          position: [-0.68, 0.0, 0.54],
+          rotationY: 0.65
+        });
+        mountInfernoWorldModel(islandGroup, 'GoldPileBig_001', {
+          scale: 0.08,
+          position: [-0.46, 0.0, 0.68]
+        });
+        mountInfernoWorldModel(islandGroup, 'Bone_006', {
+          scale: 0.055,
+          position: [0.85, -0.02, 0.25],
+          rotationY: -0.5
+        });
+        mountInfernoWorldModel(islandGroup, 'ColumnBig_001', {
+          scale: 0.055,
+          position: [-0.85, 0.0, 0.12]
+        });
+
+        for (const side of [-1, 1]) {
+          mountInfernoWorldModel(islandGroup, 'Pedestal_001', {
+            scale: 0.065,
+            position: [side * 0.42, 0.0, 0.78]
+          });
+          mountInfernoWorldModel(islandGroup, 'Brazier_002', {
+            scale: 0.08,
+            position: [side * 0.42, 0.068, 0.78]
+          });
+        }
+
+        // Orbiting Floating Lava Platforms (`PlatformSmall_001..004`), Crags & Glowing Crystals (`Gem_001..005`)
+        const platNames = ['PlatformSmall_001', 'PlatformSmall_002', 'PlatformSmall_003', 'PlatformSmall_004'];
+        const gemNames = ['Gem_001', 'Gem_002', 'Gem_003', 'Gem_004', 'Gem_005'];
         for (let i = 0; i < 6; i++) {
           const ang = (i / 6) * Math.PI * 2 + 0.4;
-          const spire = new THREE.Mesh(basaltSpireGeo, cragMat);
-          spire.position.set(Math.cos(ang) * 1.48, 0.12, Math.sin(ang) * 1.48);
-          subjectGroup.add(spire);
+          const satHolder = new THREE.Group();
+          const baseY = -0.08 + (i % 2) * 0.18;
+          satHolder.position.set(Math.cos(ang) * 1.52, baseY, Math.sin(ang) * 1.52);
 
-          const emberTip = new THREE.Mesh(new THREE.OctahedronGeometry(0.08, 0), accentGlowMat);
-          const baseY = 0.65;
-          emberTip.position.set(Math.cos(ang) * 1.48, baseY, Math.sin(ang) * 1.48);
-          subjectGroup.add(emberTip);
-          st.floatingNodes.push({ mesh: emberTip, baseY, phase: i });
+          mountInfernoWorldModel(satHolder, platNames[i % platNames.length], {
+            scale: 0.012,
+            position: [0, -0.08, 0],
+            rotationY: i * 1.1
+          });
+          mountInfernoWorldModel(satHolder, i % 2 === 0 ? 'Crag_001' : 'RockBig_003', {
+            scale: 0.016,
+            position: [0, 0.0, 0],
+            rotationY: i * 0.8
+          });
+          mountInfernoWorldModel(satHolder, gemNames[i % gemNames.length], {
+            scale: 0.42,
+            position: [0, 0.24, 0],
+            overrideMaterial: infernoMats.Emission
+          });
+
+          subjectGroup.add(satHolder);
+          st.floatingNodes.push({ mesh: satHolder, baseY, phase: i * 1.05 });
         }
       } else if (scenery.id === 'haunted_blood_graveyard') {
         preloadHalloween3DAssets();
