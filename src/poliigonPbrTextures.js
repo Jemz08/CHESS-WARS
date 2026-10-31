@@ -579,23 +579,15 @@ export function getPoliigonPbrBundle(presetId, contextId = 'main', repeatX = 2, 
   const effectivePreset =
     presetId && presetId !== 'auto' ? presetId : 'travertine_limestone';
 
-  if (
-    effectivePreset === 'custom_upload' &&
-    customUploadedMaps.customBundlesByContext.has(contextId)
-  ) {
-    return customUploadedMaps.customBundlesByContext.get(contextId);
-  }
-
   const cacheKey = `${contextId}:${effectivePreset}:${repeatX}x${repeatY}`;
   if (pbrBundleCache.has(cacheKey)) {
     return pbrBundleCache.get(cacheKey);
   }
 
-  const { size, albedoRGBA, normalRGBA } = getPresetRawBuffers(effectivePreset);
   const bundle = {
     presetId: effectivePreset,
-    map: createDataTextureFromBuffer(albedoRGBA, size, true, repeatX, repeatY),
-    normalMap: createDataTextureFromBuffer(normalRGBA, size, false, repeatX, repeatY),
+    map: null,
+    normalMap: null,
     roughnessMap: null
   };
   pbrBundleCache.set(cacheKey, bundle);

@@ -2287,6 +2287,11 @@ export function initWizardChess() {
     let moveHistory = [];
     let preMoveHighlightTask = null;
     let activeDuelSavedCam = null;
+    const checkmateParticleSystems = [];
+    const checkmateSharedChunkGeo = new THREE.DodecahedronGeometry(1, 0);
+    const checkmateSharedSlabGeo = new THREE.BoxGeometry(0.92, 0.46, 1.18);
+    const checkmateSharedShardGeo = new THREE.TetrahedronGeometry(1.18, 0);
+    const checkmateSharedCrownGeo = new THREE.OctahedronGeometry(0.95, 0);
     let checkmateState = {
       active: false,
       bannerVisible: false,
@@ -2295,7 +2300,12 @@ export function initWizardChess() {
       isCheckWin: false,
       isTimeOutWin: false,
       kingFallAngleDeg: 0,
-      phase: 'none'
+      kingKnockedOffBoard: false,
+      triumphantPieceType: null,
+      triumphantAttackTitle: null,
+      debrisShardCount: 0,
+      phase: 'none',
+      savedPose: null
     };
 
     // =========================================================================
@@ -2413,7 +2423,39 @@ export function initWizardChess() {
       checkIndicatorGroup.visible = false;
     }
 
+    function disposeCheckmateParticleSystems() {
+      while (checkmateParticleSystems.length > 0) {
+        const ps = checkmateParticleSystems.pop();
+        if (!ps) continue;
+        if (ps.points) scene.remove(ps.points);
+        if (ps.geometry && typeof ps.geometry.dispose === 'function') ps.geometry.dispose();
+        if (ps.material && typeof ps.material.dispose === 'function') ps.material.dispose();
+      }
+    }
+
+    function restoreCheckmatePiecesPose() {
+      const sp = checkmateState.savedPose;
+      if (!sp) return;
+      if (sp.kingPiece && sp.kingPiece.mesh && sp.kingHomePos) {
+        sp.kingPiece.mesh.position.copy(sp.kingHomePos);
+        sp.kingPiece.mesh.quaternion.copy(sp.kingHomeQuat);
+        sp.kingPiece.mesh.scale.copy(sp.kingHomeScale);
+        if (sp.kingPiece.currentAction) sp.kingPiece.currentAction.paused = false;
+        if (sp.kingPiece.proceduralAnim) sp.kingPiece.proceduralAnim.paused = false;
+        playPieceClip(sp.kingPiece, 'Idle', true, 0.08);
+      }
+      if (sp.attackerPiece && sp.attackerPiece.mesh && sp.attackerHomePos) {
+        sp.attackerPiece.mesh.position.copy(sp.attackerHomePos);
+        sp.attackerPiece.mesh.quaternion.copy(sp.attackerHomeQuat);
+        sp.attackerPiece.mesh.scale.copy(sp.attackerHomeScale);
+        playPieceClip(sp.attackerPiece, 'Idle', true, 0.08);
+      }
+      checkmateState.savedPose = null;
+    }
+
     function clearCheckmateSequence() {
+      restoreCheckmatePiecesPose();
+      disposeCheckmateParticleSystems();
       checkmateState.active = false;
       checkmateState.bannerVisible = false;
       checkmateState.defeatedColor = null;
@@ -2421,11 +2463,15 @@ export function initWizardChess() {
       checkmateState.isCheckWin = false;
       checkmateState.isTimeOutWin = false;
       checkmateState.kingFallAngleDeg = 0;
+      checkmateState.kingKnockedOffBoard = false;
+      checkmateState.triumphantPieceType = null;
+      checkmateState.triumphantAttackTitle = null;
+      checkmateState.debrisShardCount = 0;
       checkmateState.phase = 'none';
       checkIndicatorGroup.visible = false;
       const overlay = document.getElementById('checkmate-overlay');
       if (overlay) {
-        overlay.classList.remove('visible');
+        overlay.classList.remove('visible', 'checkmate-impact-climax');
       }
     }
 
@@ -4406,53 +4452,261 @@ export function initWizardChess() {
     });
 
     // =========================================================================
-    // Feature 7: Checkmate Rigged King Fall-Over Animation & Cathedral Overlay
+    // Feature 7: Cinematic 3D Checkmate Particle System & Triumphant Piece
+    // Knocking the Enemy King Off the Board with Stone Debris -> #checkmate-overlay
     // =========================================================================
-    function spawnKingFallImpact(worldPos, color) {
-      const winnerArch = getSideArchetype(color === 'w' ? 'b' : 'w');
-      sfxVfxManager.playPieceKillSfx('king', 'queen', winnerArch);
-      sfxVfxManager.spawnPieceKillVfx(worldPos, 'king', color, 'queen', 0, 1, winnerArch);
-      const mat = color === 'w' ? whitePieceMat : blackPieceMat;
-      for (let i = 0; i < 28; i++) {
-        const sz = 0.018 + Math.random() * 0.034;
-        const geo = new THREE.DodecahedronGeometry(sz, 0);
+    let cachedCheckmateParticleTex = null;
+    function getCheckmateParticleTexture() {
+      if (cachedCheckmateParticleTex || typeof document === 'undefined') return cachedCheckmateParticleTex;
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const grad = ctx.createRadialGradient(32, 32, 1, 32, 32, 30);
+        grad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
+        grad.addColorStop(0.32, 'rgba(255, 240, 200, 0.92)');
+        grad.addColorStop(0.68, 'rgba(255, 180, 90, 0.38)');
+        grad.addColorStop(1.0, 'rgba(255, 120, 30, 0.0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 64, 64);
+      }
+      cachedCheckmateParticleTex = new THREE.CanvasTexture(canvas);
+      cachedCheckmateParticleTex.colorSpace = THREE.SRGBColorSpace;
+      return cachedCheckmateParticleTex;
+    }
+
+    function spawnCheckmateGpuDustAndEmberPlume(originPos, dirX, dirZ, primaryHex, secondaryHex, stoneHex, count = 190) {
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      const velocities = new Float32Array(count * 3);
+      const gravities = new Float32Array(count);
+      const drags = new Float32Array(count);
+
+      const cPrimary = new THREE.Color(primaryHex || 0xff4d2a);
+      const cSecondary = new THREE.Color(secondaryHex || 0xf5d76e);
+      const cStone = new THREE.Color(stoneHex || 0xd8cfc0);
+      const cWhite = new THREE.Color(0xfff9e6);
+
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        const spreadAngle = (Math.random() - 0.5) * Math.PI * 1.15;
+        const cosA = Math.cos(spreadAngle);
+        const sinA = Math.sin(spreadAngle);
+        const coneDirX = dirX * cosA - dirZ * sinA;
+        const coneDirZ = dirX * sinA + dirZ * cosA;
+
+        const isHeavyDust = i % 3 === 0;
+        const speed = isHeavyDust
+          ? 0.65 + Math.random() * 1.95
+          : 1.25 + Math.random() * 3.45;
+
+        positions[i3] = originPos.x + (Math.random() - 0.5) * 0.22;
+        positions[i3 + 1] = originPos.y + 0.05 + Math.random() * 0.36;
+        positions[i3 + 2] = originPos.z + (Math.random() - 0.5) * 0.22;
+
+        velocities[i3] = coneDirX * speed + (Math.random() - 0.5) * 0.95;
+        velocities[i3 + 1] = (isHeavyDust ? 0.85 : 1.55) + Math.random() * 2.45;
+        velocities[i3 + 2] = coneDirZ * speed + (Math.random() - 0.5) * 0.95;
+
+        gravities[i] = isHeavyDust ? 4.8 : 2.6;
+        drags[i] = isHeavyDust ? 1.35 : 0.85;
+
+        const colPick = i % 5 === 0 ? cWhite : isHeavyDust ? cStone : i % 2 === 0 ? cPrimary : cSecondary;
+        colors[i3] = colPick.r;
+        colors[i3 + 1] = colPick.g;
+        colors[i3 + 2] = colPick.b;
+      }
+
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const mat = new THREE.PointsMaterial({
+        size: 0.088,
+        map: getCheckmateParticleTexture(),
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        sizeAttenuation: true
+      });
+
+      const points = new THREE.Points(geo, mat);
+      scene.add(points);
+      checkmateParticleSystems.push({
+        points,
+        geometry: geo,
+        material: mat,
+        velocities,
+        gravities,
+        drags,
+        count,
+        life: 2.45,
+        maxLife: 2.45
+      });
+    }
+
+    function spawnKingRimBounceDebris(rimPos, defeatedColor, dirX, dirZ, killProfile) {
+      const stoneMat = defeatedColor === 'w' ? whitePieceMat : blackPieceMat;
+      const trimMat = defeatedColor === 'w' ? whiteTrimMat : blackTrimMat;
+      const emberMat = new THREE.MeshBasicMaterial({ color: killProfile?.secondaryHex || 0xf5d76e });
+
+      for (let i = 0; i < 24; i++) {
+        const sz = 0.016 + Math.random() * 0.032;
+        const geo = i % 3 === 0 ? checkmateSharedSlabGeo : i % 2 === 0 ? checkmateSharedShardGeo : checkmateSharedChunkGeo;
+        const mat = i % 5 === 0 ? emberMat : i % 3 === 0 ? trimMat : stoneMat;
         const frag = new THREE.Mesh(geo, mat);
+        frag.scale.setScalar(sz);
         frag.position.set(
-          worldPos.x + (Math.random() - 0.5) * 0.16,
-          BOARD_SURFACE_Y + 0.04 + Math.random() * 0.12,
-          worldPos.z + (Math.random() - 0.5) * 0.16
+          rimPos.x + (Math.random() - 0.5) * 0.18,
+          BOARD_SURFACE_Y + 0.03 + Math.random() * 0.10,
+          rimPos.z + (Math.random() - 0.5) * 0.18
         );
         frag.castShadow = true;
         scene.add(frag);
         shatterDebris.push({
           mesh: frag,
+          baseScale: sz,
+          offBoardDrop: true,
           vel: new THREE.Vector3(
-            (Math.random() - 0.5) * 1.85,
-            0.85 + Math.random() * 1.55,
-            (Math.random() - 0.5) * 1.85
+            dirX * (1.15 + Math.random() * 1.85) + (Math.random() - 0.5) * 1.4,
+            0.95 + Math.random() * 1.75,
+            dirZ * (1.15 + Math.random() * 1.85) + (Math.random() - 0.5) * 1.4
           ),
           rotVel: new THREE.Vector3(
-            Math.random() * 10,
-            Math.random() * 10,
-            Math.random() * 10
+            (Math.random() - 0.5) * 20,
+            (Math.random() - 0.5) * 20,
+            (Math.random() - 0.5) * 20
           ),
-          life: 1.95
+          life: 2.15
         });
       }
-      impactFlashLight.color.setHex(0xff1e42);
-      impactFlashLight.position.set(worldPos.x, BOARD_SURFACE_Y + 0.42, worldPos.z);
-      impactFlashLight.intensity = 14.0;
+
+      spawnCheckmateGpuDustAndEmberPlume(
+        rimPos,
+        dirX,
+        dirZ,
+        killProfile?.primaryHex || 0xff4d2a,
+        killProfile?.secondaryHex || 0xf5d76e,
+        defeatedColor === 'w' ? 0xe6dfd0 : 0x3b4254,
+        96
+      );
+      sfxVfxManager.spawnSquarePulseVfx(rimPos, 0xf5d76e, 0.42, 0.55);
     }
 
-    function showCheckmateBanner(winnerColor, defeatedColor, isCheckWin = false, isTimeOutWin = false) {
+    function spawnKingFallImpact(worldPos, color, dirX = 0, dirZ = 1, attackerPiece = null) {
+      const winnerColor = color === 'w' ? 'b' : 'w';
+      const winnerArch = attackerPiece?.archetype || getSideArchetype(winnerColor);
+      const attackerType = attackerPiece?.type || 'queen';
+      const killProfile = getArchetypeKillProfile(winnerArch, 'king');
+
+      sfxVfxManager.playWeaponContactClashSfx(attackerType, 'king', winnerArch);
+      sfxVfxManager.playPieceKillSfx('king', attackerType, winnerArch);
+      sfxVfxManager.spawnWeaponContactVfx(worldPos, dirX, dirZ, 'king', winnerArch);
+      sfxVfxManager.spawnPieceKillVfx(worldPos, 'king', color, attackerType, dirX, dirZ, winnerArch);
+      sfxVfxManager.triggerCameraShake?.(0.088, 0.78);
+
+      const stoneMat = color === 'w' ? whitePieceMat : blackPieceMat;
+      const trimMat = color === 'w' ? whiteTrimMat : blackTrimMat;
+      const bladeMat = color === 'w' ? whiteBladeMat : blackBladeMat;
+      const emberCoreMat = new THREE.MeshBasicMaterial({
+        color: killProfile.primaryHex || 0xff1e42
+      });
+      const goldSparkMat = new THREE.MeshBasicMaterial({
+        color: killProfile.secondaryHex || 0xf5d76e
+      });
+
+      const totalShards = 68;
+      checkmateState.debrisShardCount = totalShards + 24;
+
+      for (let i = 0; i < totalShards; i++) {
+        const isEmber = i % 6 === 0;
+        const isGoldCrown = !isEmber && i % 4 === 0;
+        const isBladeFragment = !isEmber && !isGoldCrown && i % 5 === 0;
+        const fragMat = isEmber
+          ? (i % 12 === 0 ? goldSparkMat : emberCoreMat)
+          : isGoldCrown
+            ? trimMat
+            : isBladeFragment
+              ? bladeMat
+              : stoneMat;
+
+        const fragGeo = isGoldCrown
+          ? checkmateSharedCrownGeo
+          : i % 3 === 0
+            ? checkmateSharedSlabGeo
+            : i % 2 === 0
+              ? checkmateSharedShardGeo
+              : checkmateSharedChunkGeo;
+
+        const sz = 0.022 + Math.random() * 0.052;
+        const frag = new THREE.Mesh(fragGeo, fragMat);
+        frag.scale.setScalar(sz);
+        frag.position.set(
+          worldPos.x + (Math.random() - 0.5) * 0.22,
+          BOARD_SURFACE_Y + 0.05 + Math.random() * 0.36,
+          worldPos.z + (Math.random() - 0.5) * 0.22
+        );
+        frag.castShadow = true;
+        scene.add(frag);
+
+        // Bias 65% of the stone debris strongly along the knock-off trajectory so a wave of stone shards accompanies the flying King off the board
+        const forwardPush = (0.75 + Math.random() * 2.15) * (i < 46 ? 1.35 : 0.65);
+        shatterDebris.push({
+          mesh: frag,
+          baseScale: sz,
+          offBoardDrop: true,
+          vel: new THREE.Vector3(
+            dirX * forwardPush + (Math.random() - 0.5) * 2.25,
+            1.25 + Math.random() * 2.65,
+            dirZ * forwardPush + (Math.random() - 0.5) * 2.25
+          ),
+          rotVel: new THREE.Vector3(
+            (Math.random() - 0.5) * 22,
+            (Math.random() - 0.5) * 22,
+            (Math.random() - 0.5) * 22
+          ),
+          life: 2.65
+        });
+      }
+
+      // Spawn 3D GPU Point-Cloud Impact Plume & Ember Stream
+      spawnCheckmateGpuDustAndEmberPlume(
+        worldPos,
+        dirX,
+        dirZ,
+        killProfile.primaryHex || 0xff1e42,
+        killProfile.secondaryHex || 0xf5d76e,
+        color === 'w' ? 0xe6dfd0 : 0x3b4254,
+        210
+      );
+
+      impactFlashLight.color.setHex(killProfile.primaryHex || 0xff1e42);
+      impactFlashLight.position.set(worldPos.x, BOARD_SURFACE_Y + 0.48, worldPos.z);
+      impactFlashLight.intensity = 18.5;
+    }
+
+    function showCheckmateBanner(winnerColor, defeatedColor, isCheckWin = false, isTimeOutWin = false, triumphantPiece = null) {
       const overlay = document.getElementById('checkmate-overlay');
       const crownEl = document.getElementById('checkmate-crown');
       const titleEl = document.getElementById('checkmate-title');
       const subEl = document.getElementById('checkmate-subtitle');
+      const impactTextEl = document.getElementById('checkmate-impact-text');
 
       const winnerName = winnerColor === 'w' ? 'White' : 'Black';
       const defeatedName = defeatedColor === 'w' ? 'White' : 'Black';
       const preset = TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
+
+      const winnerArch = triumphantPiece?.archetype || getSideArchetype(winnerColor);
+      const killProfile = getArchetypeKillProfile(winnerArch, 'king');
+      const pieceLabel = triumphantPiece?.type
+        ? triumphantPiece.type.charAt(0).toUpperCase() + triumphantPiece.type.slice(1)
+        : 'Sovereign';
+
+      checkmateState.triumphantPieceType = pieceLabel;
+      checkmateState.triumphantAttackTitle = killProfile.title;
 
       if (crownEl) crownEl.textContent = winnerColor === 'w' ? '♔' : '♚';
       if (titleEl) {
@@ -4464,21 +4718,50 @@ export function initWizardChess() {
       }
       if (subEl) {
         subEl.textContent = isTimeOutWin
-          ? `${winnerName} Wins on Time (${preset.shortLabel}) • ${defeatedName} Clock Expired`
+          ? `${winnerName} Wins on Time (${preset.shortLabel}) • ${defeatedName} King Knocked Off Board`
           : isCheckWin
-            ? `${winnerName} Wins the Match • The ${defeatedName} King Is Checked & Fallen`
-            : `${winnerName} Triumphs • The ${defeatedName} King Has Fallen`;
+            ? `${winnerName} Wins the Match • Triumphant ${pieceLabel} Knocked the ${defeatedName} King Off the Board`
+            : `${winnerName} Triumphs • Triumphant ${pieceLabel} Knocked the ${defeatedName} King Off the Board`;
+      }
+      if (impactTextEl) {
+        impactTextEl.textContent = `${winnerName} ${pieceLabel} • ${killProfile.title} • ${defeatedName} King Knocked Off Board with Stone Debris`;
       }
       if (overlay) {
-        overlay.classList.add('visible');
+        overlay.classList.add('visible', 'checkmate-impact-climax');
       }
       checkmateState.bannerVisible = true;
+
+      window.dispatchEvent(
+        new CustomEvent('wizardchess:checkmateoverlay', {
+          detail: {
+            winnerColor,
+            defeatedColor,
+            winnerName,
+            defeatedName,
+            triumphantPieceType: pieceLabel,
+            attackTitle: killProfile.title,
+            attackSubtitle: killProfile.subtitle,
+            kingKnockedOffBoard: true,
+            debrisShardCount: checkmateState.debrisShardCount || 92,
+            isCheckWin,
+            isTimeOutWin
+          }
+        })
+      );
     }
 
     function triggerCheckmateSequence(defeatedColor = currentTurn, winnerColor = null, options = {}) {
       const actualWinner = winnerColor || (defeatedColor === 'w' ? 'b' : 'w');
       const isCheckWin = Boolean(options && options.isCheckWin);
       const isTimeOutWin = Boolean(options && options.isTimeOutWin);
+
+      // Cleanly restore any prior checkmate pose & remove previous checkmate tween if replaying
+      restoreCheckmatePiecesPose();
+      disposeCheckmateParticleSystems();
+      const overlayEl = document.getElementById('checkmate-overlay');
+      if (overlayEl) {
+        overlayEl.classList.remove('visible', 'checkmate-impact-climax');
+      }
 
       // Find the defeated King on the board
       let kingPiece = null;
@@ -4497,35 +4780,48 @@ export function initWizardChess() {
       }
 
       checkmateState.active = true;
+      checkmateState.bannerVisible = false;
       checkmateState.defeatedColor = defeatedColor;
       checkmateState.winnerColor = actualWinner;
       checkmateState.isCheckWin = isCheckWin;
       checkmateState.isTimeOutWin = isTimeOutWin;
       checkmateState.kingFallAngleDeg = 0;
+      checkmateState.kingKnockedOffBoard = false;
       checkmateState.phase = 'stagger';
       updateCheck3DIndicator(defeatedColor);
 
       if (!kingPiece || !kingPiece.mesh) {
-        showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin);
+        showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin, null);
         return false;
       }
 
-      // Find the checkmating attacker piece so the King falls away from the blow or into the clearest open square
-      let attackerPos = null;
+      // Identify the triumphant piece that delivered the Checkmate (or nearest attacking/royal piece of actualWinner)
+      let triumphantPiece = null;
+      let attackerR = -1;
+      let attackerC = -1;
+
       if (moveHistory.length > 0) {
         const lastMv = moveHistory[moveHistory.length - 1].move;
         if (lastMv) {
-          attackerPos = boardToWorld(lastMv.toR, lastMv.toC);
+          const candidate = boardState[lastMv.toR]?.[lastMv.toC];
+          if (candidate && candidate.color === actualWinner && candidate !== kingPiece) {
+            triumphantPiece = candidate;
+            attackerR = lastMv.toR;
+            attackerC = lastMv.toC;
+          }
         }
       }
-      if (!attackerPos) {
-        for (let r = 0; r < 8; r++) {
+
+      if (!triumphantPiece) {
+        for (let r = 0; r < 8 && !triumphantPiece; r++) {
           for (let c = 0; c < 8; c++) {
             const p = boardState[r][c];
-            if (p && p.color === actualWinner) {
+            if (p && p.color === actualWinner && p !== kingPiece) {
               const moves = getPseudoMovesForPiece(r, c, boardState);
               if (moves.some((m) => m.r === kingR && m.c === kingC)) {
-                attackerPos = boardToWorld(r, c);
+                triumphantPiece = p;
+                attackerR = r;
+                attackerC = c;
                 break;
               }
             }
@@ -4533,75 +4829,98 @@ export function initWizardChess() {
         }
       }
 
-      const homePos = boardToWorld(kingR, kingC);
-      const forwardDirZ = defeatedColor === 'b' ? 1 : -1;
-
-      // Evaluate 16 candidate fall directions around the King to pick the clearest open path on the board
-      let bestDirX = 0.24;
-      let bestDirZ = forwardDirZ * 0.97;
-      let bestScore = -Infinity;
-
-      const awayFromAttacker = attackerPos
-        ? new THREE.Vector2(homePos.x - attackerPos.x, homePos.z - attackerPos.z).normalize()
-        : new THREE.Vector2(0.25, forwardDirZ).normalize();
-
-      for (let i = 0; i < 16; i++) {
-        const ang = (i / 16) * Math.PI * 2;
-        const dx = Math.cos(ang);
-        const dz = Math.sin(ang);
-
-        // Check where the King's crown (0.50m from base) lands in board coordinates
-        const tipWorldX = homePos.x + dx * 0.44;
-        const tipWorldZ = homePos.z + dz * 0.44;
-        const tipC = Math.round(tipWorldX / BOARD_SQ_SIZE + 3.5);
-        const tipR = Math.round(tipWorldZ / BOARD_SQ_SIZE + 3.5);
-
-        let score = 0;
-        // Prefer staying inside the 8x8 board surface
-        if (tipR >= 0 && tipR < 8 && tipC >= 0 && tipC < 8) {
-          score += 40;
-          const occ = boardState[tipR]?.[tipC];
-          if (!occ) {
-            score += 65; // Open square for the fallen King's body & crown!
-          } else if (occ !== kingPiece) {
-            score -= 50;
+      if (!triumphantPiece) {
+        let bestScore = -Infinity;
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            const p = boardState[r][c];
+            if (p && p.color === actualWinner && p !== kingPiece && p.mesh) {
+              const val = PIECE_VALUES[p.type] || 100;
+              const d = Math.hypot(r - kingR, c - kingC);
+              const score = val - d * 45;
+              if (score > bestScore) {
+                bestScore = score;
+                triumphantPiece = p;
+                attackerR = r;
+                attackerC = c;
+              }
+            }
           }
-        } else {
-          score -= 35;
-        }
-
-        // Prefer falling away from the attacker's blow or forward-diagonally toward the center
-        score += (dx * awayFromAttacker.x + dz * awayFromAttacker.y) * 18;
-        score += dz * forwardDirZ * 14;
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestDirX = dx;
-          bestDirZ = dz;
         }
       }
 
-      const fallLen = Math.hypot(bestDirX, bestDirZ) || 1;
-      const fallDirX = bestDirX / fallLen;
-      const fallDirZ = bestDirZ / fallLen;
+      const homePos = boardToWorld(kingR, kingC);
+      const attackerHomePos =
+        triumphantPiece && attackerR >= 0
+          ? boardToWorld(attackerR, attackerC)
+          : new THREE.Vector3(homePos.x, BOARD_SURFACE_Y, homePos.z + (defeatedColor === 'b' ? 0.68 : -0.68));
 
-      // Highlight the defeated King's square with a crimson-and-gold Checkmate ring
+      // Save original transforms so Replay King Fall (#btn-checkmate-replay) can replay cleanly any number of times
+      checkmateState.savedPose = {
+        kingPiece,
+        kingHomePos: homePos.clone(),
+        kingHomeQuat: kingPiece.mesh.quaternion.clone(),
+        kingHomeScale: kingPiece.mesh.scale.clone(),
+        attackerPiece: triumphantPiece,
+        attackerHomePos: triumphantPiece?.mesh ? attackerHomePos.clone() : null,
+        attackerHomeQuat: triumphantPiece?.mesh ? triumphantPiece.mesh.quaternion.clone() : null,
+        attackerHomeScale: triumphantPiece?.mesh ? triumphantPiece.mesh.scale.clone() : null
+      };
+
+      // Compute Knock-Off Direction: blend the triumphant attacker's strike impulse with the nearest board edge vector
+      // so the enemy King is physically knocked OFF the 8x8 chessboard and over the ornate border!
+      const rawImpulse = new THREE.Vector2(
+        homePos.x - attackerHomePos.x,
+        homePos.z - attackerHomePos.z
+      );
+      if (rawImpulse.lengthSq() < 1e-4) {
+        rawImpulse.set(0.28, defeatedColor === 'b' ? -1 : 1);
+      }
+      rawImpulse.normalize();
+
+      // Nearest board edge direction from the King's square
+      const edgeCandidates = [
+        { dx: 0, dz: defeatedColor === 'b' ? -1 : 1, dist: 1.48 - Math.abs(homePos.z) },
+        { dx: homePos.x >= 0 ? 1 : -1, dz: 0, dist: 1.48 - Math.abs(homePos.x) },
+        { dx: rawImpulse.x, dz: rawImpulse.y, dist: 0.85 }
+      ];
+      edgeCandidates.sort((a, b) => a.dist - b.dist);
+      const nearestEdge = edgeCandidates[0];
+
+      let knockX = rawImpulse.x * 0.68 + nearestEdge.dx * 0.32;
+      let knockZ = rawImpulse.y * 0.68 + nearestEdge.dz * 0.32;
+      if (Math.hypot(knockX, knockZ) < 0.1) {
+        knockX = rawImpulse.x;
+        knockZ = rawImpulse.y;
+      }
+      const knockLen = Math.hypot(knockX, knockZ) || 1;
+      const fallDirX = knockX / knockLen;
+      const fallDirZ = knockZ / knockLen;
+
+      // Calculate exact distance from homePos along (fallDirX, fallDirZ) to the outer board border (1.48m) and off-board landing (1.92m)
+      const BOARD_RIM_HALF = 1.46;
+      const txRim = Math.abs(fallDirX) > 1e-4 ? ((fallDirX > 0 ? BOARD_RIM_HALF : -BOARD_RIM_HALF) - homePos.x) / fallDirX : Infinity;
+      const tzRim = Math.abs(fallDirZ) > 1e-4 ? ((fallDirZ > 0 ? BOARD_RIM_HALF : -BOARD_RIM_HALF) - homePos.z) / fallDirZ : Infinity;
+      const distToBoardRim = Math.max(0.38, Math.min(2.25, Math.min(txRim > 0 ? txRim : Infinity, tzRim > 0 ? tzRim : Infinity)));
+      const totalKnockoffDist = distToBoardRim + 0.46; // Lands 0.46m past the board rim, completely off the chessboard!
+
+      // Highlight the defeated King's square and knock-off vector with crimson-and-gold Checkmate rings
       clearSquareHighlights();
-      const outerRingGeo = new THREE.RingGeometry(0.135, 0.175, 36);
+      const outerRingGeo = new THREE.RingGeometry(0.135, 0.18, 36);
       outerRingGeo.rotateX(-Math.PI / 2);
       const outerRingMat = new THREE.MeshBasicMaterial({ color: 0xe63946, side: THREE.DoubleSide });
       const outerRing = new THREE.Mesh(outerRingGeo, outerRingMat);
       outerRing.position.set(homePos.x, BOARD_SURFACE_Y + 0.012, homePos.z);
       squareHighlightsGroup.add(outerRing);
 
-      const innerRingGeo = new THREE.RingGeometry(0.10, 0.125, 36);
+      const innerRingGeo = new THREE.RingGeometry(0.095, 0.125, 36);
       innerRingGeo.rotateX(-Math.PI / 2);
       const innerRingMat = new THREE.MeshBasicMaterial({ color: 0xf5d76e, side: THREE.DoubleSide });
       const innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
       innerRing.position.set(homePos.x, BOARD_SURFACE_Y + 0.014, homePos.z);
       squareHighlightsGroup.add(innerRing);
 
-      // Pause the King's idle mixer / procedural rig so its statue mesh pivots cleanly as a rigid monument
+      // Pause the King's idle mixer / procedural rig so its statue mesh tumbles cleanly as a rigid monument
       if (kingPiece.currentAction) {
         kingPiece.currentAction.paused = true;
       }
@@ -4609,56 +4928,71 @@ export function initWizardChess() {
         kingPiece.proceduralAnim.paused = true;
       }
 
-      // Face the King toward the checkmating attacker (or forward) before toppling
-      const baseYaw = attackerPos
-        ? Math.atan2(attackerPos.x - homePos.x, attackerPos.z - homePos.z)
-        : (defeatedColor === 'w' ? Math.PI : 0);
-      const qBaseFacing = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), baseYaw);
-      // Right-handed horizontal axis perpendicular to fallDir so +angle pitches the King's crown toward (fallDirX, 0, fallDirZ)
-      const tiltAxis = new THREE.Vector3(fallDirZ, 0, -fallDirX).normalize();
-      const qTilt = new THREE.Quaternion();
-
-      // Smoothly frame the checkmate on the board if the user isn't manually flying the camera with WASD
-      if (heldCameraKeys.size === 0) {
-        const camSideX = homePos.x >= 0 ? -1.35 : 1.35;
-        const camSideZ = homePos.z + forwardDirZ * 1.45;
-        smoothCameraTo(
-          new THREE.Vector3(homePos.x + camSideX, BOARD_SURFACE_Y + 1.15, camSideZ),
-          new THREE.Vector3(
-            homePos.x + fallDirX * 0.22,
-            BOARD_SURFACE_Y + 0.18,
-            homePos.z + fallDirZ * 0.22
-          ),
-          0.95
-        );
+      // Orient triumphant piece toward the enemy King and trigger its Attack clip & charge SFX
+      const winnerArch = triumphantPiece?.archetype || getSideArchetype(actualWinner);
+      const killProfile = getArchetypeKillProfile(winnerArch, 'king');
+      if (triumphantPiece && triumphantPiece.mesh) {
+        const atkYaw = Math.atan2(homePos.x - attackerHomePos.x, homePos.z - attackerHomePos.z);
+        triumphantPiece.mesh.rotation.set(0, atkYaw, 0);
+        playPieceClip(triumphantPiece, 'Attack', false, 0.06);
+        sfxVfxManager.playAttackChargeAndSwingSfx(triumphantPiece.type, 'king', winnerArch);
       }
 
-      const RIM_RADIUS = 0.135;    // Pedestal bottom rim radius so the lower edge stays grounded on the board
-      const MAX_FALL_RAD = 1.50;   // 86 degrees: King lies fallen on its side across the board tiles
-      const tStagger = 0.36;
-      const tImpact = 1.12;
+      // Face the King toward the charging triumphant attacker before being knocked off the board
+      const baseYaw = Math.atan2(-fallDirX, -fallDirZ);
+      const qBaseFacing = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), baseYaw);
+      const tiltAxis = new THREE.Vector3(fallDirZ, 0, -fallDirX).normalize();
+      const rollAxis = new THREE.Vector3(fallDirX, 0, fallDirZ).normalize();
+      const qTilt = new THREE.Quaternion();
+      const qRoll = new THREE.Quaternion();
+
+      // Smoothly frame the checkmate strike & off-board knock-off trajectory if user isn't flying camera with WASD
+      if (heldCameraKeys.size === 0) {
+        const perpX = -fallDirZ;
+        const perpZ = fallDirX;
+        const sideSign = homePos.x * perpX + homePos.z * perpZ >= 0 ? 1 : -1;
+        const camPos = new THREE.Vector3(
+          homePos.x + perpX * sideSign * 1.38 - fallDirX * 0.42,
+          BOARD_SURFACE_Y + 1.12,
+          homePos.z + perpZ * sideSign * 1.38 - fallDirZ * 0.42
+        );
+        const lookTarget = new THREE.Vector3(
+          homePos.x + fallDirX * (distToBoardRim * 0.48),
+          BOARD_SURFACE_Y + 0.14,
+          homePos.z + fallDirZ * (distToBoardRim * 0.48)
+        );
+        smoothCameraTo(camPos, lookTarget, 0.88);
+      }
+
+      const attackerStandOffPos = new THREE.Vector3(
+        homePos.x - fallDirX * 0.24,
+        BOARD_SURFACE_Y,
+        homePos.z - fallDirZ * 0.24
+      );
+      const chargeDist = attackerHomePos.distanceTo(attackerStandOffPos);
+
+      const tChargeImpact = 0.38; // Triumphant piece charges across the board & slams into the enemy King
+      const tRimCross = 0.92;     // Flying King smashes & bounces over the ornate chessboard rim
+      const tLandOffBoard = 1.48; // King crashes off the board onto the lower altar slab
       const tTotal = 1.82;
 
       let elapsed = 0;
       let impactTriggered = false;
+      let rimBounceTriggered = false;
       let bannerShown = false;
+      let wakeEmitAccum = 0;
 
-      function applyKingTopplePose(thetaRad, shudderRoll = 0) {
-        const clampedTheta = Math.max(-0.15, Math.min(1.55, thetaRad));
-        checkmateState.kingFallAngleDeg = Number(((clampedTheta * 180) / Math.PI).toFixed(1));
-
-        const px = homePos.x + fallDirX * RIM_RADIUS * (1 - Math.cos(clampedTheta));
-        const py = BOARD_SURFACE_Y + RIM_RADIUS * Math.sin(Math.max(0, clampedTheta));
-        const pz = homePos.z + fallDirZ * RIM_RADIUS * (1 - Math.cos(clampedTheta));
+      function applyKingKnockoffPose(horizDist, heightOffset, pitchRad, rollRad = 0) {
+        checkmateState.kingFallAngleDeg = Number(((Math.min(Math.PI, Math.abs(pitchRad)) * 180) / Math.PI).toFixed(1));
+        const px = homePos.x + fallDirX * horizDist;
+        const py = BOARD_SURFACE_Y + heightOffset;
+        const pz = homePos.z + fallDirZ * horizDist;
         kingPiece.mesh.position.set(px, py, pz);
 
-        qTilt.setFromAxisAngle(tiltAxis, clampedTheta);
-        if (Math.abs(shudderRoll) > 1e-4) {
-          const qShudder = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(fallDirX, 0, fallDirZ),
-            shudderRoll
-          );
-          qTilt.multiply(qShudder);
+        qTilt.setFromAxisAngle(tiltAxis, pitchRad);
+        if (Math.abs(rollRad) > 1e-4) {
+          qRoll.setFromAxisAngle(rollAxis, rollRad);
+          qTilt.multiply(qRoll);
         }
         kingPiece.mesh.quaternion.copy(qTilt).multiply(qBaseFacing);
       }
@@ -4667,56 +5001,127 @@ export function initWizardChess() {
         if (!checkmateState.active || !kingPiece.mesh) return true;
         elapsed += dt;
 
-        if (!bannerShown && elapsed >= 0.25) {
-          bannerShown = true;
-          showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin);
-        }
-
-        if (elapsed <= tStagger) {
-          // Phase 1: Royal Stagger & Tremor as the checkmate blow echoes through the King statue
+        if (elapsed <= tChargeImpact) {
+          // Phase 1: Triumphant Piece Heroic Charge & Windup -> Enemy King Stagger
           checkmateState.phase = 'stagger';
-          const u = elapsed / tStagger;
-          const shudder = Math.sin(u * Math.PI * 6) * 0.065 * (1 - u * 0.3);
-          const initialLean = u * u * 0.12;
-          applyKingTopplePose(initialLean, shudder);
-        } else if (elapsed <= tImpact) {
-          // Phase 2: Accelerating Gravity Topple around the stone pedestal rim (0.12 rad -> 1.50 rad = 86 deg)
-          checkmateState.phase = 'topple';
-          const u = Math.min(1, (elapsed - tStagger) / (tImpact - tStagger));
-          const gravCurve = Math.pow(u, 2.25);
-          const theta = 0.12 + (MAX_FALL_RAD - 0.12) * gravCurve;
-          applyKingTopplePose(theta, 0);
-        } else {
-          // Phase 3: Heavy Stone Impact, Crown Shard Burst & Damped Restitution Bounce
-          checkmateState.phase = 'impact';
-          if (!impactTriggered) {
-            impactTriggered = true;
-            const crownImpactPos = new THREE.Vector3(
-              homePos.x + fallDirX * 0.45,
-              BOARD_SURFACE_Y,
-              homePos.z + fallDirZ * 0.45
+          const u = Math.min(1, elapsed / tChargeImpact);
+          const easeU = easeInOutCubic(u);
+
+          if (triumphantPiece && triumphantPiece.mesh) {
+            const leapArc = Math.sin(u * Math.PI) * Math.min(0.24, 0.08 + chargeDist * 0.14);
+            triumphantPiece.mesh.position.set(
+              attackerHomePos.x + (attackerStandOffPos.x - attackerHomePos.x) * easeU,
+              BOARD_SURFACE_Y + leapArc,
+              attackerHomePos.z + (attackerStandOffPos.z - attackerHomePos.z) * easeU
             );
-            spawnKingFallImpact(crownImpactPos, defeatedColor);
           }
 
-          const uBounce = Math.min(1, (elapsed - tImpact) / (tTotal - tImpact));
-          const bounceAmp = 0.13 * Math.pow(1 - uBounce, 1.85);
-          const theta = MAX_FALL_RAD - Math.abs(Math.sin(uBounce * Math.PI * 2.0)) * bounceAmp;
-          applyKingTopplePose(theta, 0);
+          const shudder = Math.sin(u * Math.PI * 8) * 0.08 * u;
+          applyKingKnockoffPose(u * 0.03, 0, u * 0.16, shudder);
+        } else {
+          // At t = tChargeImpact (0.38s): Triumphant piece impacts the enemy King, unleashing the 3D stone debris particle system!
+          if (!impactTriggered) {
+            impactTriggered = true;
+            spawnKingFallImpact(homePos, defeatedColor, fallDirX, fallDirZ, triumphantPiece);
+          }
 
-          // Subtle damped camera tremor when the heavy stone King crashes onto the altar board
-          if (elapsed <= tImpact + 0.28) {
-            const sProg = (elapsed - tImpact) / 0.28;
-            const decay = (1 - sProg) * (1 - sProg);
-            camera.position.y += Math.cos(sProg * Math.PI * 8) * 0.022 * decay;
+          // Triumphant piece follows through onto the enemy King's vacated square and claims it in victory
+          if (triumphantPiece && triumphantPiece.mesh) {
+            const uClaim = Math.min(1, (elapsed - tChargeImpact) / 0.34);
+            const easeClaim = easeOutCubic(uClaim);
+            triumphantPiece.mesh.position.set(
+              attackerStandOffPos.x + (homePos.x - attackerStandOffPos.x) * easeClaim,
+              BOARD_SURFACE_Y,
+              attackerStandOffPos.z + (homePos.z - attackerStandOffPos.z) * easeClaim
+            );
+            if (uClaim >= 1 && triumphantPiece.proceduralAnim && triumphantPiece.proceduralAnim.mode !== 'idle') {
+              playPieceClip(triumphantPiece, 'Idle', true, 0.22);
+            }
+          }
+
+          // Emit continuous stone-dust & ember wake particles along the flying King's trajectory
+          wakeEmitAccum += dt;
+          if (elapsed < tLandOffBoard && wakeEmitAccum >= 0.065) {
+            wakeEmitAccum = 0;
+            const kPos = kingPiece.mesh.position;
+            const stoneMat = defeatedColor === 'w' ? whitePieceMat : blackPieceMat;
+            const frag = new THREE.Mesh(checkmateSharedShardGeo, stoneMat);
+            const sz = 0.016 + Math.random() * 0.022;
+            frag.scale.setScalar(sz);
+            frag.position.set(
+              kPos.x + (Math.random() - 0.5) * 0.12,
+              Math.max(BOARD_SURFACE_Y + 0.04, kPos.y + 0.08),
+              kPos.z + (Math.random() - 0.5) * 0.12
+            );
+            scene.add(frag);
+            shatterDebris.push({
+              mesh: frag,
+              baseScale: sz,
+              offBoardDrop: true,
+              vel: new THREE.Vector3(
+                fallDirX * 0.65 + (Math.random() - 0.5) * 1.1,
+                0.55 + Math.random() * 0.95,
+                fallDirZ * 0.65 + (Math.random() - 0.5) * 1.1
+              ),
+              rotVel: new THREE.Vector3(Math.random() * 14, Math.random() * 14, Math.random() * 14),
+              life: 1.35
+            });
+          }
+
+          if (elapsed <= tRimCross) {
+            // Phase 2A: Enemy King Launched Airborne Toward the Board Edge (Tumultuous Knockback Arc)
+            checkmateState.phase = 'topple';
+            const uFlight = Math.min(1, (elapsed - tChargeImpact) / (tRimCross - tChargeImpact));
+            const horizDist = 0.03 + (distToBoardRim - 0.03) * easeOutCubic(uFlight);
+            const parabolicArc = Math.sin(uFlight * Math.PI) * 0.42 + uFlight * 0.06;
+            const pitchRad = 0.16 + uFlight * 1.48; // Tumbles past 94 degrees as it reaches the board rim
+            const rollRad = Math.sin(uFlight * Math.PI * 2.5) * 0.28;
+            applyKingKnockoffPose(horizDist, parabolicArc, pitchRad, rollRad);
+          } else if (elapsed <= tLandOffBoard) {
+            // Phase 2B: Board Rim Collision Bounce & Plunge Off the Edge of the Board!
+            checkmateState.phase = 'impact';
+            checkmateState.kingKnockedOffBoard = true;
+
+            if (!rimBounceTriggered) {
+              rimBounceTriggered = true;
+              const rimWorldPos = new THREE.Vector3(
+                homePos.x + fallDirX * distToBoardRim,
+                BOARD_SURFACE_Y + 0.04,
+                homePos.z + fallDirZ * distToBoardRim
+              );
+              spawnKingRimBounceDebris(rimWorldPos, defeatedColor, fallDirX, fallDirZ, killProfile);
+            }
+
+            // Directly trigger the #checkmate-overlay UI right as the King is knocked over the board edge!
+            if (!bannerShown) {
+              bannerShown = true;
+              showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin, triumphantPiece);
+            }
+
+            const uPlunge = Math.min(1, (elapsed - tRimCross) / (tLandOffBoard - tRimCross));
+            const horizDist = distToBoardRim + (totalKnockoffDist - distToBoardRim) * easeOutCubic(uPlunge);
+            // Rim bounce hop followed by gravity drop below BOARD_SURFACE_Y onto the lower altar (-0.18m)
+            const rimBounceArc = Math.sin(uPlunge * Math.PI) * 0.22 - uPlunge * uPlunge * 0.18 + (1 - uPlunge) * 0.06;
+            const pitchRad = 1.64 + uPlunge * 0.68; // Continues tumbling over the edge (up to ~133 deg)
+            const rollRad = (1 - uPlunge) * 0.22 + uPlunge * 0.35;
+            applyKingKnockoffPose(horizDist, rimBounceArc, pitchRad, rollRad);
+          } else {
+            // Phase 3: Off-Board Settle & Restitution Tremor on the Lower Altar Beyond the Board Rim
+            checkmateState.phase = 'fallen';
+            checkmateState.kingKnockedOffBoard = true;
+            const uSettle = Math.min(1, (elapsed - tLandOffBoard) / Math.max(0.05, tTotal - tLandOffBoard));
+            const settleBounce = Math.abs(Math.sin(uSettle * Math.PI * 2.0)) * 0.055 * (1 - uSettle);
+            const pitchRad = 2.32 - settleBounce * 1.4;
+            applyKingKnockoffPose(totalKnockoffDist, -0.18 + settleBounce, pitchRad, 0.35);
           }
         }
 
         if (elapsed >= tTotal) {
-          applyKingTopplePose(MAX_FALL_RAD, 0);
           checkmateState.phase = 'fallen';
+          checkmateState.kingKnockedOffBoard = true;
+          applyKingKnockoffPose(totalKnockoffDist, -0.18, 2.32, 0.35);
           if (!bannerShown) {
-            showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin);
+            showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin, triumphantPiece);
           }
           return true;
         }
@@ -7042,8 +7447,11 @@ export function initWizardChess() {
         }
         d.vel.y -= 9.8 * dt;
         d.mesh.position.addScaledVector(d.vel, dt);
-        if (d.mesh.position.y < BOARD_SURFACE_Y + 0.03) {
-          d.mesh.position.y = BOARD_SURFACE_Y + 0.03;
+        const onBoardSurface =
+          Math.abs(d.mesh.position.x) < 1.52 && Math.abs(d.mesh.position.z) < 1.52;
+        const floorBounceY = d.offBoardDrop && !onBoardSurface ? BOARD_SURFACE_Y - 0.18 : BOARD_SURFACE_Y + 0.03;
+        if (d.mesh.position.y < floorBounceY) {
+          d.mesh.position.y = floorBounceY;
           d.vel.y *= -0.35;
           d.vel.x *= 0.72;
           d.vel.z *= 0.72;
@@ -7079,6 +7487,47 @@ export function initWizardChess() {
           const s = Math.max(0.01, d.life * 2);
           d.mesh.scale.setScalar((d.baseScale || 0.036) * s);
         }
+      }
+
+      // Advance 3D GPU Checkmate Dust & Ember Particle Systems
+      for (let i = checkmateParticleSystems.length - 1; i >= 0; i--) {
+        const ps = checkmateParticleSystems[i];
+        ps.life -= dt;
+        if (ps.life <= 0) {
+          scene.remove(ps.points);
+          ps.geometry.dispose();
+          ps.material.dispose();
+          checkmateParticleSystems.splice(i, 1);
+          continue;
+        }
+        const posAttr = ps.geometry.attributes.position;
+        const posArr = posAttr.array;
+        const velArr = ps.velocities;
+        const gravArr = ps.gravities;
+        const dragArr = ps.drags;
+        for (let p = 0; p < ps.count; p++) {
+          const p3 = p * 3;
+          const damp = Math.max(0.5, 1 - dragArr[p] * dt);
+          velArr[p3] *= damp;
+          velArr[p3 + 2] *= damp;
+          velArr[p3 + 1] -= gravArr[p] * dt;
+
+          posArr[p3] += velArr[p3] * dt;
+          posArr[p3 + 1] += velArr[p3 + 1] * dt;
+          posArr[p3 + 2] += velArr[p3 + 2] * dt;
+
+          const overBoard = Math.abs(posArr[p3]) < 1.52 && Math.abs(posArr[p3 + 2]) < 1.52;
+          const minY = overBoard ? BOARD_SURFACE_Y + 0.018 : BOARD_SURFACE_Y - 0.18;
+          if (posArr[p3 + 1] < minY) {
+            posArr[p3 + 1] = minY;
+            velArr[p3 + 1] *= -0.28;
+            velArr[p3] *= 0.68;
+            velArr[p3 + 2] *= 0.68;
+          }
+        }
+        posAttr.needsUpdate = true;
+        const lifeRatio = Math.max(0, ps.life / ps.maxLife);
+        ps.material.opacity = Math.min(0.95, Math.pow(lifeRatio, 0.78) * 1.15);
       }
 
       // Advance volumetric GLSL brazier flames & active warm firelight flicker

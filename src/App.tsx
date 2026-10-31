@@ -3440,103 +3440,6 @@ export default function App() {
                         </button>
                       )}
                     </div>
-
-                    {/* POLIIGON FREE PBR TEXTURE SUITE BAR (INDEPENDENT PER-PART TEXTURE ASSIGNMENT) */}
-                    <div className="poliigon-pbr-studio-bar">
-                      <div className="poliigon-pbr-top-row">
-                        <span className="poliigon-pbr-label">
-                          ✦ Poliigon PBR Texture — Choose Target Part:
-                        </span>
-                        <div className="poliigon-pbr-top-actions">
-                          {(poliigonSlotOverrides.pieces !== 'auto' ||
-                            poliigonSlotOverrides.table !== 'auto' ||
-                            poliigonSlotOverrides.board !== 'auto' ||
-                            poliigonSlotOverrides.trim !== 'auto') && (
-                            <button
-                              type="button"
-                              className="poliigon-pbr-reset-btn"
-                              onClick={handleResetAllPoliigonSlots}
-                              title="Reset all parts back to their automatic matched Poliigon PBR textures"
-                            >
-                              Reset All Auto
-                            </button>
-                          )}
-                          <input
-                            ref={poliigonUploadInputRef}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            style={{ display: 'none' }}
-                            onChange={handlePoliigonFilesUpload}
-                          />
-                          <button
-                            type="button"
-                            className="poliigon-pbr-upload-btn"
-                            onClick={() => poliigonUploadInputRef.current?.click()}
-                            title="Load downloaded Poliigon _Color, _NormalGL, and _Roughness image files for the selected part"
-                          >
-                            + Load PBR Maps
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 4 Independent Surface Target Tabs (Piece Set, Table & Frame, Board Tiles, Trim & Blades) */}
-                      <div className="poliigon-target-slot-row" role="tablist" aria-label="Surface Target to Customize">
-                        {(
-                          [
-                            { id: 'pieces', label: '♟ Piece Set' },
-                            { id: 'table', label: '🏛 Table & Frame' },
-                            { id: 'board', label: '▦ Board Tiles' },
-                            { id: 'trim', label: '⚔ Trim & Blades' }
-                          ] as const
-                        ).map((slot) => {
-                          const assignedId = poliigonSlotOverrides[slot.id] || 'auto';
-                          const isTargetActive = poliigonTargetSlot === slot.id;
-                          const isCustomized = assignedId !== 'auto';
-                          return (
-                            <button
-                              key={slot.id}
-                              type="button"
-                              role="tab"
-                              aria-selected={isTargetActive}
-                              className={`poliigon-target-slot-btn ${isTargetActive ? 'active' : ''} ${
-                                isCustomized ? 'customized' : ''
-                              }`}
-                              onClick={() => {
-                                setPoliigonTargetSlot(slot.id);
-                                if (slot.id === 'table' || slot.id === 'board') {
-                                  if (armoryTab !== 'boards') setArmoryTab('boards');
-                                } else if (armoryTab === 'boards') {
-                                  setArmoryTab('types');
-                                }
-                              }}
-                            >
-                              <span>{slot.label}</span>
-                              <span className="poliigon-slot-state-dot">
-                                {isCustomized ? 'Custom' : 'Auto'}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="poliigon-pbr-chip-scroll" role="group" aria-label="Poliigon PBR Presets">
-                        {POLIIGON_PRESET_CATALOG.map((preset) => {
-                          const isSelected = activePoliigonPreset === preset.id;
-                          return (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              onClick={() => handleSelectPoliigonPreset(preset.id)}
-                              title={`${preset.name} — ${preset.description}`}
-                              className={`poliigon-pbr-chip ${isSelected ? 'active' : ''}`}
-                            >
-                              {preset.id === 'auto' ? '✦ Auto PBR' : preset.code}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
                   </>
                 )}
               </div>
@@ -4446,7 +4349,13 @@ export default function App() {
           <div className="checkmate-title" id="checkmate-title">Checkmate</div>
           <div className="checkmate-rule"></div>
           <div className="checkmate-subtitle" id="checkmate-subtitle">
-            White Triumphs • The Black King Has Fallen
+            White Triumphs • Triumphant Sovereign Knocked the Black King Off the Board
+          </div>
+          <div className="checkmate-impact-pill" id="checkmate-impact-pill">
+            <span className="checkmate-impact-icon" aria-hidden="true">⚔</span>
+            <span id="checkmate-impact-text">
+              Triumphant Strike • Enemy King Knocked Off Board with Stone Debris
+            </span>
           </div>
           <div className="checkmate-actions">
             <button className="checkmate-btn" id="btn-checkmate-newgame">
@@ -4458,7 +4367,7 @@ export default function App() {
               id="btn-checkmate-lobby"
               onClick={() => {
                 const overlay = document.getElementById('checkmate-overlay');
-                if (overlay) overlay.classList.remove('visible');
+                if (overlay) overlay.classList.remove('visible', 'checkmate-impact-climax');
                 setMobileSheetOpen(false);
                 setPendingTurnHandoff(null);
                 getEngine()?.quitMatchToLobby?.();

@@ -6,6 +6,12 @@ import {
   preloadCyberCity3DAssets,
   getCyberCityMaterials
 } from './cyberCityAssetLoader.js';
+import {
+  createPolyPizzaWyvern,
+  animatePolyPizzaWyvern,
+  mountDragonPeakObjAsset,
+  preloadDragonPeak3DAssets
+} from './dragonPeakAssetLoader.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -647,15 +653,12 @@ function buildDragonSkyCitadelGroup() {
   const group = new THREE.Group();
   group.name = 'Realm_DragonSkyCitadel';
 
+  preloadDragonPeak3DAssets();
+
   const highlandStoneMat = new THREE.MeshStandardMaterial({
     color: 0xe5dec9,
     roughness: 0.42,
     metalness: 0.08
-  });
-  const cliffGraniteMat = new THREE.MeshStandardMaterial({
-    color: 0x333c4d,
-    roughness: 0.76,
-    metalness: 0.12
   });
   const sovereignBronzeMat = new THREE.MeshStandardMaterial({
     color: 0xd99b26,
@@ -664,18 +667,6 @@ function buildDragonSkyCitadelGroup() {
     emissive: 0x3b2304,
     emissiveIntensity: 0.2
   });
-  const sunCrystalMat = new THREE.MeshStandardMaterial({
-    color: 0xffea9f,
-    roughness: 0.15,
-    metalness: 0.3,
-    emissive: 0xffb703,
-    emissiveIntensity: 1.75
-  });
-  const snowCapMat = new THREE.MeshStandardMaterial({
-    color: 0xf1f5f9,
-    roughness: 0.5,
-    metalness: 0.05
-  });
   const waterfallMat = new THREE.MeshBasicMaterial({
     color: 0xbae6fd,
     transparent: true,
@@ -683,122 +674,137 @@ function buildDragonSkyCitadelGroup() {
     side: THREE.DoubleSide
   });
 
-  // 1. Sovereign Highland Fortress Courtyard & Craggy Mountain Peak Foundation
-  const courtyardSlab = new THREE.Mesh(new THREE.CylinderGeometry(11.2, 11.8, 0.52, 16), highlandStoneMat);
-  courtyardSlab.position.set(0, -0.26, 0);
+  // 1. Central Interdimensional Floating Island Foundation (`/assets/dragon_peak/floating_islands.obj`)
+  // Compact stone sanctuary dais right under the chess board & braziers (stays well inside the grassy island plateau)
+  const courtyardSlab = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.7, 0.08, 24), highlandStoneMat);
+  courtyardSlab.position.set(0, -0.04, 0);
   courtyardSlab.receiveShadow = true;
   group.add(courtyardSlab);
 
-  const cragPeakBase = new THREE.Mesh(new THREE.ConeGeometry(12.6, 8.5, 12), cliffGraniteMat);
-  cragPeakBase.rotation.x = Math.PI;
-  cragPeakBase.position.set(0, -4.5, 0);
-  group.add(cragPeakBase);
-
-  const compassRing = new THREE.Mesh(new THREE.TorusGeometry(6.4, 0.08, 10, 64), sovereignBronzeMat);
+  const compassRing = new THREE.Mesh(new THREE.TorusGeometry(4.45, 0.055, 10, 64), sovereignBronzeMat);
   compassRing.rotation.x = Math.PI / 2;
-  compassRing.position.y = 0.01;
+  compassRing.position.y = 0.005;
   group.add(compassRing);
 
-  // 2. Six Carved Dragon-Prow Watchtowers & Pointed Sky-Arches Around the Courtyard
-  const spireCount = 6;
-  for (let i = 0; i < spireCount; i++) {
-    const ang = (i / spireCount) * Math.PI * 2 + Math.PI / 6;
-    const r = 10.6;
-    const spire = new THREE.Group();
-    spire.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
-    spire.rotation.y = -ang;
+  // Mount the flattened-plateau 3D Interdimensional Floating Island directly beneath the central chess courtyard
+  mountDragonPeakObjAsset(group, 'island_006', {
+    scale: 12.2,
+    position: [0, -0.02, 0],
+    rotationY: 0.35,
+    flattenTopPlateau: true
+  });
 
-    const basePed = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.92, 1.2, 8), cliffGraniteMat);
-    basePed.position.y = 0.6;
-    spire.add(basePed);
-
-    const towerShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.72, 4.2, 8), highlandStoneMat);
-    towerShaft.position.y = 3.3;
-    spire.add(towerShaft);
-
-    const spireRoof = new THREE.Mesh(new THREE.ConeGeometry(0.78, 2.2, 8), sovereignBronzeMat);
-    spireRoof.position.y = 6.5;
-    spire.add(spireRoof);
-
-    // Sculpted Dragon-Prow Gargoyle jutting outward & inward
-    const prowNeck = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.3, 6), sovereignBronzeMat);
-    prowNeck.position.set(-0.65, 4.6, 0);
-    prowNeck.rotation.z = Math.PI * 0.35;
-    spire.add(prowNeck);
-
-    // Glowing Sun-Beacon Lantern suspended from the spire
-    const beacon = new THREE.Mesh(new THREE.OctahedronGeometry(0.26, 0), sunCrystalMat);
-    beacon.position.set(-0.95, 4.05, 0);
-    spire.add(beacon);
-
-    group.add(spire);
+  // Scenic props positioned on the flat outer grassy terrace of the central island (leaving front +Z camera view clear)
+  const rimConfigs = [
+    { key: 'bell_tower', scale: 2.5, r: 7.4, ang: Math.PI * 1.25 },
+    { key: 'tree_pine_lod0', scale: 2.4, r: 7.2, ang: Math.PI * 1.48 },
+    { key: 'curved_tree_lod0', scale: 2.3, r: 7.3, ang: Math.PI * 1.75 },
+    { key: 'rock_1', scale: 1.5, r: 7.5, ang: Math.PI * 1.92 },
+    { key: 'tree_generic_lod0', scale: 2.2, r: 7.2, ang: Math.PI * 0.12 },
+    { key: 'tree_pine_lod0', scale: 2.3, r: 7.3, ang: Math.PI * 0.88 },
+    { key: 'rock_2', scale: 1.5, r: 7.5, ang: Math.PI * 1.05 }
+  ];
+  for (const rc of rimConfigs) {
+    mountDragonPeakObjAsset(group, rc.key, {
+      scale: rc.scale,
+      position: [Math.cos(rc.ang) * rc.r, -0.02, Math.sin(rc.ang) * rc.r],
+      rotationY: -rc.ang + Math.PI * 0.5
+    });
   }
 
-  // 3. Six Distant Floating Mountain Peaks with Snow Caps & Cascading Waterfalls
+  // 2. Surrounding Interdimensional Floating Islands (`island`, `island_002`, `island_003`, `island_004`, `island_006`)
+  const islandVariants = ['island_002', 'island_003', 'island', 'island_006', 'island_004', 'island_002', 'island_003', 'island'];
+  const buildingVariants = ['bell_tower', 'mill', 'house_1', 'inn', 'house_2', 'bell_tower', 'mill', 'house_1'];
+  const treeVariants = ['tree_pine_lod0', 'curved_tree_lod0', 'tree_generic_lod0'];
   const waterfallStrips = [];
-  for (let i = 0; i < 6; i++) {
-    const ang = (i / 6) * Math.PI * 2 + 0.32;
-    const dist = 34.0 + (i % 2) * 9.0;
-    const peakH = 15.0 + (i % 3) * 4.5;
+  const floatingIslands = [];
+
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2 + 0.32;
+    const dist = 34.0 + (i % 2) * 8.0;
+    const baseY = -2.0 + (i % 3) * 1.6;
+    const islandScale = 4.5 + (i % 3) * 0.85;
 
     const peakGroup = new THREE.Group();
-    peakGroup.position.set(Math.cos(ang) * dist, -4.5, Math.sin(ang) * dist);
+    peakGroup.position.set(Math.cos(ang) * dist, baseY, Math.sin(ang) * dist);
     peakGroup.rotation.y = -ang + Math.PI;
 
-    const mainPeak = new THREE.Mesh(new THREE.ConeGeometry(6.8, peakH, 7), cliffGraniteMat);
-    mainPeak.position.y = peakH * 0.5;
-    peakGroup.add(mainPeak);
+    // 3D Interdimensional Floating Island OBJ mesh (with flattened top plateau so buildings & trees sit flush)
+    mountDragonPeakObjAsset(peakGroup, islandVariants[i % islandVariants.length], {
+      scale: islandScale,
+      position: [0, 0, 0],
+      rotationY: i * 0.8,
+      flattenTopPlateau: true
+    });
 
-    const underRoot = new THREE.Mesh(new THREE.ConeGeometry(5.8, peakH * 0.65, 7), cliffGraniteMat);
-    underRoot.rotation.x = Math.PI;
-    underRoot.position.y = -peakH * 0.32;
-    peakGroup.add(underRoot);
+    // Sanctuary building on the floating island plateau
+    mountDragonPeakObjAsset(peakGroup, buildingVariants[i % buildingVariants.length], {
+      scale: islandScale * 0.46,
+      position: [0, 0, 0],
+      rotationY: 0.35
+    });
 
-    const snowCap = new THREE.Mesh(new THREE.ConeGeometry(3.2, peakH * 0.42, 7), snowCapMat);
-    snowCap.position.y = peakH * 0.81;
-    peakGroup.add(snowCap);
+    // Low-poly trees & rock pillars flanking the island plateau
+    mountDragonPeakObjAsset(peakGroup, treeVariants[i % treeVariants.length], {
+      scale: islandScale * 0.40,
+      position: [-islandScale * 0.36, 0, islandScale * 0.22],
+      rotationY: i * 1.3
+    });
+    mountDragonPeakObjAsset(peakGroup, treeVariants[(i + 1) % treeVariants.length], {
+      scale: islandScale * 0.35,
+      position: [islandScale * 0.35, 0, -islandScale * 0.22],
+      rotationY: i * 2.1
+    });
+    mountDragonPeakObjAsset(peakGroup, i % 2 === 0 ? 'rock_pillar_1' : 'rock_1', {
+      scale: islandScale * 0.26,
+      position: [islandScale * 0.26, 0, islandScale * 0.30],
+      rotationY: i * 0.9
+    });
 
-    // Temple Sanctuary Spire on top of alternating peaks
-    if (i % 2 === 0) {
-      const shrine = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.85, 2.8, 6), highlandStoneMat);
-      shrine.position.y = peakH + 1.1;
-      peakGroup.add(shrine);
-      const shrineRoof = new THREE.Mesh(new THREE.ConeGeometry(1.05, 1.8, 6), sovereignBronzeMat);
-      shrineRoof.position.y = peakH + 3.4;
-      peakGroup.add(shrineRoof);
-    }
+    // Floating Low-Poly Cloud from the Interdimensional Floating Islands pack
+    mountDragonPeakObjAsset(peakGroup, i % 2 === 0 ? 'cloud' : 'cloud_001', {
+      scale: islandScale * 0.52,
+      position: [0, islandScale * 0.65, -islandScale * 0.35],
+      rotationY: i * 0.6
+    });
 
-    // Cascading Waterfall Ribbon pouring into the Sea of Clouds
-    const wfMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 10.5), waterfallMat);
-    wfMesh.position.set(0, 2.8, 3.6);
-    wfMesh.rotation.x = -0.18;
+    // Cascading Waterfall Ribbon pouring from the floating island into the Sea of Clouds
+    const wfMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 7.5), waterfallMat);
+    wfMesh.position.set(0, -3.6, islandScale * 0.55);
+    wfMesh.rotation.x = -0.12;
     peakGroup.add(wfMesh);
     waterfallStrips.push(wfMesh);
 
     group.add(peakGroup);
+    floatingIslands.push({
+      mesh: peakGroup,
+      baseY,
+      speed: 0.55 + (i % 3) * 0.15,
+      phase: i * 0.95
+    });
   }
 
-  // 4. Three Majestic Soaring Dragons Gliding in High Thermal Orbits
+  // 3. Three Majestic Soaring Wyverns (`https://poly.pizza/m/WIOTISRjeX` `/assets/dragon_peak/wyvern.obj`)
   const soaringDragons = [
     {
-      mesh: createSculptedSkyDragon(1.15, 0x1e293b, 0xd97706, 0xffd166),
-      orbitR: 23.5,
-      baseY: 9.8,
-      speed: 0.24,
+      mesh: createPolyPizzaWyvern(0.92, 0x1e293b, 0xd97706, 0xffd166),
+      orbitR: 15.5,
+      baseY: 5.8,
+      speed: 0.28,
       phase: 0.0
     },
     {
-      mesh: createSculptedSkyDragon(0.95, 0x31102f, 0xe11d48, 0xfbbf24),
-      orbitR: 29.0,
-      baseY: 13.5,
-      speed: -0.19,
+      mesh: createPolyPizzaWyvern(0.84, 0x31102f, 0xe11d48, 0xfbbf24),
+      orbitR: 20.5,
+      baseY: 8.2,
+      speed: -0.22,
       phase: 2.2
     },
     {
-      mesh: createSculptedSkyDragon(1.30, 0x0f172a, 0x0284c7, 0x38bdf8),
-      orbitR: 35.0,
-      baseY: 16.2,
-      speed: 0.16,
+      mesh: createPolyPizzaWyvern(1.05, 0x0f172a, 0x0284c7, 0x38bdf8),
+      orbitR: 25.5,
+      baseY: 10.8,
+      speed: 0.18,
       phase: 4.3
     }
   ];
@@ -809,7 +815,8 @@ function buildDragonSkyCitadelGroup() {
 
   group.userData = {
     soaringDragons,
-    waterfallStrips
+    waterfallStrips,
+    floatingIslands
   };
 
   return group;
@@ -1390,9 +1397,14 @@ export function createWorldSceneryManager(scene) {
       }
     }
 
-    // 2. Animate Dragon Peak Sky Citadel (Soaring Dragons & Wingbeats)
+    // 2. Animate Dragon Peak Sky Citadel (Soaring Wyverns, Bobbing Floating Islands & Waterfalls)
     if (dragonCitadelGroup.visible) {
-      const { soaringDragons, waterfallStrips } = dragonCitadelGroup.userData;
+      const { soaringDragons, waterfallStrips, floatingIslands } = dragonCitadelGroup.userData;
+      if (floatingIslands) {
+        for (const fi of floatingIslands) {
+          fi.mesh.position.y = fi.baseY + Math.sin(elapsedTotal * fi.speed + fi.phase) * 0.45;
+        }
+      }
       for (const d of soaringDragons) {
         const theta = elapsedTotal * d.speed + d.phase;
         const nextTheta = theta + (d.speed >= 0 ? 0.05 : -0.05);
@@ -1407,9 +1419,7 @@ export function createWorldSceneryManager(scene) {
           Math.sin(nextTheta) * d.orbitR
         );
 
-        const flap = Math.sin(elapsedTotal * 4.2 + d.phase) * 0.42;
-        if (d.mesh.userData.leftWing) d.mesh.userData.leftWing.rotation.z = flap;
-        if (d.mesh.userData.rightWing) d.mesh.userData.rightWing.rotation.z = -flap;
+        animatePolyPizzaWyvern(d.mesh, elapsedTotal, d.phase);
       }
       for (let i = 0; i < waterfallStrips.length; i++) {
         waterfallStrips[i].material.opacity = 0.45 + 0.15 * Math.sin(elapsedTotal * 3.5 + i);

@@ -31,6 +31,12 @@ import {
   mountHalloweenModel,
   preloadHalloween3DAssets
 } from './halloweenAssetLoader.js';
+import {
+  createPolyPizzaWyvern,
+  animatePolyPizzaWyvern,
+  mountDragonPeakObjAsset,
+  preloadDragonPeak3DAssets
+} from './dragonPeakAssetLoader.js';
 
 interface SkinShowcaseCanvasProps {
   activeTab: 'types' | 'sceneries' | 'boards' | 'pieces';
@@ -422,7 +428,11 @@ export default function SkinShowcaseCanvas({
       for (let i = 0; i < state.floatingNodes.length; i++) {
         const node = state.floatingNodes[i];
         node.mesh.position.y = node.baseY + Math.sin(elapsed * 2.4 + node.phase) * 0.055;
-        node.mesh.rotation.y += delta * 0.9;
+        if (node.mesh.name === 'PolyPizza_Wyvern_WIOTISRjeX') {
+          animatePolyPizzaWyvern(node.mesh, elapsed, node.phase);
+        } else {
+          node.mesh.rotation.y += delta * 0.9;
+        }
       }
 
       if (state.weatherPoints && state.weatherVelocities) {
@@ -854,24 +864,35 @@ export default function SkinShowcaseCanvas({
         roughness: 0.72,
         metalness: 0.25
       });
-      const islandSpire = new THREE.Mesh(new THREE.ConeGeometry(1.18, 0.85, 8), cragMat);
-      islandSpire.rotation.x = Math.PI;
-      islandSpire.position.y = -0.45;
-      islandGroup.add(islandSpire);
+      if (scenery.id === 'dragon_sky_citadel') {
+        preloadDragonPeak3DAssets();
+        mountDragonPeakObjAsset(islandGroup, 'island_006', {
+          scale: 1.32,
+          position: [0, -0.01, 0],
+          rotationY: 0.35,
+          flattenTopPlateau: true
+        });
+      } else {
+        const islandSpire = new THREE.Mesh(new THREE.ConeGeometry(1.18, 0.85, 8), cragMat);
+        islandSpire.rotation.x = Math.PI;
+        islandSpire.position.y = -0.45;
+        islandGroup.add(islandSpire);
+      }
 
+      const plinthRadius = scenery.id === 'dragon_sky_citadel' ? 0.68 : 1.12;
       const altarPlinth = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.12, 1.18, 0.12, 32),
+        new THREE.CylinderGeometry(plinthRadius, plinthRadius + 0.05, 0.08, 32),
         new THREE.MeshStandardMaterial({
           color: 0x10131c,
           roughness: 0.32,
           metalness: 0.65
         })
       );
-      altarPlinth.position.y = -0.05;
+      altarPlinth.position.y = -0.03;
       islandGroup.add(altarPlinth);
 
       const rimTorus = new THREE.Mesh(
-        new THREE.TorusGeometry(1.14, 0.028, 16, 48),
+        new THREE.TorusGeometry(plinthRadius + 0.02, 0.024, 16, 48),
         new THREE.MeshStandardMaterial({
           color: accentHex,
           emissive: accentHex,
@@ -935,35 +956,52 @@ export default function SkinShowcaseCanvas({
           st.floatingNodes.push({ mesh: monolith, baseY, phase: i * 1.1 });
         }
       } else if (scenery.id === 'dragon_sky_citadel') {
-        const cloudMat = new THREE.MeshStandardMaterial({
-          color: 0xffe8c2,
-          emissive: 0xd97724,
-          emissiveIntensity: 0.22,
-          roughness: 0.85,
-          metalness: 0.05
+        // Mount 3D OBJ Interdimensional Floating Islands, Bell Tower, Pine Trees, Clouds & Poly Pizza Wyvern
+        mountDragonPeakObjAsset(islandGroup, 'bell_tower', {
+          scale: 0.42,
+          position: [0, 0, -0.82],
+          rotationY: 0
         });
-        for (let i = 0; i < 10; i++) {
-          const ang = (i / 10) * Math.PI * 2;
-          const rad = 1.35 + (i % 2) * 0.25;
-          const puff = new THREE.Mesh(
-            new THREE.SphereGeometry(0.24 + (i % 3) * 0.06, 16, 14),
-            cloudMat
+        mountDragonPeakObjAsset(islandGroup, 'tree_pine_lod0', {
+          scale: 0.38,
+          position: [-0.82, 0, -0.45],
+          rotationY: 0.4
+        });
+        mountDragonPeakObjAsset(islandGroup, 'curved_tree_lod0', {
+          scale: 0.36,
+          position: [0.82, 0, -0.45],
+          rotationY: -0.4
+        });
+
+        const miniIslandVariants = ['island_002', 'island_003', 'island_004', 'island_006'];
+        for (let i = 0; i < 4; i++) {
+          const ang = (i / 4) * Math.PI * 2 + 0.45;
+          const rad = 1.52;
+          const baseY = -0.05 + (i % 2) * 0.16;
+          const satHolder = mountDragonPeakObjAsset(
+            subjectGroup,
+            miniIslandVariants[i % miniIslandVariants.length],
+            {
+              scale: 0.38,
+              position: [Math.cos(ang) * rad, baseY, Math.sin(ang) * rad],
+              rotationY: i * 1.2,
+              flattenTopPlateau: true
+            }
           );
-          puff.scale.set(1.3, 0.55, 1.1);
-          const baseY = -0.18 + (i % 2) * 0.08;
-          puff.position.set(Math.cos(ang) * rad, baseY, Math.sin(ang) * rad);
-          subjectGroup.add(puff);
-          st.floatingNodes.push({ mesh: puff, baseY, phase: i * 0.7 });
+          mountDragonPeakObjAsset(satHolder, i % 2 === 0 ? 'tree_pine_lod0' : 'mill', {
+            scale: 0.45,
+            position: [0, 0, 0]
+          });
+          st.floatingNodes.push({ mesh: satHolder, baseY, phase: i * 0.9 });
         }
 
-        const spireGeo = new THREE.ConeGeometry(0.11, 0.65, 6);
-        for (const sx of [-1, 1]) {
-          for (const sz of [-1, 1]) {
-            const spire = new THREE.Mesh(spireGeo, accentGlowMat);
-            spire.position.set(sx * 0.78, 0.32, sz * 0.78);
-            islandGroup.add(spire);
-          }
-        }
+        // Soaring Poly Pizza Wyvern (`wyvern.obj`) gliding above the floating island
+        const wyvernMesh = createPolyPizzaWyvern(0.22, 0x1e293b, 0xd97706, 0xffd166);
+        const wyvernBaseY = 0.88;
+        wyvernMesh.position.set(0, wyvernBaseY, -0.35);
+        wyvernMesh.rotation.y = Math.PI * 0.22;
+        subjectGroup.add(wyvernMesh);
+        st.floatingNodes.push({ mesh: wyvernMesh, baseY: wyvernBaseY, phase: 0.5 });
       } else if (scenery.id === 'volcanic_titan_forge') {
         const lavaRing = new THREE.Mesh(
           new THREE.TorusGeometry(1.48, 0.09, 16, 48),

@@ -1,0 +1,168 @@
+# Interdimensional Floating Islands MTL
+newmtl island_path
+Ka 0.2494 0.2169 0.1065
+Kd 0.7126 0.6197 0.3043
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl island_grass
+Ka 0.1089 0.2319 0.1044
+Kd 0.3110 0.6626 0.2984
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl island_dirt
+Ka 0.1330 0.0886 0.0484
+Kd 0.3801 0.2532 0.1382
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_stone_light
+Ka 0.1764 0.1911 0.1989
+Kd 0.5040 0.5461 0.5682
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_stone_dark
+Ka 0.1499 0.1616 0.1782
+Kd 0.4281 0.4618 0.5092
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_wood
+Ka 0.1491 0.1035 0.0644
+Kd 0.4259 0.2956 0.1841
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_plaster
+Ka 0.2383 0.2321 0.1793
+Kd 0.6808 0.6631 0.5122
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_wood_side
+Ka 0.2266 0.1975 0.1358
+Kd 0.6475 0.5642 0.3879
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_windows
+Ka 0.0765 0.0765 0.0765
+Kd 0.2185 0.2185 0.2185
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_wood_light
+Ka 0.1920 0.1311 0.0807
+Kd 0.5485 0.3746 0.2307
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_bell
+Ka 0.2641 0.1947 0.0869
+Kd 0.7546 0.5561 0.2482
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_roof_tiles
+Ka 0.0581 0.1340 0.1466
+Kd 0.1660 0.3827 0.4187
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_stone
+Ka 0.1212 0.1242 0.1331
+Kd 0.3464 0.3548 0.3804
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl building_vegetation
+Ka 0.1129 0.1466 0.0766
+Kd 0.3225 0.4187 0.2189
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl shm_wind_plant_wood_light
+Ka 0.2197 0.1707 0.1082
+Kd 0.6277 0.4878 0.3091
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl shm_wind_plant_leaf_dark
+Ka 0.0985 0.1892 0.1239
+Kd 0.2815 0.5405 0.3540
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl shm_wind_plant_leaf_light
+Ka 0.1606 0.2479 0.0670
+Kd 0.4590 0.7083 0.1916
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl shm_wind_plant_wood_dark
+Ka 0.1528 0.1066 0.0778
+Kd 0.4365 0.3046 0.2223
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl shm_wind_plant_leaf_darker
+Ka 0.0596 0.1312 0.0813
+Kd 0.1703 0.3750 0.2324
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl m_rocks_rock
+Ka 0.3162 0.3162 0.3162
+Kd 0.9035 0.9035 0.9035
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2
+
+newmtl cloud
+Ka 0.3162 0.3162 0.3162
+Kd 0.9035 0.9035 0.9035
+Ks 0.1500 0.1500 0.1500
+Ns 32.0
+d 1.0
+illum 2

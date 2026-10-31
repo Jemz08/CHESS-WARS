@@ -1,0 +1,33 @@
+# Poly Pizza Wyvern MTL
+newmtl Wyvern_Body
+Ka 0.15 0.18 0.24
+Kd 0.16 0.22 0.32
+Ks 0.35 0.35 0.40
+Ns 64.0
+d 1.0
+illum 2
+
+newmtl Wyvern_Wings
+Ka 0.45 0.22 0.05
+Kd 0.85 0.46 0.06
+Ks 0.40 0.30 0.15
+Ns 48.0
+d 1.0
+illum 2
+
+newmtl Wyvern_Accent
+Ka 0.55 0.45 0.15
+Kd 0.98 0.82 0.38
+Ks 0.80 0.70 0.40
+Ns 96.0
+d 1.0
+illum 2
+
+newmtl Wyvern_Eyes
+Ka 0.90 0.70 0.10
+Kd 1.00 0.85 0.20
+Ke 1.00 0.75 0.15
+Ks 0.90 0.90 0.90
+Ns 128.0
+d 1.0
+illum 2
