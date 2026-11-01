@@ -3260,8 +3260,8 @@ export function initWizardChess() {
       function scoreDuelPerpOcclusion(perpVec) {
         let penalty = 0;
         const probes = [
-          { perpMul: 1.24, dirMul: -0.34 },
-          { perpMul: 0.92, dirMul: 0.14 }
+          { perpMul: 1.88, dirMul: -0.58 },
+          { perpMul: 1.48, dirMul: -0.14 }
         ];
         for (const pr of probes) {
           const camX = midPoint.x + perpVec.x * pr.perpMul + dirX * pr.dirMul;
@@ -3292,26 +3292,26 @@ export function initWizardChess() {
         scoreDuelPerpOcclusion(prefPerp) > scoreDuelPerpOcclusion(altPerp) + 0.25 ? altPerp : prefPerp;
 
       // Continuous Quadratic Bezier 3/4 orbit-and-dolly arc (savedCamPos -> duelCamMid -> duelCamClose)
-      // so the attack camera glides in a single unbroken C-infinity sweep across approach + strike without ever stalling at tApproach
+      // Zoomed out for a wider, clearer view of both combatants, full weapon/spell VFX, and surrounding board context
       const duelCamMid = new THREE.Vector3(
-        midPoint.x + chosenPerp.x * 1.34 - dirX * 0.44,
-        BOARD_SURFACE_Y + 0.96,
-        midPoint.z + chosenPerp.z * 1.34 - dirZ * 0.44
+        midPoint.x + chosenPerp.x * 1.88 - dirX * 0.58,
+        BOARD_SURFACE_Y + 1.34,
+        midPoint.z + chosenPerp.z * 1.88 - dirZ * 0.58
       );
       const duelCamClose = new THREE.Vector3(
-        midPoint.x + chosenPerp.x * 0.92 + dirX * 0.18,
-        BOARD_SURFACE_Y + 0.74,
-        midPoint.z + chosenPerp.z * 0.92 + dirZ * 0.18
+        midPoint.x + chosenPerp.x * 1.48 - dirX * 0.14,
+        BOARD_SURFACE_Y + 1.10,
+        midPoint.z + chosenPerp.z * 1.48 - dirZ * 0.14
       );
       const duelTargetStart = new THREE.Vector3(
-        strikePos.x + dirX * 0.10,
-        BOARD_SURFACE_Y + 0.34,
-        strikePos.z + dirZ * 0.10
+        strikePos.x + dirX * 0.08,
+        BOARD_SURFACE_Y + 0.30,
+        strikePos.z + dirZ * 0.08
       );
       const duelTargetEnd = new THREE.Vector3(
-        endPos.x - dirX * 0.05,
-        BOARD_SURFACE_Y + 0.30,
-        endPos.z - dirZ * 0.05
+        endPos.x - dirX * 0.06,
+        BOARD_SURFACE_Y + 0.26,
+        endPos.z - dirZ * 0.06
       );
 
       function evalQuadraticBezier(outVec, p0, p1, p2, t) {
@@ -3443,9 +3443,23 @@ export function initWizardChess() {
 
         const nextInCheck = isKingInCheck(currentTurn, boardState);
         const nextMoves = getAllLegalMoves(currentTurn);
-        const moveEndsMatch = (!scriptedGameActive && nextInCheck) || nextMoves.length === 0;
+        const moveEndsMatch = nextMoves.length === 0;
 
-        // 1-Phone P1 vs P2 (pass-and-play) automatic turn & camera handoff (skip if Check/Checkmate just ended the match!)
+        // If the King is placed in Check (with legal moves remaining), pulse the checked King's square with a crimson shockwave
+        if (nextInCheck && !moveEndsMatch) {
+          for (let kr = 0; kr < 8; kr++) {
+            for (let kc = 0; kc < 8; kc++) {
+              const kp = boardState[kr][kc];
+              if (kp && kp.type === 'king' && kp.color === currentTurn) {
+                const kingWorldPos = boardToWorld(kr, kc);
+                sfxVfxManager.spawnSquarePulseVfx(kingWorldPos, 0xff2a3c, 0.36, 0.70);
+                break;
+              }
+            }
+          }
+        }
+
+        // 1-Phone P1 vs P2 (pass-and-play) automatic turn & camera handoff (skip if Checkmate/Stalemate just ended the match!)
         if (gameMode === 'pass' && !moveEndsMatch) {
           playerColor = currentTurn;
           playerCamSide = currentTurn;
@@ -4986,15 +5000,15 @@ export function initWizardChess() {
       const qTilt = new THREE.Quaternion();
       const qRoll = new THREE.Quaternion();
 
-      // Smoothly frame the checkmate strike & off-board knock-off trajectory if user isn't flying camera with WASD
+      // Smoothly frame the checkmate strike & off-board knock-off trajectory from a wider, clearer angle
       if (heldCameraKeys.size === 0) {
         const perpX = -fallDirZ;
         const perpZ = fallDirX;
         const sideSign = homePos.x * perpX + homePos.z * perpZ >= 0 ? 1 : -1;
         const camPos = new THREE.Vector3(
-          homePos.x + perpX * sideSign * 1.38 - fallDirX * 0.42,
-          BOARD_SURFACE_Y + 1.12,
-          homePos.z + perpZ * sideSign * 1.38 - fallDirZ * 0.42
+          homePos.x + perpX * sideSign * 1.85 - fallDirX * 0.58,
+          BOARD_SURFACE_Y + 1.38,
+          homePos.z + perpZ * sideSign * 1.85 - fallDirZ * 0.58
         );
         const lookTarget = new THREE.Vector3(
           homePos.x + fallDirX * (distToBoardRim * 0.48),
@@ -5234,6 +5248,8 @@ export function initWizardChess() {
     // =========================================================================
     // UI & Turn Status Updates
     // =========================================================================
+    let lastAnnouncedCheckKey = null;
+
     function updateTurnUI() {
       const turnDot = document.getElementById('turn-dot');
       const turnText = document.getElementById('turn-text');
@@ -5247,24 +5263,25 @@ export function initWizardChess() {
 
       const legalMoves = getAllLegalMoves(currentTurn);
       const inCheck = isKingInCheck(currentTurn, boardState);
-      // In interactive gameplay (!scriptedGameActive), putting a King in Check immediately wins the match!
-      const checkEndsMatchNow = inCheck && (!scriptedGameActive || legalMoves.length === 0);
+      // Match ends only when there are zero legal moves (Checkmate if inCheck, Stalemate otherwise)
+      const checkEndsMatchNow = legalMoves.length === 0;
 
       updateCheck3DIndicator(inCheck ? currentTurn : null);
+      if (!inCheck) {
+        lastAnnouncedCheckKey = null;
+      }
 
-      if (checkEndsMatchNow || legalMoves.length === 0) {
+      if (checkEndsMatchNow) {
         const wasAlreadyOver = gameOver;
         gameOver = true;
         if (inCheck) {
           const winnerColor = currentTurn === 'w' ? 'b' : 'w';
           const winner = currentTurn === 'w' ? 'Black' : 'White';
           const defeated = currentTurn === 'w' ? 'White' : 'Black';
-          const isCheckmate = legalMoves.length === 0;
-          turnText.textContent = isCheckmate
-            ? `Checkmate — ${winner} Wins`
-            : `CHECK! — ${winner} Wins!`;
+          const isCheckmate = true;
+          turnText.textContent = `Checkmate — ${winner} Wins`;
           if (!checkmateState.active) {
-            triggerCheckmateSequence(currentTurn, winnerColor, { isCheckWin: !isCheckmate });
+            triggerCheckmateSequence(currentTurn, winnerColor, { isCheckWin: false });
           }
           if (!wasAlreadyOver) {
             announceSanctumEvent('check_win', {
@@ -5284,7 +5301,7 @@ export function initWizardChess() {
                   gameMode,
                   botDifficulty,
                   isHumanWin,
-                  isCheckWin: !isCheckmate
+                  isCheckWin: false
                 }
               })
             );
@@ -5299,10 +5316,23 @@ export function initWizardChess() {
         const aiColor = playerColor === 'w' ? 'b' : 'w';
         const isAiTurn = !scriptedGameActive && gameMode === 'single' && currentTurn === aiColor;
         if (inCheck) {
+          const checkedSide = currentTurn === 'w' ? 'White' : 'Black';
           turnText.textContent = `${turnLabel} (Check!)`;
-          announceSanctumEvent('check_alert', {
-            checkedSide: currentTurn === 'w' ? 'White' : 'Black'
-          });
+          const checkKey = `${moveHistory.length}:${currentTurn}`;
+          if (lastAnnouncedCheckKey !== checkKey) {
+            lastAnnouncedCheckKey = checkKey;
+            announceSanctumEvent('check_alert', {
+              checkedSide
+            });
+            window.dispatchEvent(
+              new CustomEvent('wizardchess:checkalert', {
+                detail: {
+                  checkedColor: currentTurn,
+                  checkedSide
+                }
+              })
+            );
+          }
         } else if (isAiTurn) {
           turnText.textContent = `${turnLabel} (AI)...`;
         } else {

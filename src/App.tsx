@@ -1306,6 +1306,12 @@ export default function App() {
       }
     };
 
+    const handleCheckAlert = (ev: Event) => {
+      const d = (ev as CustomEvent).detail;
+      const sideLabel = d?.checkedSide || 'King';
+      showRewardToast(0, `CHECK! · ${sideLabel} King Under Attack!`);
+    };
+
     window.addEventListener('wizardchess:piececaptured', handlePieceCaptured);
     window.addEventListener('wizardchess:matchwon', handleMatchWon);
     window.addEventListener('wizardchess:statechange', handleStateChange);
@@ -1319,6 +1325,7 @@ export default function App() {
     window.addEventListener('wizardchess:matchmakingtimeout', handleMatchmakingTimeout);
     window.addEventListener('wizardchess:roomupdate', handleRoomUpdate);
     window.addEventListener('wizardchess:turnswitch', handleTurnSwitch);
+    window.addEventListener('wizardchess:checkalert', handleCheckAlert);
 
     return () => {
       window.removeEventListener('wizardchess:piececaptured', handlePieceCaptured);
@@ -1334,6 +1341,7 @@ export default function App() {
       window.removeEventListener('wizardchess:matchmakingtimeout', handleMatchmakingTimeout);
       window.removeEventListener('wizardchess:roomupdate', handleRoomUpdate);
       window.removeEventListener('wizardchess:turnswitch', handleTurnSwitch);
+      window.removeEventListener('wizardchess:checkalert', handleCheckAlert);
     };
   }, [passPrivacyCurtain]);
 
@@ -1824,7 +1832,7 @@ export default function App() {
           <div className="loader-lore-box">
             <span className="loader-lore-tag">SANCTUM EDICT</span>
             <p className="loader-lore-copy">
-              Placing the enemy Sovereign in Check claims immediate triumph upon the Obsidian Altar.
+              Place the enemy Sovereign in Check to force their hand, and deliver Checkmate upon the Obsidian Altar to claim triumph.
               Earn Gold from every shattered statue to unlock new 3D Sculptures and Arenas in the Armory.
             </p>
           </div>

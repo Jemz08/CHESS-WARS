@@ -719,7 +719,10 @@ export const MIXKIT_SFX_MANIFEST = {
   move_land_thud_2150: '/sfx/move_land_thud_2150.mp3',       // Mixkit #2150: Impact of a blow
   promotion_fanfare_270: '/sfx/promotion_fanfare_270.mp3',   // Mixkit #270: Fantasy game success notification
 
-  // Checked / Victory Fanfare SFX (Mixkit Win & Fanfare Library)
+  // Checked / Victory Fanfare & Soundsnap British Voice SFX
+  soundsnap_check_british_1: '/assets/audio/soundsnap_check_british_1.mp3',         // Soundsnap #479780: Male voice with a British accent saying "Check" (Take 1)
+  soundsnap_check_british_2: '/assets/audio/soundsnap_check_british_2.mp3',         // Soundsnap #479781: Male voice with a British accent saying "Check" (Take 2)
+  soundsnap_checkmate_british_2: '/assets/audio/soundsnap_checkmate_british_2.mp3', // Soundsnap #479783: Male voice with a British accent saying "Checkmate"
   medieval_victory_fanfare_226: '/sfx/medieval_victory_fanfare_226.mp3', // Mixkit #226: Medieval show fanfare announcement
   horns_victory_fanfare_722: '/sfx/horns_victory_fanfare_722.mp3',       // Mixkit #722: Successful horns fanfare
   grand_brass_fanfare_631: '/sfx/grand_brass_fanfare_631.mp3',           // Mixkit #631: Grand brass fanfare
@@ -915,10 +918,13 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       fadeOut = 0.06,
       lowpassFreq = null,
       highpassFreq = null,
-      pan = 0
+      pan = 0,
+      exactRate = false
     } = opts;
 
+    const isVoiceKey = key.startsWith('soundsnap_');
     const isUiOrLoadingKey =
+      isVoiceKey ||
       key.startsWith('lobby_') ||
       key.startsWith('loading_') ||
       key === 'medieval_lock_187';
@@ -932,14 +938,14 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         const src = ctx.createBufferSource();
         src.buffer = buf;
 
-        // Slight natural micro-variation if not explicitly fixed
-        const jitterRate = rate * (0.985 + Math.random() * 0.03);
+        // Preserve natural pitch for voice clips or when exactRate is true; otherwise apply slight micro-variation
+        const jitterRate = (exactRate || isVoiceKey) ? rate : rate * (0.985 + Math.random() * 0.03);
         src.playbackRate.setValueAtTime(Math.max(0.25, Math.min(3.0, jitterRate)), startTime);
         if (detuneCents && src.detune) {
           src.detune.setValueAtTime(detuneCents, startTime);
         }
 
-        const autoTrim = trimOffsetCache.get(key) || 0;
+        const autoTrim = isVoiceKey ? 0 : (trimOffsetCache.get(key) || 0);
         const startOffset = Math.min(Math.max(0, buf.duration - 0.05), autoTrim + Math.max(0, extraOffset));
         const availableDur = Math.max(0.04, (buf.duration - startOffset) / Math.max(0.25, jitterRate));
         const playDur = maxDuration ? Math.min(availableDur, maxDuration) : availableDur;
@@ -1143,59 +1149,71 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     });
   }
 
-  // Checked / Checkmate Victory Fanfare SFX (Mixkit #226, #722, #631, #270, #600)
+  // Checked / Checkmate Voice & Victory Fanfare SFX (Soundsnap British Voice + Mixkit Fanfare)
+  let checkVoiceTakeIndex = 0;
+
   function playSanctumHornSfx(kind = 'check_win', forcePlay = false) {
     if (!sfxEnabled && !forcePlay) return;
     if (kind === 'check_win') {
-      // Triumphant Medieval Victory Fanfare when placing the enemy Sovereign in Check / Checkmate
+      // Soundsnap British Voice: "Checkmate!" (male_voice_with_a_british_accent_saying_a_chess_term_checkmate_2)
+      playMixkitClip('soundsnap_checkmate_british_2', {
+        delay: 0,
+        volume: 1.0,
+        rate: 1.0,
+        exactRate: true,
+        fadeIn: 0.001,
+        fadeOut: 0.02
+      });
+      // Triumphant Medieval Victory Fanfare underscoring the Checkmate announcement
+      playMixkitClip('achievement_bell_600', {
+        delay: 0.08,
+        volume: 0.50,
+        rate: 1.0,
+        maxDuration: 2.2,
+        fadeOut: 0.38
+      });
       playMixkitClip('medieval_victory_fanfare_226', {
-        volume: 0.92,
+        delay: 0.34,
+        volume: 0.58,
         rate: 1.0,
         maxDuration: 4.5,
         fadeOut: 0.55
       });
       playMixkitClip('horns_victory_fanfare_722', {
-        delay: 0.06,
-        volume: 0.84,
+        delay: 0.42,
+        volume: 0.48,
         rate: 1.0,
         maxDuration: 3.6,
         fadeOut: 0.45
       });
-      playMixkitClip('promotion_fanfare_270', {
-        delay: 0.12,
-        volume: 0.76,
-        rate: 1.0,
-        maxDuration: 2.2,
-        fadeOut: 0.35
-      });
-      playMixkitClip('achievement_bell_600', {
-        delay: 0.02,
-        volume: 0.68,
-        rate: 1.0,
-        maxDuration: 2.4,
-        fadeOut: 0.40
-      });
     } else {
-      // Check Alert Victory Horn & Fanfare Chime
-      playMixkitClip('horns_victory_fanfare_722', {
-        volume: 0.85,
-        rate: 1.04,
-        maxDuration: 2.6,
-        fadeOut: 0.38
+      // Soundsnap British Voice: "Check!" (from https://www.soundsnap.com/search/audio?query=Check+chess)
+      const checkVoiceKey =
+        checkVoiceTakeIndex % 2 === 0 ? 'soundsnap_check_british_1' : 'soundsnap_check_british_2';
+      checkVoiceTakeIndex += 1;
+
+      playMixkitClip(checkVoiceKey, {
+        delay: 0,
+        volume: 1.0,
+        rate: 1.0,
+        exactRate: true,
+        fadeIn: 0.001,
+        fadeOut: 0.02
       });
-      playMixkitClip('promotion_fanfare_270', {
-        delay: 0.03,
-        volume: 0.72,
-        rate: 1.02,
-        maxDuration: 1.85,
+      // Crisp Check Alert Chime layered right behind the British voice
+      playMixkitClip('achievement_bell_600', {
+        delay: 0.08,
+        volume: 0.44,
+        rate: 1.06,
+        maxDuration: 1.6,
         fadeOut: 0.30
       });
-      playMixkitClip('achievement_bell_600', {
-        delay: 0.01,
-        volume: 0.64,
-        rate: 1.05,
-        maxDuration: 1.8,
-        fadeOut: 0.32
+      playMixkitClip('promotion_fanfare_270', {
+        delay: 0.16,
+        volume: 0.34,
+        rate: 1.04,
+        maxDuration: 1.35,
+        fadeOut: 0.28
       });
     }
   }
