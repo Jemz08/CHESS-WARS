@@ -3558,19 +3558,28 @@ export default function App() {
                               <span
                                 className="skin-orb"
                                 style={{
-                                  background: `radial-gradient(circle at 32% 30%, #ffffff, ${skin.whiteHex} 58%, #1a1c22 100%)`,
-                                  borderColor: skin.trimHex
+                                  background: `radial-gradient(circle at 32% 30%, #ffffff, ${skin.whiteHex} 58%, ${skin.whiteEmissiveHex || '#1a1c22'} 100%)`,
+                                  borderColor: skin.trimHex,
+                                  boxShadow: skin.isGlowing
+                                    ? `0 0 11px ${skin.whiteEmissiveHex || skin.bladeEmissiveHex}, inset 0 0 6px ${skin.trimHex}`
+                                    : undefined
                                 }}
                                 title="White Army Material"
                               />
                               <span
                                 className="skin-orb"
                                 style={{
-                                  background: `radial-gradient(circle at 32% 30%, ${skin.bladeHex}, ${skin.blackHex} 62%, #050608 100%)`,
-                                  borderColor: skin.trimHex
+                                  background: `radial-gradient(circle at 32% 30%, ${skin.bladeHex}, ${skin.blackHex} 62%, ${skin.blackEmissiveHex || '#050608'} 100%)`,
+                                  borderColor: skin.trimHex,
+                                  boxShadow: skin.isGlowing
+                                    ? `0 0 11px ${skin.bladeEmissiveHex || skin.blackEmissiveHex}, inset 0 0 6px ${skin.trimHex}`
+                                    : undefined
                                 }}
                                 title="Black Army Material"
                               />
+                              {skin.badge && (
+                                <span className="skin-archetype-badge">{skin.badge}</span>
+                              )}
                             </div>
                             <div className="skin-status-badges">
                               {isInspecting && (

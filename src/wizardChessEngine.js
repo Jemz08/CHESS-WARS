@@ -15,6 +15,10 @@ import {
 } from './poliigonPbrTextures.js';
 import { createWorldSceneryManager } from './worldSceneries.js';
 import { createSoundAndVfxManager, PIECE_KILL_PROFILES, getArchetypeKillProfile } from './soundAndVfxEngine.js';
+import {
+  configureGlowingPieceBodyMaterial,
+  attachPieceBodyOutline
+} from './pieceOutlineAndGlow.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -1063,6 +1067,10 @@ export function initWizardChess() {
         whitePieceMat.metalness = skin.whiteMetalness ?? 0.06;
         whitePieceMat.emissive.set(skin.whiteEmissiveHex || '#000000');
         whitePieceMat.emissiveIntensity = skin.whiteEmissiveIntensity ?? 0;
+        whitePieceMat.userData.baseEmissiveIntensity = whitePieceMat.emissiveIntensity;
+        whitePieceMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
+        whitePieceMat.userData.activeSkinObj = skin;
+        configureGlowingPieceBodyMaterial(whitePieceMat, skin, 'w');
         applyPoliigonPbrToMaterial(whitePieceMat, pbrPresets.whitePreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1074,6 +1082,10 @@ export function initWizardChess() {
         whiteTrimMat.color.set(skin.trimHex || '#d4af37');
         whiteTrimMat.roughness = skin.trimRoughness ?? 0.26;
         whiteTrimMat.metalness = skin.trimMetalness ?? 0.86;
+        whiteTrimMat.emissive.set(skin.trimEmissiveHex || '#000000');
+        whiteTrimMat.emissiveIntensity = skin.trimEmissiveIntensity ?? 0;
+        whiteTrimMat.userData.baseEmissiveIntensity = whiteTrimMat.emissiveIntensity;
+        whiteTrimMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
         applyPoliigonPbrToMaterial(whiteTrimMat, pbrPresets.trimPreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1088,6 +1100,8 @@ export function initWizardChess() {
         whiteBladeMat.metalness = skin.bladeMetalness ?? 0.88;
         whiteBladeMat.emissive.set(skin.bladeEmissiveHex || '#222832');
         whiteBladeMat.emissiveIntensity = skin.bladeEmissiveIntensity ?? 0.25;
+        whiteBladeMat.userData.baseEmissiveIntensity = whiteBladeMat.emissiveIntensity;
+        whiteBladeMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
         applyPoliigonPbrToMaterial(whiteBladeMat, pbrPresets.bladePreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1102,6 +1116,10 @@ export function initWizardChess() {
         blackPieceMat.metalness = skin.blackMetalness ?? 0.24;
         blackPieceMat.emissive.set(skin.blackEmissiveHex || '#000000');
         blackPieceMat.emissiveIntensity = skin.blackEmissiveIntensity ?? 0;
+        blackPieceMat.userData.baseEmissiveIntensity = blackPieceMat.emissiveIntensity;
+        blackPieceMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
+        blackPieceMat.userData.activeSkinObj = skin;
+        configureGlowingPieceBodyMaterial(blackPieceMat, skin, 'b');
         applyPoliigonPbrToMaterial(blackPieceMat, pbrPresets.blackPreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1113,6 +1131,10 @@ export function initWizardChess() {
         blackTrimMat.color.set(skin.trimHex || '#d4af37');
         blackTrimMat.roughness = skin.trimRoughness ?? 0.26;
         blackTrimMat.metalness = skin.trimMetalness ?? 0.86;
+        blackTrimMat.emissive.set(skin.trimEmissiveHex || '#000000');
+        blackTrimMat.emissiveIntensity = skin.trimEmissiveIntensity ?? 0;
+        blackTrimMat.userData.baseEmissiveIntensity = blackTrimMat.emissiveIntensity;
+        blackTrimMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
         applyPoliigonPbrToMaterial(blackTrimMat, pbrPresets.trimPreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1127,6 +1149,8 @@ export function initWizardChess() {
         blackBladeMat.metalness = skin.bladeMetalness ?? 0.88;
         blackBladeMat.emissive.set(skin.bladeEmissiveHex || '#222832');
         blackBladeMat.emissiveIntensity = skin.bladeEmissiveIntensity ?? 0.25;
+        blackBladeMat.userData.baseEmissiveIntensity = blackBladeMat.emissiveIntensity;
+        blackBladeMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
         applyPoliigonPbrToMaterial(blackBladeMat, pbrPresets.bladePreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1135,6 +1159,15 @@ export function initWizardChess() {
           envMapIntensity: 1.65,
           useNormalMap: false
         });
+      }
+      // Refresh 3D geometric outlines on existing board pieces for this side
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = boardState[r] && boardState[r][c];
+          if (p && p.color === side && p.mesh) {
+            attachPieceBodyOutline(p.mesh, skin, side);
+          }
+        }
       }
       renderer.shadowMap.needsUpdate = true;
     }
@@ -2078,6 +2111,13 @@ export function initWizardChess() {
           mode: 'idle',
           clipTime: 0
         };
+      }
+
+      const sideSkinObj =
+        (color === 'w' ? whitePieceMat.userData.activeSkinObj : blackPieceMat.userData.activeSkinObj) ||
+        currentPieceSkinObj;
+      if (sideSkinObj?.isGlowing) {
+        attachPieceBodyOutline(root, sideSkinObj, color);
       }
 
       const worldPos = boardToWorld(r, c);
@@ -7554,6 +7594,33 @@ export function initWizardChess() {
           baseInt +
           Math.sin(elapsedTotal * 5.6 + i * 1.7) * 0.28 +
           Math.cos(elapsedTotal * 9.1 + i) * 0.16;
+      }
+
+      // Pulse glowing finishes (armor body, radiant trim/crowns, and plasma/aether blades)
+      const sidePieceMats = [
+        whitePieceMat,
+        whiteTrimMat,
+        whiteBladeMat,
+        blackPieceMat,
+        blackTrimMat,
+        blackBladeMat
+      ];
+      for (let mIdx = 0; mIdx < sidePieceMats.length; mIdx++) {
+        const mat = sidePieceMats[mIdx];
+        if (mat && mat.userData.isGlowingSkin) {
+          const baseEm = mat.userData.baseEmissiveIntensity || 0;
+          if (baseEm > 0) {
+            const wave =
+              0.88 +
+              0.18 * Math.sin(elapsedTotal * 2.2 + mIdx * 0.75) +
+              0.05 * Math.cos(elapsedTotal * 4.4 + mIdx * 1.3);
+            mat.emissiveIntensity = baseEm * wave;
+          }
+          if (mat.userData.glowOutlineUniforms) {
+            mat.userData.glowOutlineUniforms.uGlowPulse.value =
+              0.90 + 0.22 * Math.sin(elapsedTotal * 2.2 + mIdx * 0.6);
+          }
+        }
       }
 
       if (isAnimatingMove || activeMoveTweens.length > 0 || shatterDebris.length > 0 || checkmateState.active) {

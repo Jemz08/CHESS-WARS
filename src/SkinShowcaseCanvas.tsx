@@ -42,6 +42,11 @@ import {
   preloadInfernoWorld3DAssets,
   getInfernoWorldMaterials
 } from './infernoWorldAssetLoader.js';
+import {
+  configureGlowingPieceBodyMaterial,
+  attachPieceBodyOutline,
+  createShowcaseGlowPedestalAura
+} from './pieceOutlineAndGlow.js';
 
 interface SkinShowcaseCanvasProps {
   activeTab: 'types' | 'sceneries' | 'boards' | 'pieces';
@@ -216,7 +221,12 @@ export default function SkinShowcaseCanvas({
     heroProceduralAnim: any | null;
     heroMixer: THREE.AnimationMixer | null;
     heroActions: Record<string, THREE.AnimationAction>;
-    activeVfxUpdaters: Array<(dt: number) => boolean>;
+    activeVfxUpdaters: Array<(dt: number, elapsed?: number) => boolean>;
+    glowingMaterials: Array<{ mat: THREE.MeshStandardMaterial; baseIntensity: number; phase: number }>;
+    glowingOutlineMaterials: Array<{ mat: THREE.Material & { opacity: number }; baseOpacity: number; phase: number }>;
+    glowingShaderUniforms: Array<{ uGlowPulse: { value: number }; phase: number }>;
+    isGlowingShowcaseActive: boolean;
+    baseRimIntensity: number;
   } | null>(null);
 
   // 1. Mount-only WebGLRenderer initialization (reused across all Armory clicks so we never exhaust WebGL contexts)
@@ -357,7 +367,12 @@ export default function SkinShowcaseCanvas({
       heroProceduralAnim: null as any | null,
       heroMixer: null as THREE.AnimationMixer | null,
       heroActions: {} as Record<string, THREE.AnimationAction>,
-      activeVfxUpdaters: [] as Array<(dt: number) => boolean>
+      activeVfxUpdaters: [] as Array<(dt: number, elapsed?: number) => boolean>,
+      glowingMaterials: [] as Array<{ mat: THREE.MeshStandardMaterial; baseIntensity: number; phase: number }>,
+      glowingOutlineMaterials: [] as Array<{ mat: THREE.Material & { opacity: number }; baseOpacity: number; phase: number }>,
+      glowingShaderUniforms: [] as Array<{ uGlowPulse: { value: number }; phase: number }>,
+      isGlowingShowcaseActive: false,
+      baseRimIntensity: 2.2
     };
     stageRef.current = state;
 
@@ -468,9 +483,49 @@ export default function SkinShowcaseCanvas({
       }
 
       for (let i = state.activeVfxUpdaters.length - 1; i >= 0; i--) {
-        const alive = state.activeVfxUpdaters[i](delta);
+        const alive = state.activeVfxUpdaters[i](delta, elapsed);
         if (!alive) {
           state.activeVfxUpdaters.splice(i, 1);
+        }
+      }
+
+      if (state.glowingMaterials.length > 0) {
+        for (let i = 0; i < state.glowingMaterials.length; i++) {
+          const gm = state.glowingMaterials[i];
+          if (gm.baseIntensity > 0) {
+            // Subtle, organic harmonic breathing wave (~2.8s period) so glowing skins feel alive and premium
+            const pulse =
+              0.88 +
+              0.18 * Math.sin(elapsed * 2.2 + gm.phase) +
+              0.05 * Math.cos(elapsed * 4.4 + gm.phase * 1.3);
+            gm.mat.emissiveIntensity = gm.baseIntensity * pulse;
+          }
+        }
+      }
+
+      if (state.glowingShaderUniforms.length > 0) {
+        for (let i = 0; i < state.glowingShaderUniforms.length; i++) {
+          const gu = state.glowingShaderUniforms[i];
+          gu.uGlowPulse.value =
+            0.90 +
+            0.22 * Math.sin(elapsed * 2.2 + gu.phase) +
+            0.06 * Math.cos(elapsed * 4.4 + gu.phase);
+        }
+      }
+
+      if (state.glowingOutlineMaterials.length > 0) {
+        for (let i = 0; i < state.glowingOutlineMaterials.length; i++) {
+          const om = state.glowingOutlineMaterials[i];
+          const opPulse = 0.88 + 0.16 * Math.sin(elapsed * 2.2 + om.phase);
+          om.mat.opacity = Math.min(0.95, om.baseOpacity * opPulse);
+        }
+      }
+
+      if (state.isGlowingShowcaseActive) {
+        state.rimLight.intensity = state.baseRimIntensity + 0.42 * Math.sin(elapsed * 2.2);
+        const rMat = state.ringMesh.material as THREE.MeshStandardMaterial;
+        if (rMat && rMat.emissiveIntensity !== undefined) {
+          rMat.emissiveIntensity = 0.52 + 0.22 * Math.sin(elapsed * 2.2 + 0.5);
         }
       }
 
@@ -555,18 +610,40 @@ export default function SkinShowcaseCanvas({
     st.heroMixer = null;
     st.heroActions = {};
     st.activeVfxUpdaters = [];
+    st.glowingMaterials = [];
+    st.glowingOutlineMaterials = [];
+    st.glowingShaderUniforms = [];
+    st.isGlowingShowcaseActive = Boolean(
+      pieceSkin.isGlowing && (activeTab === 'types' || activeTab === 'pieces' || activeTab === 'boards')
+    );
+    st.baseRimIntensity = pieceSkin.isGlowing ? 2.45 : 2.2;
+    rimLight.intensity = st.baseRimIntensity;
+    const pedRingMat = ringMesh.material as THREE.MeshStandardMaterial;
+    if (pedRingMat) {
+      pedRingMat.emissive.setHex(
+        parseInt((pieceSkin.trimEmissiveHex || pieceSkin.trimHex || '#5a4208').replace('#', ''), 16)
+      );
+      pedRingMat.emissiveIntensity = pieceSkin.isGlowing ? 0.55 : 0.4;
+    }
     setIsAttackingPreview(false);
     pedestalGroup.rotation.x = 0;
 
     const isWhite = previewColor === 'w';
     const trimHex = parseInt(pieceSkin.trimHex.replace('#', ''), 16);
+    const trimEmissiveHex = parseInt(
+      (pieceSkin.trimEmissiveHex || '#000000').replace('#', ''),
+      16
+    );
+    const trimEmissiveIntensity = pieceSkin.trimEmissiveIntensity || 0;
     const bladeHex = parseInt(pieceSkin.bladeHex.replace('#', ''), 16);
     const piecePbrPresets = resolvePiecePoliigonPresets(pieceSkin.id, archetype.id);
 
     const trimMat = new THREE.MeshStandardMaterial({
       color: trimHex,
       roughness: pieceSkin.trimRoughness,
-      metalness: pieceSkin.trimMetalness
+      metalness: pieceSkin.trimMetalness,
+      emissive: trimEmissiveHex,
+      emissiveIntensity: trimEmissiveIntensity
     });
     applyPoliigonPbrToMaterial(trimMat, piecePbrPresets.trimPreset, {
       contextId: 'showcase',
@@ -576,12 +653,13 @@ export default function SkinShowcaseCanvas({
       envMapIntensity: 1.5
     });
 
+    const bladeEmissiveIntensity = pieceSkin.bladeEmissiveIntensity || 0.3;
     const bladeMat = new THREE.MeshStandardMaterial({
       color: bladeHex,
       roughness: pieceSkin.bladeRoughness,
       metalness: pieceSkin.bladeMetalness,
       emissive: parseInt(pieceSkin.bladeEmissiveHex.replace('#', ''), 16),
-      emissiveIntensity: pieceSkin.bladeEmissiveIntensity || 0.3
+      emissiveIntensity: bladeEmissiveIntensity
     });
     applyPoliigonPbrToMaterial(bladeMat, piecePbrPresets.bladePreset, {
       contextId: 'showcase',
@@ -590,6 +668,13 @@ export default function SkinShowcaseCanvas({
       normalScale: piecePbrPresets.normalScaleVal * 0.82,
       envMapIntensity: 1.55
     });
+
+    if (pieceSkin.isGlowing) {
+      st.glowingMaterials.push(
+        { mat: trimMat, baseIntensity: trimEmissiveIntensity, phase: 0.7 },
+        { mat: bladeMat, baseIntensity: bladeEmissiveIntensity, phase: 1.5 }
+      );
+    }
 
     const buildKingPiece = (archId: string, colorCode: 'w' | 'b', targetHeight: number) => {
       const cIsWhite = colorCode === 'w';
@@ -602,15 +687,30 @@ export default function SkinShowcaseCanvas({
         (cIsWhite ? pieceSkin.whiteEmissiveHex : pieceSkin.blackEmissiveHex).replace('#', ''),
         16
       );
+      const cEmissiveIntensity = cIsWhite
+        ? pieceSkin.whiteEmissiveIntensity || 0.2
+        : pieceSkin.blackEmissiveIntensity || 0.2;
       const cMat = new THREE.MeshStandardMaterial({
         color: cMainHex,
         roughness: cIsWhite ? pieceSkin.whiteRoughness : pieceSkin.blackRoughness,
         metalness: cIsWhite ? pieceSkin.whiteMetalness : pieceSkin.blackMetalness,
         emissive: cEmissiveHex,
-        emissiveIntensity: cIsWhite
-          ? pieceSkin.whiteEmissiveIntensity || 0.2
-          : pieceSkin.blackEmissiveIntensity || 0.2
+        emissiveIntensity: cEmissiveIntensity
       });
+      const bodyUniforms = configureGlowingPieceBodyMaterial(cMat, pieceSkin, colorCode);
+      if (pieceSkin.isGlowing) {
+        st.glowingMaterials.push({
+          mat: cMat,
+          baseIntensity: cEmissiveIntensity,
+          phase: cIsWhite ? 0.0 : 2.3
+        });
+        if (bodyUniforms) {
+          st.glowingShaderUniforms.push({
+            uGlowPulse: bodyUniforms.uGlowPulse,
+            phase: cIsWhite ? 0.2 : 1.8
+          });
+        }
+      }
       applyPoliigonPbrToMaterial(
         cMat,
         cIsWhite ? localPresets.whitePreset : localPresets.blackPreset,
@@ -658,6 +758,12 @@ export default function SkinShowcaseCanvas({
       if (!pieceModel) return null;
 
       sanitizeCrossContextMaterials(pieceModel, trimHex);
+
+      // Attach crisp 3D edge & silhouette outlines so glowing pieces always retain a clear, readable body
+      const outlineMats = attachPieceBodyOutline(pieceModel, pieceSkin, colorCode);
+      if (outlineMats.length > 0) {
+        st.glowingOutlineMaterials.push(...outlineMats);
+      }
 
       const wrapper = new THREE.Group();
       wrapper.add(pieceModel);
@@ -718,6 +824,12 @@ export default function SkinShowcaseCanvas({
       ringMesh.visible = true;
       scene.background = new THREE.Color(0x07090f);
       rimLight.color.setHex(trimHex);
+
+      if (pieceSkin.isGlowing) {
+        const aura = createShowcaseGlowPedestalAura(pieceSkin, previewColor);
+        st.vfxGroup.add(aura.group);
+        st.activeVfxUpdaters.push((dt, elapsed = 0) => aura.update(dt, elapsed));
+      }
 
       const heroPiece = buildKingPiece(archetype.id, previewColor, 1.38);
       if (heroPiece) {
