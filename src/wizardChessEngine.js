@@ -3602,11 +3602,11 @@ export function initWizardChess() {
                 // Dragon hovers at standoff distance and recoils slightly from its sustained flamethrower breath stream
                 const breathPhase = Math.min(1, atkClipTime / Math.max(0.1, BLOW_CLIP_TIME));
                 lungeOffset = -Math.sin(breathPhase * Math.PI) * 0.024;
-              } else if (attackerArchetype === 'classic_staunton') {
-                // Staunton piece glides smoothly toward the target while ascending high into the air for its vertical anvil drop
+              } else if (attackerArchetype === 'classic_staunton' || attackerArchetype === 'toon_classic') {
+                // Staunton / Cartoon Classic piece glides toward the target while ascending for its overhead power-slam drop
                 const glidePhase = Math.min(1, atkClipTime / Math.max(0.1, CONTACT_CLIP_TIME));
                 const smoothGlide = glidePhase * glidePhase * (3 - 2 * glidePhase);
-                lungeOffset = smoothGlide * Math.max(0.032, atkProfile.maxLunge * 0.85);
+                lungeOffset = smoothGlide * Math.max(0.036, atkProfile.maxLunge * 0.9);
               } else if (attackerArchetype === 'arcane_cyber') {
                 // Cyber-Mech holds stabilized ranged firing stance and recoils backward as dual railguns & chest laser discharge
                 if (atkClipTime < 0.25) {
@@ -7629,7 +7629,8 @@ export function initWizardChess() {
           blackPieceArchetype === 'toon_classic' ||
           currentPieceArchetype === 'toon_classic' ||
           currentPieceSkinObj?.isCartoon ||
-          currentBoardSkinId === 'toon_ink_wood_table' ||
+          currentBoardSkinObj?.id === 'toon_ink_wood_table' ||
+          currentBoardSkinObj?.archType === 'toon_table' ||
           currentWorldSceneryId === 'toon_sky_kingdom'
       );
       cartoonPostProcessor.render(scene, camera, isCartoonScene);

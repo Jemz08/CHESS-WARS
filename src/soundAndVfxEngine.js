@@ -174,6 +174,22 @@ export const ARCHETYPE_COMBAT_PROFILES = {
       queen:  { title: 'BANSHEE SCYTHE EMPRESS OBLITERATION', subtitle: 'Twin Crescent War-Scythe Flurry & Blood-Moon Nova' },
       king:   { title: 'PUMPKIN LORD SAMHAIN APOCALYPSE',  subtitle: 'Sovereign Scythe Execution, Tolling Crypt Bell & Hellfire Gourd' }
     }
+  },
+  toon_classic: {
+    setName: 'Cartoon Classic (Cel-Shaded)',
+    attackName: 'Cartoon Power-Slam & Starburst',
+    effectSummary: 'Comic-book anticipation windup, aerial leap, and cel-shaded starburst impact slam',
+    primaryHex: 0xffd166,
+    secondaryHex: 0x38bdf8,
+    coreHex: 0xffffff,
+    titles: {
+      pawn:   { title: 'TOON SQUIRE HEADBUTT BONK',        subtitle: 'Comic-Book Bobble Windup & Starburst Impact Slam' },
+      rook:   { title: 'TOON FORTRESS ANVIL DROP',         subtitle: 'Bouncing Battlement Turret & Golden Shockwave Crash' },
+      knight: { title: 'CARTOON CHARGER SUPER STOMP',      subtitle: 'Rearing Stallion Buck & Cel-Shaded Starburst Barrage' },
+      bishop: { title: 'TOON ORACLE MITRE BLAST',          subtitle: 'Arcane Comic-Ink Halo & Radiant Star Comet Strike' },
+      queen:  { title: 'CARTOON EMPRESS CROWN NOVA',       subtitle: 'Royal Diadem Whirlwind & Cel-Shaded Golden Starburst' },
+      king:   { title: 'TOON SOVEREIGN GRAND SLAM',        subtitle: 'Imperial Cross-Crown Leap & Comic-Book Shockwave Finale' }
+    }
   }
 };
 
@@ -3080,9 +3096,9 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     }
 
     // ========================================================================
-    // 3. CLASSIC STAUNTON TOURNAMENT: GRANDMASTER TELEKINETIC COMET BARRAGE
+    // 3. CLASSIC STAUNTON / CARTOON CLASSIC: GRANDMASTER COMET & STARBURST BARRAGE
     // ========================================================================
-    if (arch === 'classic_staunton') {
+    if (arch === 'classic_staunton' || arch === 'toon_classic') {
       // A. 6 Streaking Golden Arcane Comets diving from a levitating crown halo into the victim
       const comets = [];
       for (let i = 0; i < 6; i++) {
@@ -3432,7 +3448,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     });
 
     const styleIndex =
-      arch === 'classic_staunton' ? 1 : arch === 'arcane_cyber' ? 2 : arch === 'dragon_elemental' ? 3 : 0;
+      arch === 'classic_staunton' || arch === 'toon_classic' ? 1 : arch === 'arcane_cyber' ? 2 : arch === 'dragon_elemental' ? 3 : 0;
 
     // 1. Unity Procedural Magic Circle / Voronoi Ground Crack Shader Decal
     const magicCircleShaderMat = createUnityMagicCircleShaderMaterial(
@@ -3599,8 +3615,8 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       return;
     }
 
-    if (arch === 'classic_staunton') {
-      // CLASSIC STAUNTON SIGNATURE: Imperial Golden Compass Star + 3 Brass Astrolabe Rings + 8 Ascending Crown Orbs
+    if (arch === 'classic_staunton' || arch === 'toon_classic') {
+      // CLASSIC STAUNTON / CARTOON CLASSIC SIGNATURE: Imperial Golden Compass Star + 3 Brass Astrolabe Rings + 8 Ascending Crown Orbs
       const starSigil1 = new THREE.Mesh(sharedStarRingGeo, pMat);
       starSigil1.position.y = 0.022;
       group.add(starSigil1);

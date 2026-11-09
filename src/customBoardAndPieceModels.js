@@ -1607,6 +1607,10 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
   const topY = 0.69 * heightScale;
 
   if (type === 'pawn') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.01;
+    rig.add(headGroup);
+
     const headGeo = getCachedGeo('staunton_pawn_head', () =>
       buildSmoothSplineLathe(
         [
@@ -1623,8 +1627,7 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
       )
     );
     const head = new THREE.Mesh(headGeo, primaryMat);
-    head.position.y = topY - 0.01;
-    rig.add(head);
+    headGroup.add(head);
 
     const finialGeo = getCachedGeo('staunton_pawn_finial', () =>
       buildSmoothSplineLathe(
@@ -1640,9 +1643,14 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
       )
     );
     const finial = new THREE.Mesh(finialGeo, trimMat);
-    finial.position.y = topY + 0.35;
-    rig.add(finial);
+    finial.position.y = 0.36;
+    headGroup.add(finial);
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   } else if (type === 'rook') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.02;
+    rig.add(headGroup);
+
     // Sculpted Castle Keep with Corbel Moldings, Recessed Inner Parapet & 6 Curved Arched Merlons
     const towerGeo = getCachedGeo('staunton_rook_tower', () =>
       buildSmoothSplineLathe(
@@ -1664,16 +1672,15 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
       )
     );
     const tower = new THREE.Mesh(towerGeo, primaryMat);
-    tower.position.y = topY - 0.02;
-    rig.add(tower);
+    headGroup.add(tower);
 
     const rim = new THREE.Mesh(
       getCachedGeo('staunton_rook_rim', () => new THREE.TorusGeometry(0.258, 0.016, 16, 48)),
       trimMat
     );
     rim.rotation.x = Math.PI / 2;
-    rim.position.y = topY + 0.28;
-    rig.add(rim);
+    rim.position.y = 0.30;
+    headGroup.add(rim);
 
     // 6 Curved Cylindrical-Sector Battlement Merlons
     const merlonGeo = getCachedGeo('staunton_rook_merlon', () => {
@@ -1699,10 +1706,11 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
     for (let i = 0; i < 6; i++) {
       const ang = (i / 6) * Math.PI * 2;
       const merlon = new THREE.Mesh(merlonGeo, primaryMat);
-      merlon.position.y = topY + 0.31;
+      merlon.position.y = 0.33;
       merlon.rotation.y = ang;
-      rig.add(merlon);
+      headGroup.add(merlon);
     }
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   } else if (type === 'knight') {
     // True Hand-Carved Staunton Bridled Warhorse Bust
     const horseGroup = new THREE.Group();
@@ -1826,6 +1834,10 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
 
     animParts.push({ mesh: horseGroup, kind: 'headNod' });
   } else if (type === 'bishop') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.01;
+    rig.add(headGroup);
+
     // High-Resolution Sculpted Mitre with Carved Liturgical Cleft, Lappets & Cross Inlay
     const mitreGeo = getCachedGeo('staunton_bishop_mitre', () => {
       const g = buildSmoothSplineLathe(
@@ -1861,8 +1873,7 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
       return g;
     });
     const mitre = new THREE.Mesh(mitreGeo, primaryMat);
-    mitre.position.y = topY - 0.01;
-    rig.add(mitre);
+    headGroup.add(mitre);
 
     // Gilded Mitre Orphrey Band & Cross Finial
     const band = new THREE.Mesh(
@@ -1870,16 +1881,21 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
       trimMat
     );
     band.rotation.x = Math.PI / 2;
-    band.position.y = topY + 0.14;
-    rig.add(band);
+    band.position.y = 0.15;
+    headGroup.add(band);
 
     const finialOrb = new THREE.Mesh(
       getCachedGeo('staunton_bishop_orb', () => new THREE.SphereGeometry(0.048, 24, 24)),
       trimMat
     );
-    finialOrb.position.y = topY + 0.55;
-    rig.add(finialOrb);
+    finialOrb.position.y = 0.56;
+    headGroup.add(finialOrb);
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   } else if (type === 'queen') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.01;
+    rig.add(headGroup);
+
     // Scalloped 12-Cusp Imperial Diadem Coronet + Velvet Dome + 12 Crown Pearls
     const coronetGeo = getCachedGeo('staunton_queen_coronet', () =>
       buildSculptedLathe(
@@ -1903,32 +1919,36 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
       )
     );
     const coronet = new THREE.Mesh(coronetGeo, primaryMat);
-    coronet.position.y = topY - 0.01;
-    rig.add(coronet);
+    headGroup.add(coronet);
 
     const innerDome = new THREE.Mesh(
       getCachedGeo('staunton_queen_dome', () => new THREE.SphereGeometry(0.185, 36, 28)),
       trimMat
     );
     innerDome.scale.set(1, 0.85, 1);
-    innerDome.position.y = topY + 0.22;
-    rig.add(innerDome);
+    innerDome.position.y = 0.23;
+    headGroup.add(innerDome);
 
     const pearlGeo = getCachedGeo('staunton_queen_pearl', () => new THREE.SphereGeometry(0.028, 18, 18));
     for (let i = 0; i < 12; i++) {
       const ang = (i / 12) * Math.PI * 2;
       const pearl = new THREE.Mesh(pearlGeo, bladeMat);
-      pearl.position.set(Math.cos(ang) * 0.245, topY + 0.31, Math.sin(ang) * 0.245);
-      rig.add(pearl);
+      pearl.position.set(Math.cos(ang) * 0.245, 0.32, Math.sin(ang) * 0.245);
+      headGroup.add(pearl);
     }
 
     const monde = new THREE.Mesh(
       getCachedGeo('staunton_queen_monde', () => new THREE.SphereGeometry(0.052, 24, 24)),
       trimMat
     );
-    monde.position.y = topY + 0.39;
-    rig.add(monde);
+    monde.position.y = 0.40;
+    headGroup.add(monde);
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   } else if (type === 'king') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.01;
+    rig.add(headGroup);
+
     // Imperial Sovereign Crown with 4 Arched Ribs, Velvet Cap & Beveled Patonce Cross
     const crownCupGeo = getCachedGeo('staunton_king_cup', () =>
       buildSmoothSplineLathe(
@@ -1946,16 +1966,15 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
       )
     );
     const crownCup = new THREE.Mesh(crownCupGeo, primaryMat);
-    crownCup.position.y = topY - 0.01;
-    rig.add(crownCup);
+    headGroup.add(crownCup);
 
     const circlet = new THREE.Mesh(
       getCachedGeo('staunton_king_circlet', () => new THREE.TorusGeometry(0.258, 0.02, 18, 48)),
       trimMat
     );
     circlet.rotation.x = Math.PI / 2;
-    circlet.position.y = topY + 0.21;
-    rig.add(circlet);
+    circlet.position.y = 0.22;
+    headGroup.add(circlet);
 
     // 4 Sweeping Imperial Crown Arches rising to the monde orb
     const archGeo = getCachedGeo('staunton_king_arch', () =>
@@ -1974,9 +1993,9 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
     );
     for (let i = 0; i < 4; i++) {
       const arch = new THREE.Mesh(archGeo, trimMat);
-      arch.position.y = topY + 0.21;
+      arch.position.y = 0.22;
       arch.rotation.y = (i / 4) * Math.PI * 2;
-      rig.add(arch);
+      headGroup.add(arch);
     }
 
     // Beveled Flared Heraldic Cross Patonce Finial
@@ -2007,8 +2026,9 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
       return g;
     });
     const cross = new THREE.Mesh(crossGeo, trimMat);
-    cross.position.y = topY + 0.39;
-    rig.add(cross);
+    cross.position.y = 0.40;
+    headGroup.add(cross);
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   }
 
   // Articulated Telekinetic Astrolabe Halo Ring around Classic Staunton pieces
@@ -2191,33 +2211,42 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
   rig.add(collarRing);
 
   if (type === 'pawn') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.02;
+    rig.add(headGroup);
+
     // Oversized Bouncy Cartoon Bobble-Head Sphere + Cute Chunky Button Finial
     const head = new THREE.Mesh(
       getCachedGeo('toon_classic_pawn_head', () => new THREE.SphereGeometry(0.225, 32, 24)),
       primaryMat
     );
     head.scale.set(1.08, 0.96, 1.08);
-    head.position.y = topY + 0.165;
+    head.position.y = 0.185;
     head.userData.cartoonHullScale = 1.058;
-    rig.add(head);
+    headGroup.add(head);
 
     const topCap = new THREE.Mesh(
       getCachedGeo('toon_classic_pawn_cap', () => new THREE.TorusGeometry(0.085, 0.022, 12, 24)),
       trimMat
     );
     topCap.rotation.x = Math.PI / 2;
-    topCap.position.y = topY + 0.365;
-    rig.add(topCap);
+    topCap.position.y = 0.385;
+    headGroup.add(topCap);
 
     const finial = new THREE.Mesh(
       getCachedGeo('toon_classic_pawn_finial', () => new THREE.SphereGeometry(0.068, 20, 16)),
       trimMat
     );
     finial.scale.set(1.12, 0.92, 1.12);
-    finial.position.y = topY + 0.415;
+    finial.position.y = 0.435;
     finial.userData.cartoonHullScale = 1.075;
-    rig.add(finial);
+    headGroup.add(finial);
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   } else if (type === 'rook') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.02;
+    rig.add(headGroup);
+
     // Exaggerated Flared Cartoon Castle Tower (wider at the top than the base!) + 6 Chunky Splayed Merlons
     const turretGeo = getCachedGeo('toon_classic_rook_turret', () =>
       buildSmoothSplineLathe(
@@ -2237,9 +2266,8 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       )
     );
     const turret = new THREE.Mesh(turretGeo, primaryMat);
-    turret.position.y = topY - 0.02;
     turret.userData.cartoonHullScale = 1.055;
-    rig.add(turret);
+    headGroup.add(turret);
 
     // 6 Oversized Splayed Cartoon Castle Battlement Merlons
     const merlonGeo = getCachedGeo('toon_classic_rook_merlon', () => {
@@ -2249,23 +2277,24 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
     for (let i = 0; i < 6; i++) {
       const ang = (i / 6) * Math.PI * 2;
       const merlon = new THREE.Mesh(merlonGeo, i % 2 === 0 ? primaryMat : trimMat);
-      merlon.position.set(Math.cos(ang) * 0.245, topY + 0.31, Math.sin(ang) * 0.245);
+      merlon.position.set(Math.cos(ang) * 0.245, 0.33, Math.sin(ang) * 0.245);
       merlon.rotation.y = -ang + Math.PI / 2;
       // Cartoon outward splay on each battlement block
       merlon.rotation.x = 0.14;
       merlon.userData.cartoonHullScale = 1.075;
-      rig.add(merlon);
+      headGroup.add(merlon);
     }
 
     // Cartoon Arched Castle Gate Relief on front & back
     const gateGeo = getCachedGeo('toon_classic_rook_gate', () => new THREE.BoxGeometry(0.11, 0.14, 0.04));
     for (const zSign of [-1, 1]) {
       const gate = new THREE.Mesh(gateGeo, trimMat);
-      gate.position.set(0, topY + 0.12, zSign * 0.245);
+      gate.position.set(0, 0.14, zSign * 0.245);
       gate.rotation.x = -zSign * 0.16;
       gate.userData.cartoonHullScale = 1.07;
-      rig.add(gate);
+      headGroup.add(gate);
     }
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   } else if (type === 'knight') {
     // Expressive Cartoon Warhorse Bust: Puffy Snout, Big Cartoon Eyes with Pupils & Catchlights, Perky Ears & Bouncy Mane Puffs!
     const horseGroup = new THREE.Group();
@@ -2383,6 +2412,10 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
 
     animParts.push({ mesh: horseGroup, kind: 'headNod' });
   } else if (type === 'bishop') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.02;
+    rig.add(headGroup);
+
     // Plump Teardrop Cartoon Mitre with Exaggerated Wide Diagonal Grin-Cleft Slot & Big Round Orb Finial
     const mitreGeo = getCachedGeo('toon_classic_bishop_mitre', () => {
       const raw = buildSmoothSplineLathe(
@@ -2419,9 +2452,8 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       return raw;
     });
     const mitre = new THREE.Mesh(mitreGeo, primaryMat);
-    mitre.position.y = topY - 0.02;
     mitre.userData.cartoonHullScale = 1.055;
-    rig.add(mitre);
+    headGroup.add(mitre);
 
     // Chunky Gold Mitre Sash Band
     const sashRing = new THREE.Mesh(
@@ -2429,18 +2461,23 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       trimMat
     );
     sashRing.rotation.x = Math.PI / 2;
-    sashRing.position.y = topY + 0.11;
-    rig.add(sashRing);
+    sashRing.position.y = 0.13;
+    headGroup.add(sashRing);
 
     // Oversized Round Cartoon Finial Bobble + Mini Cross
     const finial = new THREE.Mesh(
       getCachedGeo('toon_classic_bishop_finial', () => new THREE.SphereGeometry(0.068, 20, 16)),
       trimMat
     );
-    finial.position.y = topY + 0.475;
+    finial.position.y = 0.495;
     finial.userData.cartoonHullScale = 1.075;
-    rig.add(finial);
+    headGroup.add(finial);
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   } else if (type === 'queen') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.02;
+    rig.add(headGroup);
+
     // Flared Cartoon Royal Coronet with 7 Chunky Crown Spikes, Oversized Pearl Orbs & Plump Velvet Dome
     const coronetGeo = getCachedGeo('toon_classic_queen_coronet', () =>
       buildSculptedLathe(
@@ -2463,18 +2500,17 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       )
     );
     const coronet = new THREE.Mesh(coronetGeo, primaryMat);
-    coronet.position.y = topY - 0.02;
     coronet.userData.cartoonHullScale = 1.055;
-    rig.add(coronet);
+    headGroup.add(coronet);
 
     // 7 Oversized Cartoon Crown Pearl Spheres around the flared diadem tips
     const pearlGeo = getCachedGeo('toon_classic_queen_pearl', () => new THREE.SphereGeometry(0.044, 16, 14));
     for (let i = 0; i < 7; i++) {
       const ang = (i / 7) * Math.PI * 2;
       const pearl = new THREE.Mesh(pearlGeo, trimMat);
-      pearl.position.set(Math.cos(ang) * 0.275, topY + 0.305, Math.sin(ang) * 0.275);
+      pearl.position.set(Math.cos(ang) * 0.275, 0.325, Math.sin(ang) * 0.275);
       pearl.userData.cartoonHullScale = 1.08;
-      rig.add(pearl);
+      headGroup.add(pearl);
     }
 
     // Plump Cushioned Cartoon Inner Dome & Top Bobble
@@ -2483,18 +2519,23 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       trimMat
     );
     dome.scale.set(1, 0.82, 1);
-    dome.position.y = topY + 0.21;
+    dome.position.y = 0.23;
     dome.userData.cartoonHullScale = 1.06;
-    rig.add(dome);
+    headGroup.add(dome);
 
     const topPearl = new THREE.Mesh(
       getCachedGeo('toon_classic_queen_top_pearl', () => new THREE.SphereGeometry(0.065, 18, 16)),
       primaryMat
     );
-    topPearl.position.y = topY + 0.385;
+    topPearl.position.y = 0.405;
     topPearl.userData.cartoonHullScale = 1.075;
-    rig.add(topPearl);
+    headGroup.add(topPearl);
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   } else if (type === 'king') {
+    const headGroup = new THREE.Group();
+    headGroup.position.y = topY - 0.02;
+    rig.add(headGroup);
+
     // Grand Flared Cartoon Royal Crown + 4 Thick Bouncy Arches + Chunky Cartoon Heraldic Cross
     const crownBowlGeo = getCachedGeo('toon_classic_king_bowl', () =>
       buildSmoothSplineLathe(
@@ -2513,9 +2554,8 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       )
     );
     const crownBowl = new THREE.Mesh(crownBowlGeo, primaryMat);
-    crownBowl.position.y = topY - 0.02;
     crownBowl.userData.cartoonHullScale = 1.055;
-    rig.add(crownBowl);
+    headGroup.add(crownBowl);
 
     // Chunky Gold Circlet Band with 8 Cartoon Gem Studs
     const circlet = new THREE.Mesh(
@@ -2523,8 +2563,8 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       trimMat
     );
     circlet.rotation.x = Math.PI / 2;
-    circlet.position.y = topY + 0.22;
-    rig.add(circlet);
+    circlet.position.y = 0.24;
+    headGroup.add(circlet);
 
     // 4 Thick Bouncy Cartoon Crown Arches rising to the monde orb
     const archGeo = getCachedGeo('toon_classic_king_arch', () =>
@@ -2543,10 +2583,10 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
     );
     for (let i = 0; i < 4; i++) {
       const arch = new THREE.Mesh(archGeo, trimMat);
-      arch.position.y = topY + 0.22;
+      arch.position.y = 0.24;
       arch.rotation.y = (i / 4) * Math.PI * 2;
       arch.userData.cartoonHullScale = 1.075;
-      rig.add(arch);
+      headGroup.add(arch);
     }
 
     // Plump Monde Orb beneath the Cross
@@ -2554,9 +2594,9 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       getCachedGeo('toon_classic_king_monde', () => new THREE.SphereGeometry(0.058, 16, 14)),
       primaryMat
     );
-    mondeOrb.position.y = topY + 0.425;
+    mondeOrb.position.y = 0.445;
     mondeOrb.userData.cartoonHullScale = 1.075;
-    rig.add(mondeOrb);
+    headGroup.add(mondeOrb);
 
     // Chunky Flared Cartoon Cross Finial
     const crossGeo = getCachedGeo('toon_classic_king_cross', () => {
@@ -2586,9 +2626,10 @@ function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, anim
       return g;
     });
     const cross = new THREE.Mesh(crossGeo, trimMat);
-    cross.position.y = topY + 0.445;
+    cross.position.y = 0.465;
     cross.userData.cartoonHullScale = 1.072;
-    rig.add(cross);
+    headGroup.add(cross);
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
   }
 
   // Articulated Cartoon Comic Halo Ring around the collar
@@ -4585,7 +4626,7 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
   if (!rig) return;
 
   state.clipTime += dt;
-  const phaseSeed = (piece.r * 5 + piece.c * 3) * 0.45;
+  const phaseSeed = ((Number(piece.r) || 0) * 5 + (Number(piece.c) || 0) * 3) * 0.45;
   const mode = state.mode || 'idle';
   const arch = piece.archetype || state.archetype || 'classic_staunton';
   const pType = piece.type || state.pieceType || 'queen';
@@ -5103,7 +5144,6 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
             part.mesh.rotation.set(-0.26 * u, 0, 0);
           } else if (t < 0.86) {
             const u = (t - 0.24) / 0.62;
-            // Aim snout slightly down toward victim and sweep side-to-side like a living flamethrower
             const sweepY = Math.sin(u * Math.PI * 3.0) * 0.28;
             part.mesh.rotation.set(0.22 * Math.sin(u * Math.PI * 0.85), sweepY, -sweepY * 0.35);
           } else {
@@ -5111,9 +5151,29 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
             part.mesh.rotation.set(0.12 * (1 - u), 0, 0);
           }
         } else if (arch === 'classic_staunton' || arch === 'toon_classic') {
-          // Staunton & Cartoon Classic Warhorse rears its head proudly upward during levitation / cartoon leap
-          const rearUp = Math.sin(Math.min(1, t / 0.75) * Math.PI);
-          part.mesh.rotation.set(-0.28 * rearUp, 0, 0);
+          // All 6 pieces (Pawn, Rook, Knight, Bishop, Queen, King) coil their head/crown back,
+          // then whip forward into a dramatic overhead power-slam!
+          const isToon = arch === 'toon_classic';
+          if (t < 0.34) {
+            const u = t / 0.34;
+            const ease = u * u * (3 - 2 * u);
+            part.mesh.rotation.set(-0.38 * ease, Math.sin(u * Math.PI) * 0.24, 0);
+            if (isToon) {
+              part.mesh.scale.set(1 + 0.12 * ease, 1 + 0.15 * ease, 1 + 0.12 * ease);
+            }
+          } else if (t < 0.68) {
+            const u = (t - 0.34) / 0.34;
+            const slam = Math.sin(u * Math.PI);
+            part.mesh.rotation.set(-0.38 + 0.88 * slam, 0, Math.sin(u * Math.PI * 2.0) * 0.10);
+            if (isToon) {
+              const sq = 1 + Math.sin(u * Math.PI * 2.0) * 0.14;
+              part.mesh.scale.set(sq, 1 / sq, sq);
+            }
+          } else {
+            const u = Math.min(1, (t - 0.68) / 0.32);
+            part.mesh.rotation.set(0.32 * (1 - u), 0, 0);
+            part.mesh.scale.set(1, 1, 1);
+          }
         } else {
           // Cyber Pegasus / Warhorse optic horn target lock & horizontal laser sweep
           if (t < 0.24) {
@@ -5129,19 +5189,37 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
           }
         }
       } else {
-        part.mesh.rotation.set(
-          arch === 'hollow_reapers' ? 0 : Math.sin(elapsedTotal * 2.4 + phaseSeed) * (arch === 'toon_classic' ? 0.085 : 0.055),
-          arch === 'toon_classic' ? Math.cos(elapsedTotal * 1.8 + phaseSeed) * 0.05 : 0,
-          0
-        );
+        if (arch === 'toon_classic') {
+          // Lively cartoon bobble-head / crown nod, curious side-to-side look & breathing pulse on all 6 pieces
+          const nod = Math.sin(elapsedTotal * 2.8 + phaseSeed) * 0.11;
+          const yaw = Math.cos(elapsedTotal * 1.9 + phaseSeed) * 0.14;
+          const roll = Math.sin(elapsedTotal * 2.3 + phaseSeed * 1.3) * 0.065;
+          part.mesh.rotation.set(nod, yaw, roll);
+          const pulse = Math.sin(elapsedTotal * 3.4 + phaseSeed) * 0.042;
+          part.mesh.scale.set(1 - pulse * 0.5, 1 + pulse, 1 - pulse * 0.5);
+        } else {
+          part.mesh.rotation.set(
+            arch === 'hollow_reapers' ? 0 : Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.06,
+            arch === 'hollow_reapers' ? 0 : Math.cos(elapsedTotal * 1.6 + phaseSeed) * 0.045,
+            0
+          );
+          part.mesh.scale.set(1, 1, 1);
+        }
       }
     }
   }
 
   if (mode === 'idle') {
-    if (arch === 'classic_staunton' || arch === 'toon_classic' || arch === 'hollow_reapers') {
-      // Keep original Staunton, Cartoon Toon, and Hollow Reapers planted at y=0 with stable scale
-      // so base rings and collar rings never jump or bob off the board
+    if (arch === 'toon_classic') {
+      // Expressive cartoon idle sway on the body while keeping y=0 and scale=(1,1,1) so base rings stay grounded
+      rig.position.set(0, 0, 0);
+      rig.rotation.set(
+        Math.cos(elapsedTotal * 1.8 + phaseSeed) * 0.028,
+        0,
+        Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.042
+      );
+      rig.scale.set(1, 1, 1);
+    } else if (arch === 'classic_staunton' || arch === 'hollow_reapers') {
       rig.position.set(0, 0, 0);
       rig.rotation.set(0, 0, 0);
       rig.scale.set(1, 1, 1);
@@ -5164,10 +5242,14 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       rig.position.set(0, swoop, 0);
       rig.rotation.set(0.20, Math.sin(state.clipTime * 9.0) * 0.08, 0);
       rig.scale.set(1, 1, 1);
-    } else if (arch === 'classic_staunton' || arch === 'toon_classic') {
-      // Smooth grounded board glide for Original & Cartoon Classic so piece rings never jump
+    } else if (arch === 'toon_classic') {
+      // Jaunty cartoon waddle-stride
       rig.position.set(0, 0, 0);
-      rig.rotation.set(0.08, 0, 0);
+      rig.rotation.set(0.14, 0, Math.sin(state.clipTime * 10.0) * 0.08);
+      rig.scale.set(1, 1, 1);
+    } else if (arch === 'classic_staunton') {
+      rig.position.set(0, 0, 0);
+      rig.rotation.set(0.10, 0, 0);
       rig.scale.set(1, 1, 1);
     } else {
       const stride = Math.abs(Math.sin(state.clipTime * 10.0)) * 0.06;
@@ -5177,7 +5259,7 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
     }
   } else if (mode === 'attack') {
     // ========================================================================
-    // DISTINCT NON-DEFAULT SET ATTACK PATTERNS (Zero Forward Headbutts!)
+    // DISTINCT NON-DEFAULT SET ATTACK PATTERNS
     // ========================================================================
     const t = state.clipTime;
     const isRoyal = pType === 'king' || pType === 'queen';
@@ -5185,26 +5267,25 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
 
     if (arch === 'classic_staunton' || arch === 'toon_classic') {
       // PATTERN 1 — CLASSIC STAUNTON & CARTOON CLASSIC TOON:
-      // Smooth continuous telekinetic arc & spin without discontinuous ring scale/height jumps
-      if (t < 0.36) {
-        const u = t / 0.36;
+      // 3D Anticipation Lean-Back, Aerial Leap & Forward Overhead Power-Slam (clearly visible on all 6 pieces!)
+      if (t < 0.34) {
+        const u = t / 0.34;
         const ease = u * u * (3 - 2 * u);
-        rig.position.set(0, 0.42 * powerMul * ease, 0.24 * powerMul * ease);
-        rig.rotation.set(0, ease * Math.PI * 2.0, 0);
+        rig.position.set(0, 0.38 * powerMul * ease, 0.16 * powerMul * ease);
+        rig.rotation.set(-0.36 * ease, 0, Math.sin(u * Math.PI) * 0.08);
         rig.scale.set(1, 1, 1);
-      } else if (t < 0.64) {
-        const u = (t - 0.36) / 0.28;
-        const dropProgress = Math.min(1, u);
-        const dropEase = dropProgress * dropProgress * (3 - 2 * dropProgress);
-        const dropY = 0.42 * powerMul * (1 - dropEase);
-        rig.position.set(0, Math.max(0, dropY), 0.24 * powerMul);
-        rig.rotation.set(0, 0, 0);
+      } else if (t < 0.68) {
+        const u = (t - 0.34) / 0.34;
+        const slam = Math.sin(u * Math.PI * 0.88);
+        const dropEase = u * u * (3 - 2 * u);
+        rig.position.set(0, 0.38 * powerMul * (1 - dropEase), (0.16 + 0.18 * slam) * powerMul);
+        rig.rotation.set(-0.36 + 0.92 * slam, 0, 0);
         rig.scale.set(1, 1, 1);
       } else {
-        const u = Math.min(1, (t - 0.64) / 0.36);
+        const u = Math.min(1, (t - 0.68) / 0.32);
         const ease = u * u * (3 - 2 * u);
         rig.position.set(0, 0, 0.24 * powerMul * (1 - ease));
-        rig.rotation.set(0, 0, 0);
+        rig.rotation.set(0.42 * (1 - ease), 0, 0);
         rig.scale.set(1, 1, 1);
       }
     } else if (arch === 'arcane_cyber') {
