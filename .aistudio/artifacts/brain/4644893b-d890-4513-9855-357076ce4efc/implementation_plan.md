@@ -1,114 +1,80 @@
-# Halloween Sanctum Bundle: Pumpkin Headless Horsemen, Wraith Reapers & Blood-Moon Graveyard
+# Implementation Plan: Cartoonish Toon Table Skin, Floating Toon Kingdom Scenery & Comprehensive Error Sweep
 
-A complete seasonal Halloween expansion for the Sanctum Armory introducing a custom-sculpted **Pumpkin Headless Horsemen & Wraith Reapers** 3D piece set, a **Haunted Blood-Moon Graveyard** 3D world environment, a **Cursed Jack-o'-Lantern Crypt Altar** board architecture, a **Hallow Bone & Midnight Wraith** piece finish, and a new **Charred Pumpkin Bark** PBR material preset.
-
-> [!IMPORTANT]
-> **User Review & Confirmed Design Decisions**
-> - **Full 4-Category Seasonal Bundle**: Adds coordinated Halloween skins across **Piece Sets**, **World Scenery**, **Altar Boards**, and **Piece Finishes**, plus a matching **Poliigon PBR Surface Texture** preset so every slot in the Armory has a dedicated Halloween option.
-> - **3D Piece Set ("Hollow Jack & Wraith Reapers")**: Features sculpted Jack-o'-Lantern crowns and visors, Headless Horseman Knights holding glowing pumpkin heads aloft, hooded Wraith Reaper Queens and Bishops wielding spectral scythes, Haunted Crypt Rooks, and Cursed Lantern Bearer Pawns.
-> - **3D World Scenery & Altar ("Haunted Blood-Moon Graveyard")**: Surrounds the board with a giant crimson Blood Moon, twisted dead oak trees, wrought-iron cemetery gates, floating Jack-o'-Lanterns, and swirling bats around a graveyard altar lined with carved tombstones and corner Jack-o'-Lantern braziers.
+## 1. Confirmed User Decisions
+- **Cartoonish Toon Altar Board & Table Skin**: **Comic-Book Inked Wood & Gold Pedestal Table (`toon_ink_wood_table`)** — A stylized cel-shaded parlor table featuring warm honey-birch and rich comic-walnut board tiles, a chunky beveled wood-and-gold apron, oversized comic-inked golden corner medallions, four exaggerated turned cartoon parlor legs, and bold pitch-black (`#050508`) inverted-hull outlines + interior ink crease lines across the table and tiles.
+- **Cartoonish Toon 3D World Scenery**: **Floating Toon Kingdom (`toon_sky_kingdom`)** — A vibrant cel-shaded 360° sky kingdom featuring a stepped cartoon sky dome with stylized sunbeams, a quantized cel-shaded sea of clouds below, orbiting floating cartoon islands, splayed fairytale castle towers with fluttering pennants, rotating storybook windmills, bubbly cel-shaded trees, and puffy 3D cartoon clouds—all wrapped in crisp pitch-black comic outlines.
+- **Error Sweep & Hardening Scope**: Full diagnostic and fix pass covering **3D rendering, shaders, and console errors**, **Firestore cloud save and leaderboard permission handling**, **Online matchmaking and room connection reliability**, and **Armory 3D showcase preview rendering**.
 
 ---
 
-## 1. Overview & Core Concept
-
-The Halloween Sanctum Bundle transforms the Wizard Chess arena into an atmospheric Gothic Halloween battleground. Players can equip the entire seasonal suite at once or mix-and-match individual Halloween items with existing skins and independent PBR surface textures:
-
-1. **3D Piece Set (`hollow_reapers` — "Hollow Jack & Wraith Reapers")**:
-   - **Pawn ("Lantern Thrall")**: Cloaked grave-watcher carrying a glowing iron Jack-o'-Lantern cage and a jagged sickle.
-   - **Rook ("Haunted Crypt Tower")**: Weathered cemetery mausoleum pillar topped with wrought-iron spikes, gargoyle reliefs, and a carved pumpkin spire.
-   - **Knight ("Headless Horseman")**: Armored spectral destrier rearing over a twisted dead-root base while its headless rider brandishes a blazing Jack-o'-Lantern skull and cursed broadsword.
-   - **Bishop ("Soul-Harvester Wraith")**: Floating tattered-cowl wraith clutching a crooked soul-lantern staff and twin crescent reaper blades.
-   - **Queen ("Banshee Scythe Empress")**: Crowned spectral matriarch draped in floating shadow-ribbons, wielding a double-headed crescent war-scythe with an inner pumpkin-fire core.
-   - **King ("Pumpkin Lord Sovereign")**: Towering dread monarch wearing a spiked iron crown over a grinning carved Jack-o'-Lantern head, wielding the Great Cleaver Scythe of Samhain.
-2. **3D World Scenery (`haunted_blood_graveyard` — "Haunted Blood-Moon Graveyard")**:
-   - An eerie midnight sky dominated by an oversized crimson-orange Blood Moon, volumetric violet-indigo cemetery fog, gnarled leafless oak silhouettes, gothic wrought-iron cemetery arches, orbiting spectral bats, and bobbing candle-lit Jack-o'-Lanterns.
-3. **3D Altar Board (`cursed_pumpkin_altar` — "Cursed Jack-o'-Lantern Crypt")**:
-   - Cracked cemetery slate and charred pumpkin-wood squares bordered by wrought-iron graveyard fencing, tilted Gothic headstones, and four corner Jack-o'-Lantern braziers burning with dual orange pumpkin-fire and green ectoplasm flames.
-4. **Piece Finish (`hallow_pumpkin_wraith` — "Hallow Bone & Midnight Wraith")**:
-   - Bleached skull-bone ivory and charred phantom obsidian armor paired with glowing carved-pumpkin amber (`#ff6d00`) and spectral ectoplasm green (`#00e676`) weapons and eyes.
-5. **PBR Surface Preset (`pumpkin_carved_bark` — "Charred Pumpkin Bark")**:
-   - Scorched autumn timber and carved gourd micro-relief map selectable independently for **Piece Set**, **Table Base**, **Board Tiles**, or **Border & Trim**.
+## 2. Visual Direction & 3D Architecture
+- **Aesthetic Persona**: Hand-Inked Storybook Fantasy meets Arcane Tabletop Tactility.
+- **Cel-Shaded & Inked Rendering Pipeline**:
+  - **Stepped Toon Lighting**: Custom quantized lighting bands and procedural cel-painted wood/stone textures with high-contrast comic highlights and warm shadow steps.
+  - **Dual-Layer Black Ink Outlines (`#050508`)**:
+    1. **Inverted-Hull Silhouette (`THREE.BackSide`)** along outer contours of table legs, moldings, floating islands, castle turrets, and puffy clouds so every 3D form reads like a hand-inked illustration from any camera angle.
+    2. **Crease Ink Lines (`THREE.EdgesGeometry` + `THREE.LineSegments`)** along crisp architectural bevels, board squares, and table trim so internal geometry retains comic-book definition.
+- **Default Accessibility**: Both the **Comic-Inked Wood & Gold Pedestal Table** and **Floating Toon Kingdom** scenery will be unlocked by default (`price: 0`) alongside the **Cartoon Classic Toon** piece set so players can immediately equip a complete head-to-toe cartoon setup or preview it in the 3D Armory.
 
 ---
 
-## 2. User Experience & Visual Design
+## 3. Core Features & Technical Execution
 
-### Aesthetic Direction
-- **Gothic Samhain Atmosphere**: Balances sharp silhouettes (scythe blades, wrought-iron spikes, gnarled branches, tilted tombstones) with warm internal emissive glow from carved Jack-o'-Lantern cavities and cool spectral ectoplasm accents.
-- **High-Contrast Readability**: White and Black sides remain immediately distinguishable in both 3D camera views and live gameplay—White pieces feature bleached bone-ash ivory with warm pumpkin-amber fire, while Black pieces feature midnight wraith-iron with eerie toxic-green/violet soul-fire.
+### A. Comic-Inked Wood & Gold Pedestal Table (`toon_ink_wood_table`)
+- **Catalog & Economy Integration**:
+  - Extend board architecture types with `'toon_table'` and register `toon_ink_wood_table` in the board catalog and default unlocked inventory.
+- **3D Table & Tile Geometry**:
+  - **Inked 64-Square Chessboard**: Honey-birch (`#fff0c2`) and comic-walnut (`#5e3a24`) squares with procedural hand-drawn wood grain and crisp black ink borders separating every square.
+  - **Chunky Wood & Gold Pedestal Architecture**: Splayed cartoon table apron with inset cel-gold trim rails, oversized golden comic medallions at all four corners, four chunky lathe-turned cartoon parlor legs with exaggerated bulbs and foot pads, and floating golden comic crown/star emblems at each corner.
+  - **Full Ink Pass**: Apply bold `#050508` inverted-hull shells and `EdgesGeometry` ink lines across the table frame, legs, corner medallions, and board tiles.
 
-### Color Palette & Mood
-| Role | Hex | Visual Application |
-| :--- | :--- | :--- |
-| **Midnight Graveyard Sky** | `#0b0714` | Deep twilight-violet backdrop and horizon fog |
-| **Blood Moon Crimson** | `#ff3d00` | Giant moon disc, rim-lighting, and dramatic shadow cast |
-| **Jack-o'-Lantern Amber** | `#ff7700` | Carved pumpkin eyes/grins, corner lantern braziers, primary embers |
-| **Spectral Ectoplasm** | `#00e676` | Wraith scythe runes, floating soul wisps, dark-side emissive accents |
-| **Bleached Skull Bone** | `#e8dfd1` | Light piece armor and weathered tombstone highlights |
-| **Phantom Wraith Iron** | `#16121d` | Dark piece armor, wrought-iron cemetery gates, and crypt slate |
+### B. Floating Toon Kingdom 3D World Scenery (`toon_sky_kingdom`)
+- **Cel-Shaded Sky Dome & Cloud Sea (`uMode = 4`)**:
+  - Extend the custom GLSL sky dome and horizon sea shaders with a dedicated quantized cel-shading mode (`uMode == 4`) producing stepped cerulean-to-sunlit-gold sky bands, rotating cartoon sunbeams, and a billowing cel-shaded sea of clouds beneath the board.
+- **3D Floating Kingdom Diorama**:
+  - **Floating Cartoon Islands**: Faceted low-poly rock spires topped with vibrant emerald grass caps, cascading cartoon waterfalls, and bold black silhouette outlines.
+  - **Cartoon Castles & Windmills**: Splayed fairytale castle towers with conical roofs, glowing arched windows, rotating storybook windmill blades, and bubbly cel-shaded trees.
+  - **Puffy Outlined Clouds & Star Motes**: Multi-sphere puffy white cartoon clouds with black inverted-hull outlines drifting lazily around the sanctuary, paired with gentle bobbing motion.
+- **Armory 3D Miniature Preview**:
+  - Build a dedicated interactive 3D miniature diorama in the Armory Showcase for `toon_sky_kingdom` (floating island, cartoon castle turret, puffy outlined clouds, and cel-shaded sky backdrop) and `toon_ink_wood_table` (miniature comic-inked wood & gold table with outlined legs and tiles).
 
-### Typography & Hierarchy
-- **Seasonal Rarity Badge**: Marked as `MYTHIC` with a custom `"HALLOWEEN EVENT"` tag in the Sanctum Armory cards so players can spot the new seasonal items immediately across all 4 tabs.
-- **Clear Spec Telemetry**: Each Halloween card displays its thematic metadata (`Scythe Slash & Pumpkin Shatter`, `Haunted Crypt & Iron Fence`, `Blood Moon & Floating Lanterns`, `Bone Ivory & Wraith Obsidian`).
-
-### Interactive Feedback & 3D Motion
-- **Custom Idle Animations**:
-  - Wraith Bishops and Queens gently levitate with a phase-shifted spectral bob; Headless Horseman Knights pulse their held Jack-o'-Lantern heads with flickering candle intensity.
-- **Halloween Capture & Shatter Choreography**:
-  - **Scythe Soul-Harvest Attack**: Attacking Halloween pieces execute a sweeping reaper-scythe arc accompanied by an orange-and-ectoplasm crescent slash trail.
-  - **Pumpkin & Soul-Flame Shatter**: Captured pieces burst into carved pumpkin shards, fluttering bat silhouettes, and rising green/amber soul-flames with an eerie organ-chord and scythe-whisper audio cue.
-
----
-
-## 3. Key Product Decisions & Trade-Offs
-
-1. **Procedural Low-Poly Sculpting with Instanced Graveyard Props (60 FPS Guarantee)**:
-   - **Decision**: Build all 6 Halloween piece silhouettes and the graveyard environment using shared, cached Three.js geometries (`LatheGeometry`, `ConeGeometry`, `TorusGeometry`, and merged static perimeter meshes) rather than heavy high-subdivision meshes.
-   - **Rationale**: Preserves the smooth framerate optimization recently established while delivering unmistakable silhouettes (carved pumpkin grins, scythe blades, headless horseman pose, wrought-iron fences, and tombstones).
-2. **Independent PBR Compatibility**:
-   - **Decision**: Integrate the new `pumpkin_carved_bark` PBR texture into the existing 4-slot independent texture selector (`pieces`, `table`, `board`, `trim`) and wire `auto` mode to pair Halloween boards and pieces with charred pumpkin-wood and cemetery slate automatically.
-   - **Rationale**: Respects the user's per-surface texture customization workflow without forcing a single texture across all surfaces.
-3. **Hitbox-Safe Geometry Bounds**:
-   - **Decision**: Keep decorative scythe tips, floating lanterns, and horseman capes strictly within the visual mesh group while the existing two-tier cylinder + board-tile raycaster (`resolveClickedSquareOnBoard`) handles click/touch selection.
-   - **Rationale**: Ensures overhanging scythe blades or wings never block adjacent squares (like touching a Pawn and accidentally selecting the King).
+### C. Comprehensive Error Sweep & System Hardening
+- **3D Rendering, Shaders & Armory Showcase**:
+  - Audit all custom GLSL shader injections (`onBeforeCompile` in `pieceOutlineAndGlow.js` and `worldSceneries.js`) to ensure zero WebGL shader warnings or uniform mismatches across skin/scenery transitions.
+  - Ensure clean geometry/material disposal in the Armory 3D Showcase (`SkinShowcaseCanvas`) and live board engine when rapidly switching between standard PBR skins and Toon outlined skins.
+- **Firestore Cloud Save & Leaderboard Resilience**:
+  - Harden `firebase.ts` and `firestore.rules` so unauthenticated sessions, guest sessions, or restricted paths gracefully synchronize with local storage and fallback cleanly without throwing unhandled Firestore permission errors.
+- **Online Matchmaking & Room Connection**:
+  - Harden stale-room cleanup, transaction-based room joining, and real-time `onSnapshot` listeners so two devices searching simultaneously reliably pair into an active match without race conditions or orphaned waiting rooms.
 
 ---
 
-## 4. Technical Architecture & Data Strategy
+## 4. Architecture & Data Flow
 
-### System Architecture Diagram
-
+```text
++-------------------------------------------------------------------------+
+|                        SKIN & SCENERY CATALOG                           |
+|  - Piece Set : toon_classic ("Cartoon Classic Toon")                    |
+|  - Finish    : toon_cel_ink ("Cartoon Cel-Ink")                         |
+|  - Board     : toon_ink_wood_table ("Comic-Inked Wood & Gold Pedestal") |
+|  - Scenery   : toon_sky_kingdom ("Floating Toon Kingdom")               |
++-------------------+---------------------------------+-------------------+
+                    |                                 |
+                    v                                 v
++---------------------------------------+ +-------------------------------+
+|       LIVE 3D WIZARD CHESS ENGINE     | |    3D ARMORY SHOWCASE MODAL   |
+|  - rebuildBoardArchitectureGroup()    | |  - Interactive 360° Preview   |
+|    -> archType: 'toon_table'          | |  - Miniature Toon Table &     |
+|    -> Black Hull + Crease Ink Pass    | |    Floating Kingdom Diorama   |
+|  - createWorldSceneryManager()        | |  - Safe WebGL Resource        |
+|    -> buildToonSkyKingdomGroup()      | |    Disposal on Tab Switch     |
+|    -> GLSL Sky/Sea uMode = 4          | +-------------------------------+
++-------------------+-------------------+
+                    |
+                    v
++-------------------------------------------------------------------------+
+|                CLOUD SAVE, LEADERBOARD & MATCHMAKING                    |
+|  - Firestore Transaction Matchmaking + Stale Room Cleanup               |
+|  - Permission-Safe Cloud Profile Sync & LocalStorage Fallback           |
++-------------------------------------------------------------------------+
 ```
-+-----------------------------------------------------------------------------------+
-|                            SANCTUM ARMORY & CATALOG                               |
-|  - PieceArchetype: 'hollow_reapers'      - BoardSkin: 'cursed_pumpkin_altar'      |
-|  - PieceSkin: 'hallow_pumpkin_wraith'    - WorldScenery: 'haunted_blood_graveyard'|
-|  - PBR Preset: 'pumpkin_carved_bark' (Independent per-slot: Pieces/Table/Board)   |
-+-----------------------------------------+-----------------------------------------+
-                                          |
-                     +--------------------+--------------------+
-                     |                                         |
-                     v                                         v
-+-----------------------------------------+ +---------------------------------------+
-|      3D PIECE & BOARD MODEL ENGINE      | |     3D WORLD & VFX/SFX ENGINE         |
-|  - 6 'hollow_reapers' procedural meshes | |  - Blood Moon disc + cemetery fog     |
-|    (Lantern Thrall, Crypt Rook,         | |  - Dead oak trees + iron gate arches  |
-|     Headless Horseman, Wraith Bishop,   | |  - Orbiting bats + floating pumpkins  |
-|     Banshee Queen, Pumpkin Sovereign)   | |  - Scythe slash + pumpkin-ember burst |
-|  - 'haunted_crypt' board border:        | |  - Eerie organ + reaper-scythe audio  |
-|    Iron fence, tombstones & 4 pumpkins  | |  - Live preview in SkinShowcaseCanvas |
-+-----------------------------------------+ +---------------------------------------+
-```
-
-### Catalog & State Additions
-- **Piece Archetype (`hollow_reapers`)**:
-  - `attackStyle`: `'Scythe Soul-Harvest & Pumpkin Burst'`
-  - Custom geometry builder for all 6 chess roles (`p`, `r`, `n`, `b`, `q`, `k`) with carved emissive Jack-o'-Lantern facial cut-outs and curved reaper scythes.
-- **Board Skin (`cursed_pumpkin_altar`)**:
-  - `archType`: `'haunted_crypt'`
-  - Perimeter generator adding corner Jack-o'-Lantern pedestals, wrought-iron picket rails, and weathered Gothic gravestones around the 8×8 grid.
-- **World Scenery (`haunted_blood_graveyard`)**:
-  - Environment builder rendering the Blood Moon backdrop, dead forest ring, graveyard monoliths, and animated floating Jack-o'-Lantern particles in both the main 3D game arena and the Armory `SkinShowcaseCanvas` preview.
-- **Piece Skin (`hallow_pumpkin_wraith`) & PBR Texture (`pumpkin_carved_bark`)**:
-  - High-contrast bone-ivory vs. midnight-obsidian palette with `#ff6d00` pumpkin-amber and `#00e676` ectoplasm emissives, plus a procedural charred-bark/carved-gourd PBR canvas generator cached at GPU-friendly resolution.

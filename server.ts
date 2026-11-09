@@ -33,6 +33,7 @@ interface RoomState {
   turn: 'w' | 'b';
   moves: MoveEntry[];
   resetCount: number;
+  surrenderedBy?: 'w' | 'b' | '';
   updatedAt: number;
   wsClients: Set<WebSocket>;
   sseClients: Set<express.Response>;
@@ -93,6 +94,7 @@ function serializeRoom(room: RoomState) {
     turn: room.turn,
     moves: room.moves,
     resetCount: room.resetCount,
+    surrenderedBy: room.surrenderedBy || '',
     updatedAt: room.updatedAt
   };
 }
@@ -127,9 +129,12 @@ function pruneQueue() {
   const now = Date.now();
   for (let i = matchmakingQueue.length - 1; i >= 0; i--) {
     const entry = matchmakingQueue[i];
-    const wsClosed = entry.ws && entry.ws.readyState !== WebSocket.OPEN;
+    if (entry.ws && entry.ws.readyState !== WebSocket.OPEN) {
+      entry.ws = null;
+    }
+    const stale = !entry.ws && now - entry.lastSeenAt > 10000;
     const expired = now - entry.joinedAt > MATCHMAKING_TIMEOUT_MS;
-    if (wsClosed || expired) {
+    if (stale || expired) {
       if (expired && entry.ws && entry.ws.readyState === WebSocket.OPEN) {
         try {
           entry.ws.send(JSON.stringify({ type: 'queue:timeout', timeoutSec: 30 }));
@@ -146,10 +151,9 @@ function findSuitableOpponentIndex(
   playerToken: string,
   preferredColor: 'w' | 'b' | 'any',
   rating: number,
-  myJoinedAt: number
+  _myJoinedAt: number
 ): number {
   const now = Date.now();
-  const myWaitSec = Math.max(0, (now - myJoinedAt) / 1000);
   let bestIdx = -1;
   let bestScore = Infinity;
 
@@ -158,26 +162,13 @@ function findSuitableOpponentIndex(
     if (candidate.playerToken === playerToken) continue;
 
     const candidateWaitSec = Math.max(0, (now - candidate.joinedAt) / 1000);
-    const maxWaitSec = Math.max(myWaitSec, candidateWaitSec);
-
-    // Rating window starts at ±150 and expands by +45 per second waited
-    const allowedRatingDelta = 150 + maxWaitSec * 45;
     const ratingDelta = Math.abs((candidate.rating || 1000) - rating);
 
-    if (ratingDelta > allowedRatingDelta && maxWaitSec < 8) {
-      continue;
-    }
-
-    // Prefer compatible color preferences ('w' vs 'b' or 'any')
+    // Prefer compatible color preferences ('w' vs 'b' or 'any') and closer ratings without blocking matches
     const colorConflict =
       preferredColor !== 'any' &&
       candidate.preferredColor !== 'any' &&
       preferredColor === candidate.preferredColor;
-
-    // If both want the exact same color, wait 4 seconds for an ideal opposite-color match before pairing anyway
-    if (colorConflict && maxWaitSec < 4) {
-      continue;
-    }
 
     const score = ratingDelta + (colorConflict ? 120 : 0) - candidateWaitSec * 10;
     if (score < bestScore) {
@@ -378,6 +369,16 @@ function applyRoomMove(
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
   app.use(express.json({ limit: '15mb' }));
 
   // --- Matchmaking REST API ---
@@ -541,7 +542,22 @@ async function startServer() {
     }
     room.moves = [];
     room.turn = 'w';
+    room.surrenderedBy = '';
     room.resetCount += 1;
+    room.updatedAt = Date.now();
+    broadcastRoomState(room);
+    res.json({ ok: true, room: serializeRoom(room) });
+  });
+
+  app.post('/api/rooms/:code/surrender', (req, res) => {
+    const code = String(req.params.code || '').trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room) {
+      res.status(404).json({ ok: false, error: 'Room not found' });
+      return;
+    }
+    const color: 'w' | 'b' = req.body?.color === 'b' ? 'b' : 'w';
+    room.surrenderedBy = color;
     room.updatedAt = Date.now();
     broadcastRoomState(room);
     res.json({ ok: true, room: serializeRoom(room) });
@@ -651,7 +667,16 @@ async function startServer() {
           if (room) {
             room.moves = [];
             room.turn = 'w';
+            room.surrenderedBy = '';
             room.resetCount += 1;
+            room.updatedAt = Date.now();
+            broadcastRoomState(room);
+          }
+        } else if (msg.type === 'room:surrender') {
+          const code = String(msg.code || '').trim().toUpperCase();
+          const room = rooms.get(code) || subscribedRoom;
+          if (room) {
+            room.surrenderedBy = msg.color === 'b' ? 'b' : 'w';
             room.updatedAt = Date.now();
             broadcastRoomState(room);
           }
@@ -666,7 +691,9 @@ async function startServer() {
         subscribedRoom.wsClients.delete(ws);
       }
       const qIdx = matchmakingQueue.findIndex((q) => q.ws === ws);
-      if (qIdx !== -1) matchmakingQueue.splice(qIdx, 1);
+      if (qIdx !== -1) {
+        matchmakingQueue[qIdx].ws = null;
+      }
     });
   });
 

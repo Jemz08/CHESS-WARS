@@ -661,6 +661,10 @@ export function resolvePiecePoliigonPresets(skinId = 'classic_stone', archetypeI
     whitePreset = 'pumpkin_carved_bark';
     blackPreset = 'volcanic_basalt_cracked';
     normalScaleVal = 0.92;
+  } else if (archetypeId === 'toon_classic' || skinId === 'toon_cel_ink') {
+    whitePreset = 'marble_calacatta';
+    blackPreset = 'marble_nero_marquina';
+    normalScaleVal = 0.14;
   }
 
   // Apply independent per-part overrides if chosen by the user
@@ -684,7 +688,17 @@ export function resolvePiecePoliigonPresets(skinId = 'classic_stone', archetypeI
  */
 export function resolveBoardPoliigonPresets(boardSkinId = 'obsidian_sanctum', archType = 'gothic') {
   let res;
-  if (boardSkinId === 'royal_wood_table' || archType === 'wood_table') {
+  if (boardSkinId === 'toon_ink_wood_table' || archType === 'toon_table') {
+    res = {
+      lightPreset: 'wood_fine_dark',
+      darkPreset: 'wood_fine_dark',
+      borderPreset: 'wood_fine_dark',
+      accentPreset: 'metal_gold_hammered',
+      normalScaleVal: 0.28,
+      repeatSq: 1.25,
+      repeatBorder: 2.0
+    };
+  } else if (boardSkinId === 'royal_wood_table' || archType === 'wood_table') {
     res = {
       lightPreset: 'wood_fine_dark',
       darkPreset: 'wood_fine_dark',

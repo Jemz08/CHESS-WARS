@@ -148,6 +148,45 @@
         }
       },
       "required": ["userId", "displayName", "wins", "rating", "rankTier"]
+    },
+    "MatchmakingTicket": {
+      "title": "MatchmakingTicket",
+      "description": "Active online matchmaking queue ticket for cross-device pairing",
+      "type": "object",
+      "properties": {
+        "playerToken": { "type": "string", "maxLength": 128 },
+        "preferredColor": { "type": "string", "maxLength": 8 },
+        "rating": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "roomCode": { "type": "string", "maxLength": 16 },
+        "assignedColor": { "type": "string", "maxLength": 4 },
+        "opponentRating": { "type": "number" },
+        "loadoutJson": { "type": "string" },
+        "joinedAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["playerToken", "preferredColor", "rating", "status", "updatedAt"]
+    },
+    "MultiplayerRoom": {
+      "title": "MultiplayerRoom",
+      "description": "Live multiplayer chess room state synchronized across devices",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 16 },
+        "status": { "type": "string", "maxLength": 32 },
+        "whiteToken": { "type": "string", "maxLength": 128 },
+        "blackToken": { "type": "string", "maxLength": 128 },
+        "whiteJoined": { "type": "boolean" },
+        "blackJoined": { "type": "boolean" },
+        "whiteLoadoutJson": { "type": "string" },
+        "blackLoadoutJson": { "type": "string" },
+        "turn": { "type": "string", "maxLength": 4 },
+        "movesJson": { "type": "string" },
+        "resetCount": { "type": "number" },
+        "surrenderedBy": { "type": "string", "maxLength": 4 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["code", "status", "turn", "updatedAt"]
     }
   },
   "firestore": {
@@ -158,6 +197,14 @@
     "/leaderboard/{userId}": {
       "schema": { "$ref": "#/entities/LeaderboardEntry" },
       "description": "Public player ranking data for the live leaderboard feed"
+    },
+    "/matchmaking_queue/{ticketId}": {
+      "schema": { "$ref": "#/entities/MatchmakingTicket" },
+      "description": "Global cross-device matchmaking queue"
+    },
+    "/multiplayer_rooms/{roomCode}": {
+      "schema": { "$ref": "#/entities/MultiplayerRoom" },
+      "description": "Global cross-device multiplayer rooms"
     }
   }
 }

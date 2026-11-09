@@ -17,8 +17,22 @@ import { createWorldSceneryManager } from './worldSceneries.js';
 import { createSoundAndVfxManager, PIECE_KILL_PROFILES, getArchetypeKillProfile } from './soundAndVfxEngine.js';
 import {
   configureGlowingPieceBodyMaterial,
-  attachPieceBodyOutline
+  attachPieceBodyOutline,
+  createCartoonOutlinePostProcessor
 } from './pieceOutlineAndGlow.js';
+import {
+  pollCloudMatchmaking,
+  subscribeCloudMatchmakingTicket,
+  leaveCloudMatchmaking,
+  fetchCloudMultiplayerRoom,
+  saveCloudMultiplayerRoom,
+  joinCloudMultiplayerRoom,
+  appendCloudRoomMove,
+  updateCloudRoomLoadout,
+  recordCloudRoomSurrender,
+  resetCloudMultiplayerRoom,
+  subscribeCloudMultiplayerRoom
+} from './firebase';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -74,6 +88,7 @@ export function initWizardChess() {
     if (renderer.debug) {
       renderer.debug.checkShaderErrors = false;
     }
+    const cartoonPostProcessor = createCartoonOutlinePostProcessor(renderer);
     renderer.domElement.addEventListener(
       'webglcontextlost',
       (e) => {
@@ -1059,6 +1074,7 @@ export function initWizardChess() {
     function applySkinToSideMaterials(side, skin) {
       if (!skin) return;
       const sideArch = side === 'w' ? whitePieceArchetype : blackPieceArchetype;
+      const isSideCartoon = Boolean(skin.isCartoon || sideArch === 'toon_classic');
       const pbrPresets = resolvePiecePoliigonPresets(skin.id || 'classic_stone', sideArch);
 
       if (side === 'w') {
@@ -1070,7 +1086,7 @@ export function initWizardChess() {
         whitePieceMat.userData.baseEmissiveIntensity = whitePieceMat.emissiveIntensity;
         whitePieceMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
         whitePieceMat.userData.activeSkinObj = skin;
-        configureGlowingPieceBodyMaterial(whitePieceMat, skin, 'w');
+        configureGlowingPieceBodyMaterial(whitePieceMat, skin, 'w', isSideCartoon);
         applyPoliigonPbrToMaterial(whitePieceMat, pbrPresets.whitePreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1086,6 +1102,7 @@ export function initWizardChess() {
         whiteTrimMat.emissiveIntensity = skin.trimEmissiveIntensity ?? 0;
         whiteTrimMat.userData.baseEmissiveIntensity = whiteTrimMat.emissiveIntensity;
         whiteTrimMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
+        configureGlowingPieceBodyMaterial(whiteTrimMat, skin, 'w', isSideCartoon);
         applyPoliigonPbrToMaterial(whiteTrimMat, pbrPresets.trimPreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1119,7 +1136,7 @@ export function initWizardChess() {
         blackPieceMat.userData.baseEmissiveIntensity = blackPieceMat.emissiveIntensity;
         blackPieceMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
         blackPieceMat.userData.activeSkinObj = skin;
-        configureGlowingPieceBodyMaterial(blackPieceMat, skin, 'b');
+        configureGlowingPieceBodyMaterial(blackPieceMat, skin, 'b', isSideCartoon);
         applyPoliigonPbrToMaterial(blackPieceMat, pbrPresets.blackPreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1135,6 +1152,7 @@ export function initWizardChess() {
         blackTrimMat.emissiveIntensity = skin.trimEmissiveIntensity ?? 0;
         blackTrimMat.userData.baseEmissiveIntensity = blackTrimMat.emissiveIntensity;
         blackTrimMat.userData.isGlowingSkin = Boolean(skin.isGlowing);
+        configureGlowingPieceBodyMaterial(blackTrimMat, skin, 'b', isSideCartoon);
         applyPoliigonPbrToMaterial(blackTrimMat, pbrPresets.trimPreset, {
           contextId: 'main',
           repeatX: 2,
@@ -1165,7 +1183,7 @@ export function initWizardChess() {
         for (let c = 0; c < 8; c++) {
           const p = boardState[r] && boardState[r][c];
           if (p && p.color === side && p.mesh) {
-            attachPieceBodyOutline(p.mesh, skin, side);
+            attachPieceBodyOutline(p.mesh, skin, side, isSideCartoon);
           }
         }
       }
@@ -1191,9 +1209,12 @@ export function initWizardChess() {
       currentBoardSkinObj = boardSkin;
       const bPresets = resolveBoardPoliigonPresets(boardSkin.id || 'obsidian_sanctum', boardSkin.archType || 'gothic');
 
+      const isToonBoard = Boolean(boardSkin.isCartoon || boardSkin.archType === 'toon_table');
+
       lightSqMat.color.set(boardSkin.lightSqHex || '#dcd3c2');
       lightSqMat.roughness = boardSkin.lightRoughness ?? 0.38;
       lightSqMat.metalness = boardSkin.lightMetalness ?? 0.06;
+      configureGlowingPieceBodyMaterial(lightSqMat, null, 'w', isToonBoard);
       applyPoliigonPbrToMaterial(lightSqMat, bPresets.lightPreset, {
         contextId: 'main',
         repeatX: bPresets.repeatSq,
@@ -1205,6 +1226,7 @@ export function initWizardChess() {
       darkSqMat.color.set(boardSkin.darkSqHex || '#14171f');
       darkSqMat.roughness = boardSkin.darkRoughness ?? 0.28;
       darkSqMat.metalness = boardSkin.darkMetalness ?? 0.18;
+      configureGlowingPieceBodyMaterial(darkSqMat, null, 'b', isToonBoard);
       applyPoliigonPbrToMaterial(darkSqMat, bPresets.darkPreset, {
         contextId: 'main',
         repeatX: bPresets.repeatSq,
@@ -1214,6 +1236,7 @@ export function initWizardChess() {
       });
 
       boardBorderMat.color.set(boardSkin.borderHex || '#d4af37');
+      configureGlowingPieceBodyMaterial(boardBorderMat, null, 'w', isToonBoard);
       applyPoliigonPbrToMaterial(boardBorderMat, bPresets.borderPreset, {
         contextId: 'main',
         repeatX: bPresets.repeatBorder,
@@ -1972,10 +1995,15 @@ export function initWizardChess() {
 
     // Multiplayer & Online Matchmaking State
     let roomCode = null;
-    let playerToken = localStorage.getItem('wizard_chess_token') || '';
+    let playerToken = '';
+    try {
+      playerToken = sessionStorage.getItem('wizard_chess_session_token') || '';
+    } catch (e) {}
     let roomEventSource = null;
     let roomPollTimer = null;
     let matchmakingPollTimer = null;
+    let cloudMatchmakingUnsub = null;
+    let cloudRoomUnsub = null;
     let onlineQueueStatus = 'idle'; // 'idle' | 'searching' | 'matched'
     let activeWebSocket = null;
     let appliedMoveSeq = 0;
@@ -2116,8 +2144,9 @@ export function initWizardChess() {
       const sideSkinObj =
         (color === 'w' ? whitePieceMat.userData.activeSkinObj : blackPieceMat.userData.activeSkinObj) ||
         currentPieceSkinObj;
-      if (sideSkinObj?.isGlowing) {
-        attachPieceBodyOutline(root, sideSkinObj, color);
+      const isSideCartoon = Boolean(sideSkinObj?.isCartoon || sideArchetype === 'toon_classic');
+      if (sideSkinObj?.isGlowing || isSideCartoon) {
+        attachPieceBodyOutline(root, sideSkinObj, color, isSideCartoon);
       }
 
       const worldPos = boardToWorld(r, c);
@@ -2339,6 +2368,7 @@ export function initWizardChess() {
       winnerColor: null,
       isCheckWin: false,
       isTimeOutWin: false,
+      isSurrenderWin: false,
       kingFallAngleDeg: 0,
       kingKnockedOffBoard: false,
       triumphantPieceType: null,
@@ -2502,6 +2532,7 @@ export function initWizardChess() {
       checkmateState.winnerColor = null;
       checkmateState.isCheckWin = false;
       checkmateState.isTimeOutWin = false;
+      checkmateState.isSurrenderWin = false;
       checkmateState.kingFallAngleDeg = 0;
       checkmateState.kingKnockedOffBoard = false;
       checkmateState.triumphantPieceType = null;
@@ -4742,7 +4773,14 @@ export function initWizardChess() {
       impactFlashLight.intensity = 18.5;
     }
 
-    function showCheckmateBanner(winnerColor, defeatedColor, isCheckWin = false, isTimeOutWin = false, triumphantPiece = null) {
+    function showCheckmateBanner(
+      winnerColor,
+      defeatedColor,
+      isCheckWin = false,
+      isTimeOutWin = false,
+      triumphantPiece = null,
+      isSurrenderWin = false
+    ) {
       const overlay = document.getElementById('checkmate-overlay');
       const crownEl = document.getElementById('checkmate-crown');
       const titleEl = document.getElementById('checkmate-title');
@@ -4764,21 +4802,27 @@ export function initWizardChess() {
 
       if (crownEl) crownEl.textContent = winnerColor === 'w' ? '♔' : '♚';
       if (titleEl) {
-        titleEl.textContent = isTimeOutWin
-          ? 'Time Out — Victory!'
-          : isCheckWin
-            ? 'Check — Victory!'
-            : 'Checkmate';
+        titleEl.textContent = isSurrenderWin
+          ? 'Surrender — Victory!'
+          : isTimeOutWin
+            ? 'Time Out — Victory!'
+            : isCheckWin
+              ? 'Check — Victory!'
+              : 'Checkmate';
       }
       if (subEl) {
-        subEl.textContent = isTimeOutWin
-          ? `${winnerName} Wins on Time (${preset.shortLabel}) • ${defeatedName} King Knocked Off Board`
-          : isCheckWin
-            ? `${winnerName} Wins the Match • Triumphant ${pieceLabel} Knocked the ${defeatedName} King Off the Board`
-            : `${winnerName} Triumphs • Triumphant ${pieceLabel} Knocked the ${defeatedName} King Off the Board`;
+        subEl.textContent = isSurrenderWin
+          ? `${defeatedName} Surrendered • ${winnerName} Triumphs & Knocked the ${defeatedName} King Off the Board`
+          : isTimeOutWin
+            ? `${winnerName} Wins on Time (${preset.shortLabel}) • ${defeatedName} King Knocked Off Board`
+            : isCheckWin
+              ? `${winnerName} Wins the Match • Triumphant ${pieceLabel} Knocked the ${defeatedName} King Off the Board`
+              : `${winnerName} Triumphs • Triumphant ${pieceLabel} Knocked the ${defeatedName} King Off the Board`;
       }
       if (impactTextEl) {
-        impactTextEl.textContent = `${winnerName} ${pieceLabel} • ${killProfile.title} • ${defeatedName} King Knocked Off Board with Stone Debris`;
+        impactTextEl.textContent = isSurrenderWin
+          ? `${defeatedName} Conceded the Altar • ${winnerName} ${pieceLabel} Knocked the ${defeatedName} King Off Board`
+          : `${winnerName} ${pieceLabel} • ${killProfile.title} • ${defeatedName} King Knocked Off Board with Stone Debris`;
       }
       if (overlay) {
         overlay.classList.add('visible', 'checkmate-impact-climax');
@@ -4798,7 +4842,8 @@ export function initWizardChess() {
             kingKnockedOffBoard: true,
             debrisShardCount: checkmateState.debrisShardCount || 92,
             isCheckWin,
-            isTimeOutWin
+            isTimeOutWin,
+            isSurrenderWin
           }
         })
       );
@@ -4808,6 +4853,7 @@ export function initWizardChess() {
       const actualWinner = winnerColor || (defeatedColor === 'w' ? 'b' : 'w');
       const isCheckWin = Boolean(options && options.isCheckWin);
       const isTimeOutWin = Boolean(options && options.isTimeOutWin);
+      const isSurrenderWin = Boolean(options && options.isSurrenderWin);
 
       // Cleanly restore any prior checkmate pose & remove previous checkmate tween if replaying
       restoreCheckmatePiecesPose();
@@ -4839,13 +4885,14 @@ export function initWizardChess() {
       checkmateState.winnerColor = actualWinner;
       checkmateState.isCheckWin = isCheckWin;
       checkmateState.isTimeOutWin = isTimeOutWin;
+      checkmateState.isSurrenderWin = isSurrenderWin;
       checkmateState.kingFallAngleDeg = 0;
       checkmateState.kingKnockedOffBoard = false;
       checkmateState.phase = 'stagger';
       updateCheck3DIndicator(defeatedColor);
 
       if (!kingPiece || !kingPiece.mesh) {
-        showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin, null);
+        showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin, null, isSurrenderWin);
         return false;
       }
 
@@ -5149,7 +5196,14 @@ export function initWizardChess() {
             // Directly trigger the #checkmate-overlay UI right as the King is knocked over the board edge!
             if (!bannerShown) {
               bannerShown = true;
-              showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin, triumphantPiece);
+              showCheckmateBanner(
+                actualWinner,
+                defeatedColor,
+                isCheckWin,
+                isTimeOutWin,
+                triumphantPiece,
+                isSurrenderWin
+              );
             }
 
             const uPlunge = Math.min(1, (elapsed - tRimCross) / (tLandOffBoard - tRimCross));
@@ -5175,7 +5229,14 @@ export function initWizardChess() {
           checkmateState.kingKnockedOffBoard = true;
           applyKingKnockoffPose(totalKnockoffDist, -0.18, 2.32, 0.35);
           if (!bannerShown) {
-            showCheckmateBanner(actualWinner, defeatedColor, isCheckWin, isTimeOutWin, triumphantPiece);
+            showCheckmateBanner(
+              actualWinner,
+              defeatedColor,
+              isCheckWin,
+              isTimeOutWin,
+              triumphantPiece,
+              isSurrenderWin
+            );
           }
           return true;
         }
@@ -5183,6 +5244,100 @@ export function initWizardChess() {
       }
 
       activeMoveTweens.push(stepKingFall);
+      return true;
+    }
+
+    function surrenderMatch(surrenderingColor = null, options = {}) {
+      if (gameOver) return false;
+      let defeatedColor = currentTurn;
+      if (surrenderingColor === 'w' || surrenderingColor === 'b') {
+        defeatedColor = surrenderingColor;
+      } else if (gameMode === 'single' || gameMode === 'multi') {
+        defeatedColor = playerColor === 'b' ? 'b' : 'w';
+      }
+
+      gameOver = true;
+      if (aiTimer) {
+        clearTimeout(aiTimer);
+        aiTimer = null;
+      }
+      preMoveHighlightTask = null;
+      clearSquareHighlights();
+      selectedSquare = null;
+      validMoves = [];
+
+      if (gameMode === 'multi' && roomCode && !options.fromRemote) {
+        const stRoom = getStaticRoom(roomCode);
+        if (stRoom) {
+          stRoom.surrenderedBy = defeatedColor;
+          stRoom.updatedAt = Date.now();
+          saveAndBroadcastStaticRoom(stRoom);
+        }
+        if (activeWebSocket && activeWebSocket.readyState === WebSocket.OPEN) {
+          try {
+            activeWebSocket.send(
+              JSON.stringify({
+                type: 'room:surrender',
+                code: roomCode,
+                color: defeatedColor
+              })
+            );
+          } catch (e) {}
+        }
+        mpApiRequest(`/api/rooms/${roomCode}/surrender`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ color: defeatedColor })
+        });
+        recordCloudRoomSurrender(roomCode, defeatedColor);
+      }
+
+      const winnerColor = defeatedColor === 'w' ? 'b' : 'w';
+      const winner = winnerColor === 'w' ? 'White' : 'Black';
+      const defeated = defeatedColor === 'w' ? 'White' : 'Black';
+      const turnText = document.getElementById('turn-text');
+      if (turnText) {
+        turnText.textContent = `${defeated} Surrendered — ${winner} Wins!`;
+      }
+
+      if (!checkmateState.active) {
+        triggerCheckmateSequence(defeatedColor, winnerColor, {
+          isCheckWin: false,
+          isTimeOutWin: false,
+          isSurrenderWin: true
+        });
+      }
+
+      announceSanctumEvent('check_win', {
+        winner,
+        defeated,
+        isCheckmate: false,
+        isSurrenderWin: true
+      });
+
+      const isHumanWin =
+        gameMode === 'pass' ||
+        (gameMode === 'single' && winnerColor === playerColor) ||
+        (gameMode === 'multi' && winnerColor === playerColor);
+
+      window.dispatchEvent(
+        new CustomEvent('wizardchess:matchwon', {
+          detail: {
+            winnerColor,
+            defeatedColor,
+            gameMode,
+            botDifficulty,
+            timeControlCategory,
+            timeControlPresetId,
+            isHumanWin,
+            isCheckWin: false,
+            isTimeOutWin: false,
+            isSurrenderWin: true
+          }
+        })
+      );
+      emitClockTick();
+      updateTurnUI();
       return true;
     }
 
@@ -5309,6 +5464,14 @@ export function initWizardChess() {
         } else {
           turnText.textContent = 'Stalemate — Draw';
         }
+      } else if (gameOver && checkmateState.isSurrenderWin) {
+        const winner = checkmateState.winnerColor === 'b' ? 'Black' : 'White';
+        const defeated = checkmateState.defeatedColor === 'b' ? 'Black' : 'White';
+        turnText.textContent = `${defeated} Surrendered — ${winner} Wins!`;
+      } else if (gameOver && checkmateState.isTimeOutWin) {
+        const winner = checkmateState.winnerColor === 'b' ? 'Black' : 'White';
+        const preset = TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
+        turnText.textContent = `Time Out (${preset.shortLabel}) — ${winner} Wins!`;
       } else if (!matchStarted) {
         turnText.textContent = 'Select Game Mode';
       } else {
@@ -5651,13 +5814,15 @@ export function initWizardChess() {
     });
 
     // =========================================================================
-    // Multiplayer Room Synchronization (Same-Origin API + Static Site Fallback)
+    // Multiplayer Room Synchronization (Firestore Global Cloud + Express/WS + Static Fallback)
     // =========================================================================
-    const CLOUD_MP_API_BASE = '';
+    const CLOUD_MP_API_BASE = 'https://ais-pre-64yibneopxihyh3rjs6f74-281552636048.asia-southeast1.run.app';
     const isStaticHost =
       window.location.hostname.includes('zipline') ||
       window.location.hostname.includes('github.io') ||
-      window.location.protocol === 'file:';
+      window.location.protocol === 'file:' ||
+      window.location.protocol === 'capacitor:' ||
+      (window.location.hostname === 'localhost' && window.location.port === '');
 
     const MATCHMAKING_TIMEOUT_MS = 30000;
     let matchmakingTimeoutTimer = null;
@@ -5679,6 +5844,12 @@ export function initWizardChess() {
       if (matchmakingCountdownTimer) {
         clearInterval(matchmakingCountdownTimer);
         matchmakingCountdownTimer = null;
+      }
+      if (cloudMatchmakingUnsub) {
+        try {
+          cloudMatchmakingUnsub();
+        } catch (e) {}
+        cloudMatchmakingUnsub = null;
       }
     }
 
@@ -5721,6 +5892,7 @@ export function initWizardChess() {
     }
 
     function saveAndBroadcastStaticRoom(room) {
+      if (!room || !room.code) return;
       try {
         localStorage.setItem(`wizard_chess_room_${room.code}`, JSON.stringify(room));
       } catch (e) {}
@@ -5732,10 +5904,14 @@ export function initWizardChess() {
     }
 
     function ensurePlayerToken() {
-      if (!playerToken) {
-        playerToken = 'tok_' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+      if (!playerToken || !/^[a-zA-Z0-9_\-]+$/.test(playerToken)) {
+        playerToken =
+          'tok_' +
+          Math.random().toString(36).slice(2, 10) +
+          '_' +
+          Date.now().toString(36);
         try {
-          localStorage.setItem('wizard_chess_token', playerToken);
+          sessionStorage.setItem('wizard_chess_session_token', playerToken);
         } catch (e) {}
       }
       return playerToken;
@@ -5744,7 +5920,9 @@ export function initWizardChess() {
     async function mpApiRequest(apiPath, options = {}) {
       const bases = isStaticHost
         ? (CLOUD_MP_API_BASE ? [CLOUD_MP_API_BASE] : [])
-        : (CLOUD_MP_API_BASE ? ['', CLOUD_MP_API_BASE] : ['']);
+        : (CLOUD_MP_API_BASE && window.location.origin !== CLOUD_MP_API_BASE
+            ? ['', CLOUD_MP_API_BASE]
+            : ['']);
       for (const base of bases) {
         try {
           const res = await fetch(`${base}${apiPath}`, options);
@@ -5823,6 +6001,7 @@ export function initWizardChess() {
         } catch (e) {}
       }
 
+      updateCloudRoomLoadout(roomCode, mySide, loadout);
       await mpApiRequest(`/api/rooms/${roomCode}/loadout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5832,7 +6011,11 @@ export function initWizardChess() {
 
     function ensureWebSocketConnection() {
       if (isStaticHost) return null;
-      if (activeWebSocket && (activeWebSocket.readyState === WebSocket.OPEN || activeWebSocket.readyState === WebSocket.CONNECTING)) {
+      if (
+        activeWebSocket &&
+        (activeWebSocket.readyState === WebSocket.OPEN ||
+          activeWebSocket.readyState === WebSocket.CONNECTING)
+      ) {
         return activeWebSocket;
       }
       try {
@@ -5853,7 +6036,13 @@ export function initWizardChess() {
               })
             );
           } else if (gameMode === 'multi' && roomCode) {
-            ws.send(JSON.stringify({ type: 'room:subscribe', code: roomCode, playerToken: ensurePlayerToken() }));
+            ws.send(
+              JSON.stringify({
+                type: 'room:subscribe',
+                code: roomCode,
+                playerToken: ensurePlayerToken()
+              })
+            );
           }
         });
 
@@ -5862,10 +6051,14 @@ export function initWizardChess() {
             const msg = JSON.parse(String(ev.data));
             if (!msg || !msg.type) return;
             if (msg.type === 'queue:matched' && msg.code) {
+              if (msg.room) {
+                saveCloudMultiplayerRoom(msg.room);
+              }
+              leaveCloudMatchmaking(playerToken);
               handleMatchmakingSuccess(msg.code, msg.color || 'w', msg.room, msg.opponentRating);
             } else if (msg.type === 'queue:searching') {
               if (typeof msg.queueSize === 'number') {
-                matchmakingQueueSize = Math.max(1, msg.queueSize);
+                matchmakingQueueSize = Math.max(matchmakingQueueSize, msg.queueSize);
               }
             } else if (msg.type === 'queue:timeout') {
               if (onlineQueueStatus === 'searching') {
@@ -5919,12 +6112,20 @@ export function initWizardChess() {
           );
         } catch (e) {}
       }
-      // 3. Also broadcast to cloud/local room REST API
-      await mpApiRequest(`/api/rooms/${roomCode}/move`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(movePayload)
-      });
+      // 3. Sync move to global Firestore room document + REST API in parallel
+      await Promise.allSettled([
+        appendCloudRoomMove(roomCode, {
+          color: movePayload.color === 'b' ? 'b' : 'w',
+          from: movePayload.from,
+          to: movePayload.to,
+          promotion: movePayload.promotion || 'queen'
+        }),
+        mpApiRequest(`/api/rooms/${roomCode}/move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(movePayload)
+        })
+      ]);
     }
 
     function stopMultiplayerSync() {
@@ -5935,6 +6136,12 @@ export function initWizardChess() {
       if (roomPollTimer) {
         clearInterval(roomPollTimer);
         roomPollTimer = null;
+      }
+      if (cloudRoomUnsub) {
+        try {
+          cloudRoomUnsub();
+        } catch (e) {}
+        cloudRoomUnsub = null;
       }
       clearMatchmakingTimers();
     }
@@ -5971,6 +6178,14 @@ export function initWizardChess() {
         resetChessBoard(false);
       }
 
+      if (
+        (room.surrenderedBy === 'w' || room.surrenderedBy === 'b') &&
+        !gameOver
+      ) {
+        surrenderMatch(room.surrenderedBy, { fromRemote: true });
+        return;
+      }
+
       if (Array.isArray(room.moves) && room.moves.length > appliedMoveSeq) {
         const tryApplyNext = () => {
           if (isAnimatingMove) {
@@ -6002,6 +6217,14 @@ export function initWizardChess() {
       stopMultiplayerSync();
       roomCode = code;
 
+      // 1. Real-time Firestore room subscription across all devices/networks
+      cloudRoomUnsub = subscribeCloudMultiplayerRoom(code, (cloudRoom) => {
+        if (gameMode !== 'multi' || roomCode !== code) return;
+        saveAndBroadcastStaticRoom(cloudRoom);
+        applyRemoteRoomState(cloudRoom);
+      });
+
+      // 2. WebSocket subscription when on same server origin
       const ws = ensureWebSocketConnection();
       if (ws && ws.readyState === WebSocket.OPEN) {
         try {
@@ -6021,14 +6244,34 @@ export function initWizardChess() {
         } catch (e) {}
       }
 
+      // 3. Periodic fallback poll (checks both Firestore and REST API)
       roomPollTimer = setInterval(async () => {
         if (gameMode !== 'multi' || !roomCode) return;
-        const data = await mpApiRequest(
-          `/api/rooms/${roomCode}/state?playerToken=${encodeURIComponent(playerToken)}`
-        );
-        if (data && data.ok && data.room) {
-          saveAndBroadcastStaticRoom(data.room);
-          applyRemoteRoomState(data.room);
+        const [cloudRoom, apiData] = await Promise.all([
+          fetchCloudMultiplayerRoom(roomCode),
+          mpApiRequest(
+            `/api/rooms/${roomCode}/state?playerToken=${encodeURIComponent(playerToken)}`
+          )
+        ]);
+        const apiRoom = apiData && apiData.ok && apiData.room ? apiData.room : null;
+        // Prefer whichever room state has more moves or higher resetCount / updatedAt
+        let bestRoom = cloudRoom || apiRoom;
+        if (cloudRoom && apiRoom) {
+          const cloudMoves = Array.isArray(cloudRoom.moves) ? cloudRoom.moves.length : 0;
+          const apiMoves = Array.isArray(apiRoom.moves) ? apiRoom.moves.length : 0;
+          if (apiMoves > cloudMoves || (apiRoom.resetCount || 0) > (cloudRoom.resetCount || 0)) {
+            bestRoom = apiRoom;
+          } else if (
+            cloudMoves === apiMoves &&
+            Boolean(apiRoom.surrenderedBy) &&
+            !cloudRoom.surrenderedBy
+          ) {
+            bestRoom = apiRoom;
+          }
+        }
+        if (bestRoom) {
+          saveAndBroadcastStaticRoom(bestRoom);
+          applyRemoteRoomState(bestRoom);
           return;
         }
         const stRoom = getStaticRoom(roomCode);
@@ -6039,6 +6282,7 @@ export function initWizardChess() {
     }
 
     function handleMatchmakingSuccess(code, assignedColor, roomObj, opponentRating = 1000) {
+      if (onlineQueueStatus === 'matched' && roomCode === code) return;
       clearMatchmakingTimers();
       lobbyPaused = false;
       matchStarted = true;
@@ -6066,6 +6310,7 @@ export function initWizardChess() {
         if (playerColor === 'b' && !roomObj.blackLoadout) roomObj.blackLoadout = myLoadout;
         syncRoomLoadouts(roomObj, false);
         saveAndBroadcastStaticRoom(roomObj);
+        saveCloudMultiplayerRoom(roomObj);
       }
 
       resetChessBoard(true);
@@ -6135,6 +6380,17 @@ export function initWizardChess() {
         emitMatchmakingTick();
       }, 250);
 
+      // Subscribe to real-time Firestore ticket updates so if another device pairs with us, we enter the match immediately
+      cloudMatchmakingUnsub = subscribeCloudMatchmakingTicket(playerToken, (match) => {
+        if (onlineQueueStatus !== 'searching') return;
+        mpApiRequest('/api/matchmaking/leave', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerToken })
+        });
+        handleMatchmakingSuccess(match.code, match.color, match.room, match.opponentRating);
+      });
+
       const myLoadout = getLocalPlayerLoadout();
       const ws = ensureWebSocketConnection();
       if (ws && ws.readyState === WebSocket.OPEN) {
@@ -6158,28 +6414,68 @@ export function initWizardChess() {
           return;
         }
         const currentLoadout = getLocalPlayerLoadout();
-        const res = await mpApiRequest('/api/matchmaking/join', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+
+        // Poll both Global Firestore Matchmaking Queue and Express Server Matchmaking Queue in parallel
+        const [cloudRes, apiRes] = await Promise.all([
+          pollCloudMatchmaking({
             playerToken,
             preferredColor: matchmakingPreferredColor,
             rating: matchmakingRating,
-            loadout: currentLoadout
+            loadout: currentLoadout,
+            joinedAt: matchmakingStartedAt
+          }),
+          mpApiRequest('/api/matchmaking/join', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              playerToken,
+              preferredColor: matchmakingPreferredColor,
+              rating: matchmakingRating,
+              loadout: currentLoadout
+            })
           })
-        });
+        ]);
+
         if (onlineQueueStatus !== 'searching') return;
-        if (res && res.ok) {
-          if (typeof res.queueSize === 'number') {
-            matchmakingQueueSize = Math.max(1, res.queueSize);
-          }
-          if (res.status === 'matched' && res.code) {
-            handleMatchmakingSuccess(res.code, res.color, res.room, res.opponentRating);
-            return;
-          }
+
+        const maxQueue = Math.max(
+          1,
+          typeof cloudRes?.queueSize === 'number' ? cloudRes.queueSize : 1,
+          typeof apiRes?.queueSize === 'number' ? apiRes.queueSize : 1
+        );
+        matchmakingQueueSize = maxQueue;
+
+        if (cloudRes && cloudRes.ok && cloudRes.status === 'matched' && cloudRes.code) {
+          mpApiRequest('/api/matchmaking/leave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ playerToken })
+          });
+          handleMatchmakingSuccess(
+            cloudRes.code,
+            cloudRes.color || 'w',
+            cloudRes.room,
+            cloudRes.opponentRating
+          );
+          return;
         }
-        // Fallback cross-tab matchmaking queue via localStorage if server is static
-        if (!res) {
+
+        if (apiRes && apiRes.ok && apiRes.status === 'matched' && apiRes.code) {
+          leaveCloudMatchmaking(playerToken);
+          if (apiRes.room) {
+            saveCloudMultiplayerRoom(apiRes.room);
+          }
+          handleMatchmakingSuccess(
+            apiRes.code,
+            apiRes.color || 'w',
+            apiRes.room,
+            apiRes.opponentRating
+          );
+          return;
+        }
+
+        // Fallback cross-tab matchmaking queue via localStorage if both cloud and server are offline
+        if (!cloudRes && !apiRes) {
           try {
             const rawQ = localStorage.getItem('wizard_chess_static_queue');
             const parsedQ = rawQ ? JSON.parse(rawQ) : null;
@@ -6189,52 +6485,51 @@ export function initWizardChess() {
               parsedQ.playerToken !== playerToken &&
               now - parsedQ.ts < MATCHMAKING_TIMEOUT_MS
             ) {
-              const waitSec = Math.max(0, (now - parsedQ.ts) / 1000);
-              const allowedDelta = 150 + waitSec * 45;
-              const ratingDelta = Math.abs((parsedQ.rating || 1000) - matchmakingRating);
-              if (ratingDelta <= allowedDelta || waitSec >= 8) {
-                localStorage.removeItem('wizard_chess_static_queue');
-                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-                let genCode = '';
-                for (let i = 0; i < 4; i++) {
-                  genCode += chars[Math.floor(Math.random() * chars.length)];
-                }
-                let oppColor = 'w';
-                let myColor = 'b';
-                if (parsedQ.preferredColor === 'b' && matchmakingPreferredColor !== 'b') {
-                  oppColor = 'b';
-                  myColor = 'w';
-                } else if (matchmakingPreferredColor === 'w' && parsedQ.preferredColor !== 'w') {
-                  myColor = 'w';
-                  oppColor = 'b';
-                }
-                const staticRoom = {
-                  code: genCode,
-                  status: 'playing',
-                  whiteJoined: true,
-                  blackJoined: true,
-                  whiteLoadout: myColor === 'w' ? currentLoadout : parsedQ.loadout || null,
-                  blackLoadout: myColor === 'b' ? currentLoadout : parsedQ.loadout || null,
-                  turn: 'w',
-                  moves: [],
-                  resetCount: 0,
-                  updatedAt: now
-                };
-                saveAndBroadcastStaticRoom(staticRoom);
-                if (staticBroadcastChannel) {
-                  staticBroadcastChannel.postMessage({
-                    type: 'static_queue_matched',
-                    targetToken: parsedQ.playerToken,
-                    code: genCode,
-                    color: oppColor,
-                    opponentRating: matchmakingRating,
-                    room: staticRoom
-                  });
-                }
-                handleMatchmakingSuccess(genCode, myColor, staticRoom, parsedQ.rating || 1000);
-                return;
+              localStorage.removeItem('wizard_chess_static_queue');
+              const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+              let genCode = '';
+              for (let i = 0; i < 4; i++) {
+                genCode += chars[Math.floor(Math.random() * chars.length)];
               }
-            } else if (!parsedQ || parsedQ.playerToken === playerToken || now - parsedQ.ts >= MATCHMAKING_TIMEOUT_MS) {
+              let oppColor = 'w';
+              let myColor = 'b';
+              if (parsedQ.preferredColor === 'b' && matchmakingPreferredColor !== 'b') {
+                oppColor = 'b';
+                myColor = 'w';
+              } else if (matchmakingPreferredColor === 'w' && parsedQ.preferredColor !== 'w') {
+                myColor = 'w';
+                oppColor = 'b';
+              }
+              const staticRoom = {
+                code: genCode,
+                status: 'playing',
+                whiteJoined: true,
+                blackJoined: true,
+                whiteLoadout: myColor === 'w' ? currentLoadout : parsedQ.loadout || null,
+                blackLoadout: myColor === 'b' ? currentLoadout : parsedQ.loadout || null,
+                turn: 'w',
+                moves: [],
+                resetCount: 0,
+                updatedAt: now
+              };
+              saveAndBroadcastStaticRoom(staticRoom);
+              if (staticBroadcastChannel) {
+                staticBroadcastChannel.postMessage({
+                  type: 'static_queue_matched',
+                  targetToken: parsedQ.playerToken,
+                  code: genCode,
+                  color: oppColor,
+                  opponentRating: matchmakingRating,
+                  room: staticRoom
+                });
+              }
+              handleMatchmakingSuccess(genCode, myColor, staticRoom, parsedQ.rating || 1000);
+              return;
+            } else if (
+              !parsedQ ||
+              parsedQ.playerToken === playerToken ||
+              now - parsedQ.ts >= MATCHMAKING_TIMEOUT_MS
+            ) {
               localStorage.setItem(
                 'wizard_chess_static_queue',
                 JSON.stringify({
@@ -6252,7 +6547,7 @@ export function initWizardChess() {
 
       await pollMatch();
       if (onlineQueueStatus === 'searching') {
-        matchmakingPollTimer = setInterval(pollMatch, 1200);
+        matchmakingPollTimer = setInterval(pollMatch, 1100);
       }
     }
 
@@ -6276,11 +6571,14 @@ export function initWizardChess() {
           activeWebSocket.send(JSON.stringify({ type: 'queue:leave', playerToken }));
         } catch (e) {}
       }
-      await mpApiRequest('/api/matchmaking/leave', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerToken })
-      });
+      await Promise.allSettled([
+        leaveCloudMatchmaking(playerToken),
+        mpApiRequest('/api/matchmaking/leave', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerToken })
+        })
+      ]);
 
       if (wasSearching && reason === 'timeout') {
         window.dispatchEvent(
@@ -6407,7 +6705,7 @@ export function initWizardChess() {
         body: JSON.stringify({ preferredColor, playerToken, loadout: myLoadout })
       });
 
-      // Pure static fallback if neither local nor remote server is reachable
+      // Pure static or Firestore fallback if neither local nor remote server is reachable
       if (!data || !data.ok) {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         let genCode = '';
@@ -6418,6 +6716,8 @@ export function initWizardChess() {
         const staticRoom = {
           code: genCode,
           status: 'waiting',
+          whiteToken: side === 'w' ? playerToken : '',
+          blackToken: side === 'b' ? playerToken : '',
           whiteJoined: side === 'w',
           blackJoined: side === 'b',
           whiteLoadout: side === 'w' ? myLoadout : null,
@@ -6425,6 +6725,7 @@ export function initWizardChess() {
           turn: 'w',
           moves: [],
           resetCount: 0,
+          surrenderedBy: '',
           updatedAt: Date.now()
         };
         saveAndBroadcastStaticRoom(staticRoom);
@@ -6439,9 +6740,17 @@ export function initWizardChess() {
         saveAndBroadcastStaticRoom(data.room);
       }
 
-      playerToken = data.playerToken;
+      if (data.room) {
+        await saveCloudMultiplayerRoom({
+          ...data.room,
+          whiteToken: data.color === 'w' ? playerToken : '',
+          blackToken: data.color === 'b' ? playerToken : ''
+        });
+      }
+
+      playerToken = data.playerToken || playerToken;
       try {
-        localStorage.setItem('wizard_chess_token', playerToken);
+        sessionStorage.setItem('wizard_chess_session_token', playerToken);
       } catch (e) {}
       matchStarted = true;
       scriptedGameActive = false;
@@ -6487,11 +6796,28 @@ export function initWizardChess() {
       ensurePlayerToken();
       const myLoadout = getLocalPlayerLoadout();
 
-      let data = await mpApiRequest('/api/rooms/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, playerToken, loadout: myLoadout })
-      });
+      const [cloudJoin, apiJoin] = await Promise.all([
+        joinCloudMultiplayerRoom(code, playerToken, myLoadout),
+        mpApiRequest('/api/rooms/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, playerToken, loadout: myLoadout })
+        })
+      ]);
+
+      let data = null;
+      if (cloudJoin && cloudJoin.ok && cloudJoin.room) {
+        data = {
+          ok: true,
+          code,
+          color: cloudJoin.color,
+          playerToken,
+          room: cloudJoin.room
+        };
+      } else if (apiJoin && apiJoin.ok && apiJoin.room) {
+        data = apiJoin;
+        saveCloudMultiplayerRoom(apiJoin.room);
+      }
 
       if (!data || !data.ok) {
         let stRoom = getStaticRoom(code);
@@ -6535,9 +6861,9 @@ export function initWizardChess() {
         saveAndBroadcastStaticRoom(data.room);
       }
 
-      playerToken = data.playerToken;
+      playerToken = data.playerToken || playerToken;
       try {
-        localStorage.setItem('wizard_chess_token', playerToken);
+        sessionStorage.setItem('wizard_chess_session_token', playerToken);
       } catch (e) {}
       matchStarted = true;
       scriptedGameActive = false;
@@ -6689,6 +7015,7 @@ export function initWizardChess() {
         if (stRoom) {
           stRoom.moves = [];
           stRoom.turn = 'w';
+          stRoom.surrenderedBy = '';
           stRoom.resetCount = (stRoom.resetCount || 0) + 1;
           stRoom.updatedAt = Date.now();
           saveAndBroadcastStaticRoom(stRoom);
@@ -6699,7 +7026,10 @@ export function initWizardChess() {
             activeWebSocket.send(JSON.stringify({ type: 'room:reset', code: roomCode, playerToken }));
           } catch (e) {}
         }
-        await mpApiRequest(`/api/rooms/${roomCode}/reset`, { method: 'POST' });
+        await Promise.allSettled([
+          resetCloudMultiplayerRoom(roomCode),
+          mpApiRequest(`/api/rooms/${roomCode}/reset`, { method: 'POST' })
+        ]);
       } else {
         resetChessBoard(true, false);
       }
@@ -6845,7 +7175,11 @@ export function initWizardChess() {
       const winner = winCol === 'w' ? 'White' : 'Black';
       const defeated = defCol === 'w' ? 'White' : 'Black';
       announceSanctumEvent('check_win', { winner, defeated, isCheckmate: !checkmateState.isCheckWin });
-      triggerCheckmateSequence(defCol, winCol, { isCheckWin: checkmateState.isCheckWin });
+      triggerCheckmateSequence(defCol, winCol, {
+        isCheckWin: checkmateState.isCheckWin,
+        isTimeOutWin: checkmateState.isTimeOutWin,
+        isSurrenderWin: checkmateState.isSurrenderWin
+      });
     });
     document.getElementById('btn-checkmate-newgame')?.addEventListener('click', () => {
       resetChessBoard(true, false);
@@ -6880,6 +7214,7 @@ export function initWizardChess() {
       startBotMatch,
       startPassAndPlayMatch,
       quitMatchToLobby,
+      surrenderMatch,
       stopAllGameplayAudio: () => sfxVfxManager.stopAllGameplayAudio?.(),
       startOnlineMatchmaking,
       cancelOnlineMatchmaking,
@@ -7288,12 +7623,24 @@ export function initWizardChess() {
       }
     };
 
+    function renderMainScene() {
+      const isCartoonScene = Boolean(
+        whitePieceArchetype === 'toon_classic' ||
+          blackPieceArchetype === 'toon_classic' ||
+          currentPieceArchetype === 'toon_classic' ||
+          currentPieceSkinObj?.isCartoon ||
+          currentBoardSkinId === 'toon_ink_wood_table' ||
+          currentWorldSceneryId === 'toon_sky_kingdom'
+      );
+      cartoonPostProcessor.render(scene, camera, isCartoonScene);
+    }
+
     window.wizardChess.stepBy = (seconds, steps = 24) => {
       const subDt = seconds / steps;
       for (let i = 0; i < steps; i++) {
         stepScene(subDt, false);
       }
-      renderer.render(scene, camera);
+      renderMainScene();
     };
 
     // =========================================================================
@@ -7357,8 +7704,9 @@ export function initWizardChess() {
       // Pulse the 3D Crimson-and-Gold Check Indicator Ring & Beacon when a King is in Check
       if (checkIndicatorGroup.visible) {
         const pulse = 1 + Math.sin(elapsedTotal * 6.5) * 0.085;
-        checkOuterRingMesh.scale.set(pulse, pulse, 1);
-        checkInnerRingMesh.rotation.z += dt * 1.4;
+        checkOuterRingMesh.scale.set(pulse, 1, pulse);
+        checkOuterRingMesh.rotation.y -= dt * 0.65;
+        checkInnerRingMesh.rotation.y += dt * 1.4;
         checkBeaconMat.opacity = 0.16 + (Math.sin(elapsedTotal * 5.2) * 0.5 + 0.5) * 0.18;
       }
 
@@ -7658,7 +8006,7 @@ export function initWizardChess() {
       }
 
       if (doRender) {
-        renderer.render(scene, camera);
+        renderMainScene();
       }
     }
 
@@ -7684,6 +8032,7 @@ export function initWizardChess() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      cartoonPostProcessor.setSize();
     });
 
 
@@ -7698,7 +8047,7 @@ export function initWizardChess() {
     resetChessBoard(true, true);
     setCameraForSide(playerColor, true);
     orbitControls.enabled = false;
-    renderer.render(scene, camera);
+    renderMainScene();
     if (!navigator.webdriver) {
       animate();
     }
@@ -7711,7 +8060,7 @@ export function initWizardChess() {
         rebuildBoardPieces();
       }
       renderer.shadowMap.needsUpdate = true;
-      renderer.render(scene, camera);
+      renderMainScene();
       window.dispatchEvent(new CustomEvent('wizardchess:ready'));
       if (navigator.webdriver) {
         window.wizardChess.stepBy(0.9, 15);

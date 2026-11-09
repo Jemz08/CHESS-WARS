@@ -1509,6 +1509,9 @@ export function buildProceduralPieceGroup(archetypeId, pieceType, color, mats) {
 
   if (archetypeId === 'classic_staunton') {
     buildStauntonPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
+  } else if (archetypeId === 'toon_classic') {
+    buildCartoonClassicPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts, color);
+    root.userData.hasBuiltInCartoonOutline = true;
   } else if (archetypeId === 'arcane_cyber') {
     buildArcaneCyberPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
   } else if (archetypeId === 'dragon_elemental') {
@@ -1521,7 +1524,7 @@ export function buildProceduralPieceGroup(archetypeId, pieceType, color, mats) {
 
   root.traverse((child) => {
     if (child.isMesh) {
-      if (child.userData.isDragonFire) {
+      if (child.userData.isDragonFire || child.userData.isPieceOutline) {
         child.castShadow = false;
         child.receiveShadow = false;
       } else {
@@ -2035,6 +2038,590 @@ function buildStauntonPiece(rig, type, primaryMat, trimMat, bladeMat, animParts)
     innerRing: tkInnerRing,
     baseY: topY - 0.04
   });
+}
+
+// ============================================================================
+// 1B. CARTOON CLASSIC TOON SET (Chunky Squash-and-Stretch Classic Proportions + Bold Pitch-Black Ink Outlines)
+// ============================================================================
+let sharedCartoonHullMat = null;
+let sharedCartoonCreaseMat = null;
+let sharedCartoonEyeWhiteMat = null;
+let sharedCartoonEyePupilMat = null;
+
+function getSharedCartoonOutlineMaterials() {
+  if (!sharedCartoonHullMat) {
+    sharedCartoonHullMat = new THREE.MeshBasicMaterial({
+      color: 0x050508,
+      side: THREE.BackSide,
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 2
+    });
+    sharedCartoonHullMat.userData = { isSharedPoliigonTex: true };
+  }
+  if (!sharedCartoonCreaseMat) {
+    sharedCartoonCreaseMat = new THREE.LineBasicMaterial({
+      color: 0x050508,
+      transparent: true,
+      opacity: 0.96,
+      depthWrite: false
+    });
+    sharedCartoonCreaseMat.userData = { isSharedPoliigonTex: true };
+  }
+  if (!sharedCartoonEyeWhiteMat) {
+    sharedCartoonEyeWhiteMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff
+    });
+    sharedCartoonEyeWhiteMat.userData = { isSharedPoliigonTex: true };
+  }
+  if (!sharedCartoonEyePupilMat) {
+    sharedCartoonEyePupilMat = new THREE.MeshBasicMaterial({
+      color: 0x050508
+    });
+    sharedCartoonEyePupilMat.userData = { isSharedPoliigonTex: true };
+  }
+  return {
+    hullMat: sharedCartoonHullMat,
+    creaseMat: sharedCartoonCreaseMat,
+    eyeWhiteMat: sharedCartoonEyeWhiteMat,
+    eyePupilMat: sharedCartoonEyePupilMat
+  };
+}
+
+function attachBuiltInCartoonInkOutlines(containerGroup) {
+  const { hullMat } = getSharedCartoonOutlineMaterials();
+  const meshes = [];
+  containerGroup.traverse((child) => {
+    if (
+      child.isMesh &&
+      child.geometry &&
+      !child.userData?.isPieceOutline &&
+      !child.userData?.skipCartoonOutline &&
+      child.geometry.type !== 'TorusGeometry' &&
+      child.geometry.type !== 'RingGeometry'
+    ) {
+      meshes.push(child);
+    }
+  });
+
+  // Lightweight silhouette hull only (internal crease lines and screen-space contours
+  // are handled in 1 pass by the post-processing cel-shading outline shader)
+  for (const mesh of meshes) {
+    const hullScale = mesh.userData?.cartoonHullScale || 1.042;
+    const hullMesh = new THREE.Mesh(mesh.geometry, hullMat);
+    hullMesh.scale.setScalar(hullScale);
+    hullMesh.userData.isPieceOutline = true;
+    hullMesh.userData.isBuiltInCartoonOutline = true;
+    hullMesh.userData.ownsOutlineGeometry = false;
+    hullMesh.userData.excludeFromBounds = true;
+    hullMesh.castShadow = false;
+    hullMesh.receiveShadow = false;
+    hullMesh.raycast = () => {};
+    mesh.add(hullMesh);
+  }
+}
+
+function buildCartoonClassicPiece(rig, type, primaryMat, trimMat, bladeMat, animParts) {
+  const { eyeWhiteMat, eyePupilMat } = getSharedCartoonOutlineMaterials();
+  const heightScale = {
+    pawn: 0.96,
+    rook: 1.08,
+    knight: 1.18,
+    bishop: 1.24,
+    queen: 1.40,
+    king: 1.54
+  }[type] || 1.12;
+
+  // Exaggerated Cartoon Squash-and-Stretch Classic Pedestal & Flared Waist
+  // Wider cushioned base, tight pinched waist, and a wide flared upper cartoon collar!
+  const bodyGeo = getCachedGeo(`toon_classic_base_${type}`, () =>
+    buildSculptedLathe(
+      [
+        [0.0, 0.0],
+        [0.40, 0.0],
+        [0.425, 0.045],
+        [0.39, 0.095],
+        [0.31, 0.12],
+        [0.355, 0.16],
+        [0.33, 0.20],
+        [0.24, 0.235],
+        [0.165, 0.34],
+        [0.132, 0.45],
+        [0.155, 0.54],
+        [0.255, 0.62],
+        [0.285, 0.655],
+        [0.225, 0.69],
+        [0.245, 0.72],
+        [0.0, 0.72]
+      ].map(([r, y]) => [r, y * heightScale]),
+      {
+        sampleCount: 44,
+        radialSegments: 36,
+        fluteCount: 8,
+        fluteAmp: 0.011,
+        fluteYMin: 0.22 * heightScale,
+        fluteYMax: 0.58 * heightScale
+      }
+    )
+  );
+  const bodyMesh = new THREE.Mesh(bodyGeo, primaryMat);
+  bodyMesh.userData.cartoonHullScale = 1.055;
+  rig.add(bodyMesh);
+
+  // Chunky Cartoon Base Cushion Ring
+  const baseRing = new THREE.Mesh(
+    getCachedGeo('toon_classic_base_ring', () => new THREE.TorusGeometry(0.355, 0.036, 16, 36)),
+    trimMat
+  );
+  baseRing.rotation.x = Math.PI / 2;
+  baseRing.position.y = 0.125 * heightScale;
+  baseRing.userData.cartoonHullScale = 1.06;
+  rig.add(baseRing);
+
+  const topY = 0.72 * heightScale;
+
+  // Puffy Cartoon Neck Collar Ring
+  const collarRing = new THREE.Mesh(
+    getCachedGeo('toon_classic_collar_ring', () => new THREE.TorusGeometry(0.245, 0.038, 16, 36)),
+    trimMat
+  );
+  collarRing.rotation.x = Math.PI / 2;
+  collarRing.position.y = topY - 0.045;
+  collarRing.userData.cartoonHullScale = 1.065;
+  rig.add(collarRing);
+
+  if (type === 'pawn') {
+    // Oversized Bouncy Cartoon Bobble-Head Sphere + Cute Chunky Button Finial
+    const head = new THREE.Mesh(
+      getCachedGeo('toon_classic_pawn_head', () => new THREE.SphereGeometry(0.225, 32, 24)),
+      primaryMat
+    );
+    head.scale.set(1.08, 0.96, 1.08);
+    head.position.y = topY + 0.165;
+    head.userData.cartoonHullScale = 1.058;
+    rig.add(head);
+
+    const topCap = new THREE.Mesh(
+      getCachedGeo('toon_classic_pawn_cap', () => new THREE.TorusGeometry(0.085, 0.022, 12, 24)),
+      trimMat
+    );
+    topCap.rotation.x = Math.PI / 2;
+    topCap.position.y = topY + 0.365;
+    rig.add(topCap);
+
+    const finial = new THREE.Mesh(
+      getCachedGeo('toon_classic_pawn_finial', () => new THREE.SphereGeometry(0.068, 20, 16)),
+      trimMat
+    );
+    finial.scale.set(1.12, 0.92, 1.12);
+    finial.position.y = topY + 0.415;
+    finial.userData.cartoonHullScale = 1.075;
+    rig.add(finial);
+  } else if (type === 'rook') {
+    // Exaggerated Flared Cartoon Castle Tower (wider at the top than the base!) + 6 Chunky Splayed Merlons
+    const turretGeo = getCachedGeo('toon_classic_rook_turret', () =>
+      buildSmoothSplineLathe(
+        [
+          [0.0, 0.0],
+          [0.215, 0.0],
+          [0.225, 0.06],
+          [0.275, 0.17],
+          [0.305, 0.25],
+          [0.285, 0.29],
+          [0.175, 0.29],
+          [0.175, 0.21],
+          [0.0, 0.21]
+        ],
+        28,
+        36
+      )
+    );
+    const turret = new THREE.Mesh(turretGeo, primaryMat);
+    turret.position.y = topY - 0.02;
+    turret.userData.cartoonHullScale = 1.055;
+    rig.add(turret);
+
+    // 6 Oversized Splayed Cartoon Castle Battlement Merlons
+    const merlonGeo = getCachedGeo('toon_classic_rook_merlon', () => {
+      const g = new THREE.BoxGeometry(0.115, 0.125, 0.095);
+      return g;
+    });
+    for (let i = 0; i < 6; i++) {
+      const ang = (i / 6) * Math.PI * 2;
+      const merlon = new THREE.Mesh(merlonGeo, i % 2 === 0 ? primaryMat : trimMat);
+      merlon.position.set(Math.cos(ang) * 0.245, topY + 0.31, Math.sin(ang) * 0.245);
+      merlon.rotation.y = -ang + Math.PI / 2;
+      // Cartoon outward splay on each battlement block
+      merlon.rotation.x = 0.14;
+      merlon.userData.cartoonHullScale = 1.075;
+      rig.add(merlon);
+    }
+
+    // Cartoon Arched Castle Gate Relief on front & back
+    const gateGeo = getCachedGeo('toon_classic_rook_gate', () => new THREE.BoxGeometry(0.11, 0.14, 0.04));
+    for (const zSign of [-1, 1]) {
+      const gate = new THREE.Mesh(gateGeo, trimMat);
+      gate.position.set(0, topY + 0.12, zSign * 0.245);
+      gate.rotation.x = -zSign * 0.16;
+      gate.userData.cartoonHullScale = 1.07;
+      rig.add(gate);
+    }
+  } else if (type === 'knight') {
+    // Expressive Cartoon Warhorse Bust: Puffy Snout, Big Cartoon Eyes with Pupils & Catchlights, Perky Ears & Bouncy Mane Puffs!
+    const horseGroup = new THREE.Group();
+    horseGroup.position.y = topY - 0.02;
+    rig.add(horseGroup);
+
+    // Plump S-Curved Cartoon Neck & Chest
+    const neckGeo = getCachedGeo('toon_classic_knight_neck', () => {
+      const pts = [
+        new THREE.Vector3(0, 0.0, -0.02),
+        new THREE.Vector3(0, 0.14, 0.065),
+        new THREE.Vector3(0, 0.29, 0.025),
+        new THREE.Vector3(0, 0.42, 0.055)
+      ];
+      return buildTaperedCurveGeo(pts, 0.215, 0.135, 24, 24);
+    });
+    const neck = new THREE.Mesh(neckGeo, primaryMat);
+    neck.scale.set(0.92, 1.0, 1.14);
+    neck.userData.cartoonHullScale = 1.055;
+    horseGroup.add(neck);
+
+    // Round Cartoon Cranium & Cheek Dome
+    const cranium = new THREE.Mesh(
+      getCachedGeo('toon_classic_knight_cranium', () => new THREE.SphereGeometry(0.165, 28, 22)),
+      primaryMat
+    );
+    cranium.scale.set(0.92, 1.02, 1.15);
+    cranium.position.set(0, 0.42, 0.055);
+    cranium.userData.cartoonHullScale = 1.058;
+    horseGroup.add(cranium);
+
+    // Chubby Rounded Cartoon Muzzle & Smiling Snout
+    const muzzle = new THREE.Mesh(
+      getCachedGeo('toon_classic_knight_muzzle', () => new THREE.SphereGeometry(0.132, 26, 20)),
+      primaryMat
+    );
+    muzzle.scale.set(0.88, 0.86, 1.28);
+    muzzle.position.set(0, 0.355, 0.215);
+    muzzle.rotation.x = 0.22;
+    muzzle.userData.cartoonHullScale = 1.062;
+    horseGroup.add(muzzle);
+
+    // Puffy Cartoon Nostril Bumps
+    const nostrilGeo = getCachedGeo('toon_classic_knight_nostril', () => new THREE.SphereGeometry(0.036, 14, 12));
+    for (const side of [-1, 1]) {
+      const nostril = new THREE.Mesh(nostrilGeo, trimMat);
+      nostril.position.set(side * 0.068, 0.375, 0.335);
+      nostril.userData.cartoonHullScale = 1.08;
+      horseGroup.add(nostril);
+    }
+
+    // Big Expressive Cartoon Eyes (White Sclera + Pitch-Black Pupil + White Catchlight + Expressive Brow Ridge!)
+    const scleraGeo = getCachedGeo('toon_classic_knight_sclera', () => new THREE.SphereGeometry(0.046, 18, 16));
+    const pupilGeo = getCachedGeo('toon_classic_knight_pupil', () => new THREE.SphereGeometry(0.026, 14, 12));
+    const catchlightGeo = getCachedGeo('toon_classic_knight_catchlight', () => new THREE.SphereGeometry(0.011, 10, 8));
+    const browGeo = getCachedGeo('toon_classic_knight_brow', () => new THREE.BoxGeometry(0.075, 0.022, 0.036));
+
+    for (const side of [-1, 1]) {
+      const sclera = new THREE.Mesh(scleraGeo, eyeWhiteMat);
+      sclera.scale.set(0.65, 1.12, 1.05);
+      sclera.position.set(side * 0.128, 0.445, 0.115);
+      sclera.userData.cartoonHullScale = 1.08;
+      sclera.userData.skipCartoonCrease = true;
+      horseGroup.add(sclera);
+
+      const pupil = new THREE.Mesh(pupilGeo, eyePupilMat);
+      pupil.scale.set(0.65, 1.1, 1.0);
+      pupil.position.set(side * 0.146, 0.445, 0.132);
+      pupil.userData.skipCartoonOutline = true;
+      horseGroup.add(pupil);
+
+      const catchlight = new THREE.Mesh(catchlightGeo, eyeWhiteMat);
+      catchlight.position.set(side * 0.155, 0.462, 0.142);
+      catchlight.userData.skipCartoonOutline = true;
+      horseGroup.add(catchlight);
+
+      const brow = new THREE.Mesh(browGeo, trimMat);
+      brow.position.set(side * 0.132, 0.498, 0.118);
+      brow.rotation.set(0.15, side * 0.35, -side * 0.24);
+      brow.userData.cartoonHullScale = 1.08;
+      horseGroup.add(brow);
+    }
+
+    // Perky Oversized Cartoon Horse Ears
+    const earGeo = getCachedGeo('toon_classic_knight_ear', () => new THREE.ConeGeometry(0.052, 0.17, 14));
+    for (const side of [-1, 1]) {
+      const ear = new THREE.Mesh(earGeo, primaryMat);
+      ear.position.set(side * 0.082, 0.585, 0.02);
+      ear.rotation.set(-0.18, 0, -side * 0.24);
+      ear.userData.cartoonHullScale = 1.068;
+      horseGroup.add(ear);
+    }
+
+    // Bouncy 6-Puff Scalloped Cartoon Mane Crest
+    const manePuffGeo = getCachedGeo('toon_classic_knight_mane_puff', () => new THREE.SphereGeometry(0.068, 16, 14));
+    for (let i = 0; i < 6; i++) {
+      const t = i / 5;
+      const puff = new THREE.Mesh(manePuffGeo, i % 2 === 0 ? trimMat : primaryMat);
+      const scaleVal = 1.05 - Math.abs(t - 0.45) * 0.32;
+      puff.scale.set(0.68 * scaleVal, 0.95 * scaleVal, 1.15 * scaleVal);
+      puff.position.set(0, 0.09 + t * 0.43, -0.105 - Math.sin(t * Math.PI) * 0.045);
+      puff.userData.cartoonHullScale = 1.072;
+      horseGroup.add(puff);
+    }
+
+    // Cartoon Bridle Noseband & Bit Rings
+    const noseBand = new THREE.Mesh(
+      getCachedGeo('toon_classic_knight_noseband', () => new THREE.TorusGeometry(0.108, 0.018, 12, 24)),
+      trimMat
+    );
+    noseBand.rotation.y = Math.PI / 2;
+    noseBand.rotation.x = 0.25;
+    noseBand.position.set(0, 0.37, 0.195);
+    horseGroup.add(noseBand);
+
+    animParts.push({ mesh: horseGroup, kind: 'headNod' });
+  } else if (type === 'bishop') {
+    // Plump Teardrop Cartoon Mitre with Exaggerated Wide Diagonal Grin-Cleft Slot & Big Round Orb Finial
+    const mitreGeo = getCachedGeo('toon_classic_bishop_mitre', () => {
+      const raw = buildSmoothSplineLathe(
+        [
+          [0.0, 0.0],
+          [0.195, 0.0],
+          [0.245, 0.11],
+          [0.235, 0.24],
+          [0.165, 0.37],
+          [0.065, 0.45],
+          [0.0, 0.47]
+        ],
+        34,
+        36
+      );
+      const pos = raw.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        let y = pos.getY(i);
+        let z = pos.getZ(i);
+        // Carve a bold, unmistakable diagonal cartoon mitre notch on the front upper face
+        if (y > 0.17 && z > 0.01) {
+          const rotPlane = (y - 0.29) * 0.82 - (z - 0.11) * 0.57;
+          const distFromSlot = Math.abs(rotPlane);
+          if (distFromSlot < 0.048) {
+            const depth = 1.0 - distFromSlot / 0.048;
+            y -= depth * 0.055;
+            z -= depth * 0.095;
+            pos.setXYZ(i, x * (1 - depth * 0.28), y, z);
+          }
+        }
+      }
+      raw.computeVertexNormals();
+      return raw;
+    });
+    const mitre = new THREE.Mesh(mitreGeo, primaryMat);
+    mitre.position.y = topY - 0.02;
+    mitre.userData.cartoonHullScale = 1.055;
+    rig.add(mitre);
+
+    // Chunky Gold Mitre Sash Band
+    const sashRing = new THREE.Mesh(
+      getCachedGeo('toon_classic_bishop_sash', () => new THREE.TorusGeometry(0.228, 0.024, 14, 32)),
+      trimMat
+    );
+    sashRing.rotation.x = Math.PI / 2;
+    sashRing.position.y = topY + 0.11;
+    rig.add(sashRing);
+
+    // Oversized Round Cartoon Finial Bobble + Mini Cross
+    const finial = new THREE.Mesh(
+      getCachedGeo('toon_classic_bishop_finial', () => new THREE.SphereGeometry(0.068, 20, 16)),
+      trimMat
+    );
+    finial.position.y = topY + 0.475;
+    finial.userData.cartoonHullScale = 1.075;
+    rig.add(finial);
+  } else if (type === 'queen') {
+    // Flared Cartoon Royal Coronet with 7 Chunky Crown Spikes, Oversized Pearl Orbs & Plump Velvet Dome
+    const coronetGeo = getCachedGeo('toon_classic_queen_coronet', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.0],
+          [0.195, 0.0],
+          [0.245, 0.09],
+          [0.305, 0.23],
+          [0.265, 0.28],
+          [0.175, 0.19],
+          [0.0, 0.18]
+        ],
+        {
+          sampleCount: 30,
+          radialSegments: 42,
+          scallopCount: 7,
+          scallopAmp: 0.062,
+          scallopYMin: 0.14
+        }
+      )
+    );
+    const coronet = new THREE.Mesh(coronetGeo, primaryMat);
+    coronet.position.y = topY - 0.02;
+    coronet.userData.cartoonHullScale = 1.055;
+    rig.add(coronet);
+
+    // 7 Oversized Cartoon Crown Pearl Spheres around the flared diadem tips
+    const pearlGeo = getCachedGeo('toon_classic_queen_pearl', () => new THREE.SphereGeometry(0.044, 16, 14));
+    for (let i = 0; i < 7; i++) {
+      const ang = (i / 7) * Math.PI * 2;
+      const pearl = new THREE.Mesh(pearlGeo, trimMat);
+      pearl.position.set(Math.cos(ang) * 0.275, topY + 0.305, Math.sin(ang) * 0.275);
+      pearl.userData.cartoonHullScale = 1.08;
+      rig.add(pearl);
+    }
+
+    // Plump Cushioned Cartoon Inner Dome & Top Bobble
+    const dome = new THREE.Mesh(
+      getCachedGeo('toon_classic_queen_dome', () => new THREE.SphereGeometry(0.175, 24, 18)),
+      trimMat
+    );
+    dome.scale.set(1, 0.82, 1);
+    dome.position.y = topY + 0.21;
+    dome.userData.cartoonHullScale = 1.06;
+    rig.add(dome);
+
+    const topPearl = new THREE.Mesh(
+      getCachedGeo('toon_classic_queen_top_pearl', () => new THREE.SphereGeometry(0.065, 18, 16)),
+      primaryMat
+    );
+    topPearl.position.y = topY + 0.385;
+    topPearl.userData.cartoonHullScale = 1.075;
+    rig.add(topPearl);
+  } else if (type === 'king') {
+    // Grand Flared Cartoon Royal Crown + 4 Thick Bouncy Arches + Chunky Cartoon Heraldic Cross
+    const crownBowlGeo = getCachedGeo('toon_classic_king_bowl', () =>
+      buildSmoothSplineLathe(
+        [
+          [0.0, 0.0],
+          [0.205, 0.0],
+          [0.265, 0.11],
+          [0.315, 0.22],
+          [0.285, 0.26],
+          [0.195, 0.22],
+          [0.085, 0.26],
+          [0.0, 0.27]
+        ],
+        30,
+        36
+      )
+    );
+    const crownBowl = new THREE.Mesh(crownBowlGeo, primaryMat);
+    crownBowl.position.y = topY - 0.02;
+    crownBowl.userData.cartoonHullScale = 1.055;
+    rig.add(crownBowl);
+
+    // Chunky Gold Circlet Band with 8 Cartoon Gem Studs
+    const circlet = new THREE.Mesh(
+      getCachedGeo('toon_classic_king_circlet', () => new THREE.TorusGeometry(0.285, 0.028, 16, 36)),
+      trimMat
+    );
+    circlet.rotation.x = Math.PI / 2;
+    circlet.position.y = topY + 0.22;
+    rig.add(circlet);
+
+    // 4 Thick Bouncy Cartoon Crown Arches rising to the monde orb
+    const archGeo = getCachedGeo('toon_classic_king_arch', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0.275, 0.0, 0),
+          new THREE.Vector3(0.255, 0.14, 0),
+          new THREE.Vector3(0.135, 0.22, 0),
+          new THREE.Vector3(0.0, 0.195, 0)
+        ],
+        0.034,
+        0.026,
+        20,
+        14
+      )
+    );
+    for (let i = 0; i < 4; i++) {
+      const arch = new THREE.Mesh(archGeo, trimMat);
+      arch.position.y = topY + 0.22;
+      arch.rotation.y = (i / 4) * Math.PI * 2;
+      arch.userData.cartoonHullScale = 1.075;
+      rig.add(arch);
+    }
+
+    // Plump Monde Orb beneath the Cross
+    const mondeOrb = new THREE.Mesh(
+      getCachedGeo('toon_classic_king_monde', () => new THREE.SphereGeometry(0.058, 16, 14)),
+      primaryMat
+    );
+    mondeOrb.position.y = topY + 0.425;
+    mondeOrb.userData.cartoonHullScale = 1.075;
+    rig.add(mondeOrb);
+
+    // Chunky Flared Cartoon Cross Finial
+    const crossGeo = getCachedGeo('toon_classic_king_cross', () => {
+      const s = new THREE.Shape();
+      s.moveTo(-0.036, 0.0);
+      s.lineTo(0.036, 0.0);
+      s.lineTo(0.028, 0.085);
+      s.lineTo(0.118, 0.068);
+      s.lineTo(0.118, 0.152);
+      s.lineTo(0.028, 0.135);
+      s.lineTo(0.045, 0.235);
+      s.lineTo(-0.045, 0.235);
+      s.lineTo(-0.028, 0.135);
+      s.lineTo(-0.118, 0.152);
+      s.lineTo(-0.118, 0.068);
+      s.lineTo(-0.028, 0.085);
+      s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.052,
+        bevelEnabled: true,
+        bevelSegments: 4,
+        steps: 1,
+        bevelSize: 0.014,
+        bevelThickness: 0.014
+      });
+      g.translate(0, 0, -0.026);
+      return g;
+    });
+    const cross = new THREE.Mesh(crossGeo, trimMat);
+    cross.position.y = topY + 0.445;
+    cross.userData.cartoonHullScale = 1.072;
+    rig.add(cross);
+  }
+
+  // Articulated Cartoon Comic Halo Ring around the collar
+  const tkHaloGroup = new THREE.Group();
+  tkHaloGroup.position.y = topY - 0.045;
+  rig.add(tkHaloGroup);
+
+  const tkOuterRing = new THREE.Mesh(
+    getCachedGeo('toon_classic_tk_outer_ring', () => new THREE.TorusGeometry(0.205, 0.016, 12, 36)),
+    trimMat
+  );
+  tkOuterRing.rotation.x = Math.PI / 2;
+  tkOuterRing.userData.cartoonHullScale = 1.07;
+  tkHaloGroup.add(tkOuterRing);
+
+  const tkInnerRing = new THREE.Mesh(
+    getCachedGeo('toon_classic_tk_inner_ring', () => new THREE.TorusGeometry(0.175, 0.012, 12, 32)),
+    bladeMat
+  );
+  tkInnerRing.rotation.x = Math.PI / 2;
+  tkInnerRing.userData.cartoonHullScale = 1.07;
+  tkHaloGroup.add(tkInnerRing);
+
+  animParts.push({
+    mesh: tkHaloGroup,
+    kind: 'stauntonTelekineticHalo',
+    outerRing: tkOuterRing,
+    innerRing: tkInnerRing,
+    baseY: topY - 0.045
+  });
+
+  // Attach Bold Pitch-Black Cartoon Ink Outlines (BackSide Inverted Hull + Black Crease Lines) to all meshes in the piece!
+  attachBuiltInCartoonInkOutlines(rig);
 }
 
 // ============================================================================
@@ -4181,23 +4768,13 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       }
       part.mesh.rotation.z = Math.sin(elapsedTotal * 3.0) * 0.15;
     } else if (part.kind === 'stauntonTelekineticHalo') {
-      // Classic Staunton Telekinetic Astrolabe Levitation Rings
-      if (isAttacking) {
-        const t = state.clipTime;
-        const flare = Math.sin(Math.min(1, t / 0.88) * Math.PI);
-        part.mesh.position.y = part.baseY - 0.18 * flare;
-        const ringScale = 1.0 + flare * 0.95;
-        part.mesh.scale.setScalar(ringScale);
-        part.outerRing.rotation.z = elapsedTotal * 14.0;
-        part.outerRing.rotation.x = Math.PI / 2 + Math.sin(t * 16.0) * 0.35;
-        part.innerRing.rotation.z = -elapsedTotal * 18.0;
-        part.innerRing.rotation.y = Math.cos(t * 16.0) * 0.42;
-      } else {
-        part.mesh.position.y = part.baseY;
-        part.mesh.scale.setScalar(1.0);
-        part.outerRing.rotation.set(Math.PI / 2, 0, elapsedTotal * 0.8);
-        part.innerRing.rotation.set(Math.PI / 2, 0, -elapsedTotal * 0.8);
-      }
+      // Classic Staunton & Cartoon Classic Base Rings: keep strictly level and grounded at baseY
+      // so the rings never jump vertically or tilt/flip out of plane
+      const spinSpeed = isAttacking ? 5.5 : 0.8;
+      part.mesh.position.y = part.baseY;
+      part.mesh.scale.setScalar(1.0);
+      part.outerRing.rotation.set(Math.PI / 2, 0, elapsedTotal * spinSpeed);
+      part.innerRing.rotation.set(Math.PI / 2, 0, -elapsedTotal * spinSpeed);
     } else if (part.kind === 'cyberLaserCannon') {
       // Articulated Cyber-Mech Laser Cannon / Railgun Pod Target-Lock, Aiming & Hydraulic Barrel Recoil!
       if (isAttacking) {
@@ -4533,10 +5110,10 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
             const u = Math.min(1, (t - 0.86) / 0.18);
             part.mesh.rotation.set(0.12 * (1 - u), 0, 0);
           }
-        } else if (arch === 'classic_staunton') {
-          // Staunton Warhorse rears its head proudly upward during telekinetic levitation (never headbutts!)
+        } else if (arch === 'classic_staunton' || arch === 'toon_classic') {
+          // Staunton & Cartoon Classic Warhorse rears its head proudly upward during levitation / cartoon leap
           const rearUp = Math.sin(Math.min(1, t / 0.75) * Math.PI);
-          part.mesh.rotation.set(-0.26 * rearUp, 0, 0);
+          part.mesh.rotation.set(-0.28 * rearUp, 0, 0);
         } else {
           // Cyber Pegasus / Warhorse optic horn target lock & horizontal laser sweep
           if (t < 0.24) {
@@ -4553,8 +5130,8 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
         }
       } else {
         part.mesh.rotation.set(
-          arch === 'hollow_reapers' ? 0 : Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.055,
-          0,
+          arch === 'hollow_reapers' ? 0 : Math.sin(elapsedTotal * 2.4 + phaseSeed) * (arch === 'toon_classic' ? 0.085 : 0.055),
+          arch === 'toon_classic' ? Math.cos(elapsedTotal * 1.8 + phaseSeed) * 0.05 : 0,
           0
         );
       }
@@ -4562,10 +5139,18 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
   }
 
   if (mode === 'idle') {
-    const breath = arch === 'hollow_reapers' ? 1.0 : 1.0 + Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.018;
-    rig.position.set(0, 0, 0);
-    rig.rotation.set(0, 0, 0);
-    rig.scale.set(1, breath, 1);
+    if (arch === 'classic_staunton' || arch === 'toon_classic' || arch === 'hollow_reapers') {
+      // Keep original Staunton, Cartoon Toon, and Hollow Reapers planted at y=0 with stable scale
+      // so base rings and collar rings never jump or bob off the board
+      rig.position.set(0, 0, 0);
+      rig.rotation.set(0, 0, 0);
+      rig.scale.set(1, 1, 1);
+    } else {
+      const breath = 1.0 + Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.018;
+      rig.position.set(0, 0, 0);
+      rig.rotation.set(0, 0, 0);
+      rig.scale.set(1, breath, 1);
+    }
   } else if (mode === 'move') {
     if (arch === 'arcane_cyber' || arch === 'hollow_reapers') {
       // Spectral wraith / zero-gravity hover glide with slight forward pitch
@@ -4579,6 +5164,11 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       rig.position.set(0, swoop, 0);
       rig.rotation.set(0.20, Math.sin(state.clipTime * 9.0) * 0.08, 0);
       rig.scale.set(1, 1, 1);
+    } else if (arch === 'classic_staunton' || arch === 'toon_classic') {
+      // Smooth grounded board glide for Original & Cartoon Classic so piece rings never jump
+      rig.position.set(0, 0, 0);
+      rig.rotation.set(0.08, 0, 0);
+      rig.scale.set(1, 1, 1);
     } else {
       const stride = Math.abs(Math.sin(state.clipTime * 10.0)) * 0.06;
       rig.position.set(0, stride, 0);
@@ -4587,39 +5177,33 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
     }
   } else if (mode === 'attack') {
     // ========================================================================
-    // 3 DISTINCT NON-DEFAULT SET ATTACK PATTERNS (Zero Forward Headbutts!)
+    // DISTINCT NON-DEFAULT SET ATTACK PATTERNS (Zero Forward Headbutts!)
     // ========================================================================
     const t = state.clipTime;
     const isRoyal = pType === 'king' || pType === 'queen';
     const powerMul = isRoyal ? 1.22 : pType === 'rook' || pType === 'knight' ? 1.12 : 1.0;
 
-    if (arch === 'classic_staunton') {
-      // PATTERN 1 — CLASSIC STAUNTON:
-      // "VERTICAL TELEKINETIC ASCENSION, 720° CROWN SPIN & STRAIGHT-DOWN ANVIL CRUSH"
+    if (arch === 'classic_staunton' || arch === 'toon_classic') {
+      // PATTERN 1 — CLASSIC STAUNTON & CARTOON CLASSIC TOON:
+      // Smooth continuous telekinetic arc & spin without discontinuous ring scale/height jumps
       if (t < 0.36) {
         const u = t / 0.36;
         const ease = u * u * (3 - 2 * u);
-        rig.position.set(0, 0.56 * powerMul * ease, 0.28 * powerMul * ease);
-        rig.rotation.set(0, ease * Math.PI * 4.0, 0);
-        rig.scale.set(1 + 0.08 * ease, 1 + 0.10 * ease, 1 + 0.08 * ease);
+        rig.position.set(0, 0.42 * powerMul * ease, 0.24 * powerMul * ease);
+        rig.rotation.set(0, ease * Math.PI * 2.0, 0);
+        rig.scale.set(1, 1, 1);
       } else if (t < 0.64) {
         const u = (t - 0.36) / 0.28;
-        const dropProgress = Math.min(1, u / 0.52);
-        const dropY = 0.56 * powerMul * (1 - Math.pow(dropProgress, 2.4));
-        rig.position.set(0, Math.max(0, dropY), 0.28 * powerMul);
+        const dropProgress = Math.min(1, u);
+        const dropEase = dropProgress * dropProgress * (3 - 2 * dropProgress);
+        const dropY = 0.42 * powerMul * (1 - dropEase);
+        rig.position.set(0, Math.max(0, dropY), 0.24 * powerMul);
         rig.rotation.set(0, 0, 0);
-        if (u >= 0.52) {
-          const impactPhase = (u - 0.52) / 0.48;
-          const squash = 1 - Math.sin(impactPhase * Math.PI) * 0.18;
-          const widen = 1 / Math.sqrt(squash);
-          rig.scale.set(widen, squash, widen);
-        } else {
-          rig.scale.set(0.95, 1.12, 0.95);
-        }
+        rig.scale.set(1, 1, 1);
       } else {
         const u = Math.min(1, (t - 0.64) / 0.36);
         const ease = u * u * (3 - 2 * u);
-        rig.position.set(0, 0.06 * Math.sin(u * Math.PI), 0.28 * powerMul * (1 - ease));
+        rig.position.set(0, 0, 0.24 * powerMul * (1 - ease));
         rig.rotation.set(0, 0, 0);
         rig.scale.set(1, 1, 1);
       }
@@ -4803,7 +5387,141 @@ export function rebuildBoardArchitectureGroup(
     envMapIntensity: 1.2
   });
 
-  if (archType === 'wood_table') {
+  if (archType === 'toon_table') {
+    // Comic-Book Inked Wood & Gold Pedestal Table:
+    // - Crisp black comic ink grid lines outlining every 8x8 square on the board surface
+    // - Chunky cel-shaded wood cabinet apron with inset sunny-gold trim molding
+    // - 4 oversized comic-inked golden corner medallions + 4 exaggerated spline-turned cartoon parlor legs
+    // - Bold pitch-black (#050508) inverted-hull silhouette shells + EdgesGeometry crease ink lines
+    const toonInkHullMat = new THREE.MeshBasicMaterial({
+      color: 0x050508,
+      side: THREE.BackSide,
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 2
+    });
+    const toonWoodMat = new THREE.MeshStandardMaterial({
+      color: borderColor,
+      roughness: 0.46,
+      metalness: 0.04,
+      emissive: borderColor,
+      emissiveIntensity: 0.08
+    });
+    const toonGoldMat = new THREE.MeshStandardMaterial({
+      color: accentColor,
+      roughness: 0.32,
+      metalness: 0.24,
+      emissive: accentColor,
+      emissiveIntensity: 0.24
+    });
+
+    const addToonMeshWithInk = (parent, geo, mat, hullScale = 1.042) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = true;
+      m.receiveShadow = true;
+
+      if (geo.type !== 'TorusGeometry' && geo.type !== 'RingGeometry') {
+        const hull = new THREE.Mesh(geo, toonInkHullMat);
+        hull.scale.setScalar(hullScale);
+        hull.userData.isBuiltInCartoonOutline = true;
+        hull.userData.excludeFromBounds = true;
+        hull.raycast = () => {};
+        m.add(hull);
+      }
+
+      parent.add(m);
+      return m;
+    };
+
+    // 1. Crisp Pitch-Black Comic Ink Grid Strips across the 8x8 Chessboard Surface
+    const inkStripMat = new THREE.MeshBasicMaterial({ color: 0x050508 });
+    const inkThickness = Math.max(0.008, BOARD_SQ_SIZE * 0.032);
+    const inkHeight = 0.0045;
+    const gridSpan = halfB * 2 + inkThickness;
+    const inkLineHGeo = new THREE.BoxGeometry(gridSpan, inkHeight, inkThickness);
+    const inkLineVGeo = new THREE.BoxGeometry(inkThickness, inkHeight, gridSpan);
+    for (let i = -4; i <= 4; i++) {
+      const offset = i * BOARD_SQ_SIZE;
+      const hLine = new THREE.Mesh(inkLineHGeo, inkStripMat);
+      hLine.position.set(0, BOARD_SURFACE_Y + 0.0018, offset);
+      hLine.raycast = () => {};
+      boardArchGroup.add(hLine);
+
+      const vLine = new THREE.Mesh(inkLineVGeo, inkStripMat);
+      vLine.position.set(offset, BOARD_SURFACE_Y + 0.0018, 0);
+      vLine.raycast = () => {};
+      boardArchGroup.add(vLine);
+    }
+
+    // 2. Chunky Cel-Shaded Wood Frame Apron + Inset Sunny-Gold Comic Trim Rails
+    const rimW = BOARD_SQ_SIZE * 0.56;
+    const rimH = BOARD_SQ_SIZE * 0.24;
+    const horizGeo = new THREE.BoxGeometry(halfB * 2 + rimW * 2, rimH, rimW);
+    const vertGeo = new THREE.BoxGeometry(rimW, rimH, halfB * 2);
+    const goldRailHGeo = new THREE.BoxGeometry(halfB * 2 + rimW * 1.45, rimH * 0.42, rimW * 0.36);
+    const goldRailVGeo = new THREE.BoxGeometry(rimW * 0.36, rimH * 0.42, halfB * 2);
+
+    for (const s of [-1, 1]) {
+      const hBar = addToonMeshWithInk(boardArchGroup, horizGeo, toonWoodMat, 1.036, 20);
+      hBar.position.set(0, BOARD_SURFACE_Y - rimH * 0.42, s * (halfB + rimW * 0.5));
+
+      const hGold = addToonMeshWithInk(boardArchGroup, goldRailHGeo, toonGoldMat, 1.045, 20);
+      hGold.position.set(0, BOARD_SURFACE_Y - rimH * 0.16, s * (halfB + rimW * 0.52));
+
+      const vBar = addToonMeshWithInk(boardArchGroup, vertGeo, toonWoodMat, 1.036, 20);
+      vBar.position.set(s * (halfB + rimW * 0.5), BOARD_SURFACE_Y - rimH * 0.42, 0);
+
+      const vGold = addToonMeshWithInk(boardArchGroup, goldRailVGeo, toonGoldMat, 1.045, 20);
+      vGold.position.set(s * (halfB + rimW * 0.52), BOARD_SURFACE_Y - rimH * 0.16, 0);
+    }
+
+    // 3. Exaggerated Cartoon Turned Parlor Legs + Oversized Golden Corner Medallions + Floating Comic Star-Crowns
+    const legHeight = Math.max(0.42, BOARD_SURFACE_Y > 0.1 ? BOARD_SURFACE_Y - 0.02 : BOARD_SQ_SIZE * 2.15);
+    const legTopY = BOARD_SURFACE_Y - rimH * 0.72;
+    const legProfile = [
+      [0.0, -legHeight],
+      [rimW * 0.42, -legHeight],
+      [rimW * 0.46, -legHeight * 0.90],
+      [rimW * 0.24, -legHeight * 0.76],
+      [rimW * 0.52, -legHeight * 0.52],
+      [rimW * 0.22, -legHeight * 0.30],
+      [rimW * 0.48, -legHeight * 0.12],
+      [rimW * 0.44, 0.0],
+      [0.0, 0.0]
+    ];
+    const toonLegGeo = buildSmoothSplineLathe(legProfile, 24, 16);
+    const medallionGeo = new THREE.CylinderGeometry(rimW * 0.56, rimW * 0.62, rimH * 1.18, 12);
+    const goldStudGeo = new THREE.OctahedronGeometry(rimW * 0.24, 0);
+    const cornerOffset = halfB + rimW * 0.55;
+
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const cx = sx * cornerOffset;
+        const cz = sz * cornerOffset;
+
+        const med = addToonMeshWithInk(boardArchGroup, medallionGeo, toonGoldMat, 1.052, 20);
+        med.position.set(cx, BOARD_SURFACE_Y - rimH * 0.34, cz);
+
+        const leg = addToonMeshWithInk(boardArchGroup, toonLegGeo, toonWoodMat, 1.052, 26);
+        leg.position.set(cx, legTopY, cz);
+
+        const goldRingGeo = new THREE.TorusGeometry(rimW * 0.46, rimW * 0.09, 10, 18);
+        const legCollar = addToonMeshWithInk(boardArchGroup, goldRingGeo, toonGoldMat, 1.06, 24);
+        legCollar.rotation.x = Math.PI / 2;
+        legCollar.position.set(cx, legTopY - legHeight * 0.52, cz);
+
+        // Floating Cartoon Gold Star-Gem above each corner medallion
+        const starGem = addToonMeshWithInk(boardArchGroup, goldStudGeo, toonGoldMat, 1.08, 15);
+        const baseY = BOARD_SURFACE_Y + rimH * 0.95;
+        starGem.position.set(cx, baseY, cz);
+        boardArchGroup.userData.dynamicNodes.push({
+          mesh: starGem,
+          baseY,
+          phase: sx * 1.1 + sz * 0.7
+        });
+      }
+    }
+  } else if (archType === 'wood_table') {
     // Royal Tournament Wood Table: Wide Mahogany Frame + Deep Cabinet Apron + 4 Brass Medallions + 4 Turned Parlor Legs
     const rimW = 0.18;
     const rimH = 0.065;

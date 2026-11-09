@@ -217,6 +217,53 @@ function createSkyDomeMaterial() {
           return;
         }
 
+        if (uMode == 4) {
+          // ------------------------------------------------------------------
+          // MODE 4: FLOATING TOON KINGDOM (Quantized Cel-Shaded Sky & Sunbeams)
+          // ------------------------------------------------------------------
+          vec3 zenithToonBlue = vec3(0.11, 0.44, 0.72);
+          vec3 midToonCyan = vec3(0.28, 0.79, 0.89);
+          vec3 lowToonAqua = vec3(0.56, 0.88, 0.94);
+          vec3 horizonToonGold = vec3(1.0, 0.85, 0.42);
+
+          // Quantized cel-stepped sky bands with crisp comic transitions
+          vec3 skyCol = horizonToonGold;
+          skyCol = mix(skyCol, lowToonAqua, smoothstep(0.02, 0.06, up));
+          skyCol = mix(skyCol, midToonCyan, smoothstep(0.20, 0.25, up));
+          skyCol = mix(skyCol, zenithToonBlue, smoothstep(0.48, 0.54, up));
+
+          // Subtle comic ink band separator lines between sky steps
+          float bandEdge1 = exp(-pow((up - 0.04) * 55.0, 2.0));
+          float bandEdge2 = exp(-pow((up - 0.225) * 45.0, 2.0));
+          float bandEdge3 = exp(-pow((up - 0.51) * 40.0, 2.0));
+          skyCol = mix(skyCol, skyCol * 0.82, clamp(bandEdge1 + bandEdge2 + bandEdge3, 0.0, 0.35));
+
+          // Cartoon Sun Disk with Rotating Cel-Shaded Sunbeams & Bold Black Comic Ring
+          vec3 sunDir = normalize(vec3(0.42, 0.34, -0.84));
+          float sunDot = max(0.0, dot(dir, sunDir));
+          float sunAngle = atan(dir.y - sunDir.y, dir.x - sunDir.x);
+          float rayWave = step(0.25, sin(sunAngle * 12.0 + uTime * 0.45));
+          float rayMask = smoothstep(0.72, 0.985, sunDot) * (1.0 - smoothstep(0.990, 0.994, sunDot));
+          skyCol = mix(skyCol, vec3(1.0, 0.94, 0.58), rayWave * rayMask * 0.38);
+
+          // Bold black comic outline ring around the cartoon sun disk
+          float sunOutline = smoothstep(0.988, 0.9905, sunDot) * (1.0 - smoothstep(0.9925, 0.9945, sunDot));
+          float sunCore = smoothstep(0.993, 0.995, sunDot);
+          skyCol = mix(skyCol, vec3(0.02, 0.02, 0.04), sunOutline * 0.95);
+          skyCol = mix(skyCol, vec3(1.0, 0.96, 0.42), sunCore);
+
+          // Stylized quantized cel-clouds painted on the distant horizon
+          vec3 cCoord = vec3(dir.x * 2.8 + uTime * 0.014, dir.y * 5.0, dir.z * 2.8 - uTime * 0.01);
+          float cVal = fbm(cCoord);
+          float toonCloudFill = smoothstep(0.56, 0.60, cVal) * smoothstep(0.01, 0.14, up) * (1.0 - smoothstep(0.32, 0.48, up));
+          float toonCloudInk = smoothstep(0.52, 0.555, cVal) * (1.0 - smoothstep(0.565, 0.60, cVal)) * smoothstep(0.01, 0.14, up) * (1.0 - smoothstep(0.32, 0.48, up));
+          skyCol = mix(skyCol, vec3(1.0, 0.99, 0.94), toonCloudFill * 0.88);
+          skyCol = mix(skyCol, vec3(0.02, 0.02, 0.04), toonCloudInk * 0.85);
+
+          gl_FragColor = vec4(skyCol, 1.0);
+          return;
+        }
+
         // --------------------------------------------------------------------
         // MODE 2: VOLCANIC TITAN FORGE (Smoldering Caldera & Ash Storm Sky)
         // --------------------------------------------------------------------
@@ -274,8 +321,8 @@ function createHorizonSeaMaterial() {
         float r = length(pos.xz);
         float wave = sin(pos.x * 0.18 + uTime * 0.65) * cos(pos.z * 0.16 - uTime * 0.52) * 0.55
                    + sin(r * 0.25 - uTime * 0.85) * 0.35;
-        if (uMode == 1) {
-          pos.y += wave * smoothstep(9.0, 22.0, r);
+        if (uMode == 1 || uMode == 4) {
+          pos.y += wave * (uMode == 4 ? 1.18 : 1.0) * smoothstep(9.0, 22.0, r);
         } else if (uMode == 2) {
           pos.y += wave * 0.35 * smoothstep(9.0, 20.0, r);
         }
@@ -370,6 +417,33 @@ function createHorizonSeaMaterial() {
           col = mix(col, pumpkinGlow * 0.75, smoothstep(0.65, 0.92, m2));
           float alpha = radialMask * (0.35 + 0.55 * fogMask);
           gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.86));
+          return;
+        }
+
+        if (uMode == 4) {
+          // Mode 4: Quantized Cel-Shaded Cartoon Cloud Sea with Bold Black Comic Ink Contour Lines
+          vec2 uv = vLocalPos.xz * 0.075 + vec2(uTime * 0.038, -uTime * 0.026);
+          float c1 = fbm2(uv);
+          float c2 = fbm2(uv * 2.0 + vec2(c1 * 1.2));
+          float crest = clamp(c1 * 0.65 + c2 * 0.35 + vWaveH * 0.24, 0.0, 1.0);
+
+          vec3 toonShadow = vec3(0.42, 0.58, 0.82);
+          vec3 toonMid = vec3(0.88, 0.95, 1.0);
+          vec3 toonHighlight = vec3(1.0, 0.98, 0.88);
+          vec3 comicInk = vec3(0.02, 0.02, 0.04);
+
+          // Quantized 3-step cel bands
+          vec3 col = toonShadow;
+          col = mix(col, toonMid, smoothstep(0.38, 0.42, crest));
+          col = mix(col, toonHighlight, smoothstep(0.64, 0.68, crest));
+
+          // Bold pitch-black comic ink contour lines along cloud billow thresholds
+          float inkLine1 = smoothstep(0.35, 0.38, crest) * (1.0 - smoothstep(0.41, 0.44, crest));
+          float inkLine2 = smoothstep(0.61, 0.64, crest) * (1.0 - smoothstep(0.67, 0.70, crest));
+          col = mix(col, comicInk, clamp(inkLine1 * 0.92 + inkLine2 * 0.75, 0.0, 0.95));
+
+          float alpha = radialMask * smoothstep(0.20, 0.45, crest) * 0.95;
+          gl_FragColor = vec4(col, alpha);
           return;
         }
 
@@ -1438,6 +1512,341 @@ function buildHauntedBloodGraveyardGroup() {
 }
 
 // ============================================================================
+// Realm 5 Builder: Floating Toon Kingdom ('toon_sky_kingdom')
+// Cel-shaded floating emerald islands, splayed fairytale cartoon castles,
+// rotating storybook windmills, bubbly cel-shaded trees & puffy outlined clouds!
+// ============================================================================
+function buildToonSkyKingdomGroup() {
+  const group = new THREE.Group();
+  group.name = 'Realm_ToonSkyKingdom';
+
+  const inkHullMat = new THREE.MeshBasicMaterial({
+    color: 0x050508,
+    side: THREE.BackSide,
+    polygonOffset: true,
+    polygonOffsetFactor: 2,
+    polygonOffsetUnits: 2
+  });
+
+  const makeToonMat = (hex, emissiveHex = hex, emissiveIntensity = 0.12, roughness = 0.45) =>
+    new THREE.MeshStandardMaterial({
+      color: hex,
+      emissive: emissiveHex,
+      emissiveIntensity,
+      roughness,
+      metalness: 0.04
+    });
+
+  const grassMat = makeToonMat(0x52b788, 0x2d6a4f, 0.15, 0.48);
+  const brightGrassMat = makeToonMat(0x74c69d, 0x40916c, 0.18, 0.45);
+  const rockTerracottaMat = makeToonMat(0xc98a5b, 0x7f4f24, 0.12, 0.55);
+  const castleCreamMat = makeToonMat(0xfff3d1, 0xffd166, 0.14, 0.42);
+  const roofRoyalBlueMat = makeToonMat(0x3a86ff, 0x1d4ed8, 0.18, 0.36);
+  const roofBerryRedMat = makeToonMat(0xff4d6d, 0xc9184a, 0.18, 0.36);
+  const toonGoldMat = makeToonMat(0xffbe0b, 0xfb8500, 0.28, 0.30);
+  const toonTimberMat = makeToonMat(0x7f4f24, 0x582f0e, 0.10, 0.52);
+  const cloudWhiteMat = makeToonMat(0xffffff, 0xe0fbfc, 0.25, 0.35);
+  const windowGlowMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+  const waterfallCyanMat = new THREE.MeshBasicMaterial({
+    color: 0x48cae4,
+    transparent: true,
+    opacity: 0.85,
+    side: THREE.DoubleSide
+  });
+
+  // Shared unit geometries to eliminate redundant BufferGeometry allocations across islands, clouds, and trees
+  const sharedCloudPuffGeo = new THREE.SphereGeometry(1.0, 10, 8);
+  const sharedFoliageGeo = new THREE.DodecahedronGeometry(1.0, 0);
+  const sharedTrunkGeo = new THREE.CylinderGeometry(0.16, 0.28, 1.15, 8);
+  const sharedKeepGeo = new THREE.CylinderGeometry(1.15, 0.92, 2.6, 10);
+  const sharedCollarGeo = new THREE.CylinderGeometry(1.32, 1.18, 0.42, 10);
+  const sharedMainRoofGeo = new THREE.ConeGeometry(1.52, 1.95, 10);
+  const sharedPoleGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.85, 6);
+  const sharedFlagGeo = new THREE.ConeGeometry(0.24, 0.68, 4);
+  sharedFlagGeo.rotateZ(-Math.PI / 2);
+  const sharedTurretBodyGeo = new THREE.CylinderGeometry(0.48, 0.38, 2.1, 8);
+  const sharedTurretRoofGeo = new THREE.ConeGeometry(0.66, 1.15, 8);
+  const sharedWindowGeo = new THREE.BoxGeometry(0.22, 0.38, 0.12);
+
+  // Optimized toon mesh builder: relies on the screen-space post-processing outline shader
+  // + lightweight BackSide silhouette hull (zero expensive per-mesh EdgesGeometry/LineSegments)
+  const addToonMesh = (parent, geo, mat, hullScale = 1.045, _edgeAngle = 22, castShadow = false) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = castShadow;
+    mesh.raycast = () => {};
+
+    if (hullScale > 1.0) {
+      const hull = new THREE.Mesh(geo, inkHullMat);
+      hull.scale.setScalar(hullScale);
+      hull.castShadow = false;
+      hull.receiveShadow = false;
+      hull.raycast = () => {};
+      mesh.add(hull);
+    }
+
+    parent.add(mesh);
+    return mesh;
+  };
+
+  const buildPuffyToonCloud = (scale = 1.0) => {
+    const cloudGroup = new THREE.Group();
+    const puffs = [
+      { pos: [0, 0, 0], r: 1.05 },
+      { pos: [-0.95, -0.12, 0.12], r: 0.78 },
+      { pos: [0.95, -0.10, -0.08], r: 0.82 },
+      { pos: [-0.42, 0.42, -0.18], r: 0.72 },
+      { pos: [0.46, 0.38, 0.18], r: 0.68 }
+    ];
+    for (const p of puffs) {
+      const puff = addToonMesh(cloudGroup, sharedCloudPuffGeo, cloudWhiteMat, 1.055, 40, false);
+      puff.scale.setScalar(p.r * scale);
+      puff.position.set(p.pos[0] * scale, p.pos[1] * scale, p.pos[2] * scale);
+    }
+    return cloudGroup;
+  };
+
+  const buildToonTree = (scale = 1.0) => {
+    const treeGroup = new THREE.Group();
+    const trunk = addToonMesh(treeGroup, sharedTrunkGeo, toonTimberMat, 1.05, 24, false);
+    trunk.position.y = 0.55;
+
+    const foliageSpheres = [
+      { pos: [0, 1.35, 0], r: 0.72, mat: grassMat },
+      { pos: [-0.38, 1.12, 0.24], r: 0.52, mat: brightGrassMat },
+      { pos: [0.40, 1.16, -0.20], r: 0.54, mat: brightGrassMat },
+      { pos: [0, 1.82, 0], r: 0.48, mat: brightGrassMat }
+    ];
+    for (const f of foliageSpheres) {
+      const fMesh = addToonMesh(treeGroup, sharedFoliageGeo, f.mat, 1.05, 28, false);
+      fMesh.scale.setScalar(f.r);
+      fMesh.position.set(f.pos[0], f.pos[1], f.pos[2]);
+    }
+    treeGroup.scale.setScalar(scale);
+    return treeGroup;
+  };
+
+  const buildToonCastleKeep = (scale = 1.0, isRedRoof = false) => {
+    const castleGroup = new THREE.Group();
+    const roofMat = isRedRoof ? roofBerryRedMat : roofRoyalBlueMat;
+
+    // Main Splayed Cartoon Keep Tower
+    const keep = addToonMesh(castleGroup, sharedKeepGeo, castleCreamMat, 1.045, 20, false);
+    keep.position.y = 1.3;
+
+    // Crenellated Battlement Collar
+    const collar = addToonMesh(castleGroup, sharedCollarGeo, castleCreamMat, 1.048, 20, false);
+    collar.position.y = 2.65;
+
+    // Conical Fairytale Spire Roof
+    const mainRoof = addToonMesh(castleGroup, sharedMainRoofGeo, roofMat, 1.048, 22, false);
+    mainRoof.position.y = 3.82;
+
+    // Golden Roof Finial & Pennant Flag
+    const pole = addToonMesh(castleGroup, sharedPoleGeo, toonGoldMat, 1.0, 24, false);
+    pole.position.y = 5.0;
+
+    const flag = addToonMesh(castleGroup, sharedFlagGeo, toonGoldMat, 1.05, 18, false);
+    flag.position.set(0.32, 5.22, 0);
+
+    // 3 Flanking Cartoon Turrets
+    for (let t = 0; t < 3; t++) {
+      const ang = (t / 3) * Math.PI * 2 + 0.4;
+      const tx = Math.cos(ang) * 1.18;
+      const tz = Math.sin(ang) * 1.18;
+
+      const tBody = addToonMesh(castleGroup, sharedTurretBodyGeo, castleCreamMat, 1.048, 20, false);
+      tBody.position.set(tx, 1.15, tz);
+
+      const tRoof = addToonMesh(castleGroup, sharedTurretRoofGeo, roofMat, 1.05, 22, false);
+      tRoof.position.set(tx, 2.75, tz);
+
+      // Glowing Arched Cartoon Window
+      const win = addToonMesh(castleGroup, sharedWindowGeo, windowGlowMat, 1.0, 18, false);
+      win.position.set(tx * 1.32, 1.55, tz * 1.32);
+      win.lookAt(tx * 2.5, 1.55, tz * 2.5);
+    }
+
+    castleGroup.scale.setScalar(scale);
+    return castleGroup;
+  };
+
+  // 1. Central Floating Toon Sanctuary Island (flush at y = 0.0 for the Chessboard & Braziers)
+  const mainGrassDiscGeo = new THREE.CylinderGeometry(10.6, 11.2, 0.56, 24);
+  const mainGrassDisc = addToonMesh(group, mainGrassDiscGeo, grassMat, 1.028, 18);
+  mainGrassDisc.position.set(0, -0.28, 0);
+
+  const mainRockConeGeo = new THREE.ConeGeometry(10.4, 7.5, 10);
+  mainRockConeGeo.rotateX(Math.PI);
+  const mainRockCone = addToonMesh(group, mainRockConeGeo, rockTerracottaMat, 1.032, 15);
+  mainRockCone.position.set(0, -4.25, 0);
+
+  // Inner Golden-Rimmed Comic Cobblestone Plaza Ring
+  const innerPlazaGeo = new THREE.CylinderGeometry(8.4, 8.6, 0.08, 24);
+  const innerPlaza = addToonMesh(group, innerPlazaGeo, castleCreamMat, 1.025, 18);
+  innerPlaza.position.set(0, -0.02, 0);
+
+  for (const rad of [5.1, 8.45, 10.45]) {
+    const ringGeo = new THREE.TorusGeometry(rad, 0.09, 10, 48);
+    const ring = addToonMesh(group, ringGeo, toonGoldMat, 1.055, 24);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.02;
+  }
+
+  // Perimeter Storybook Guard Turrets & Bubbly Toon Trees around the Central Island (r = 9.4m)
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    const r = 9.45;
+    const px = Math.cos(ang) * r;
+    const pz = Math.sin(ang) * r;
+
+    if (i % 2 === 0) {
+      const turretGroup = new THREE.Group();
+      turretGroup.position.set(px, 0, pz);
+      turretGroup.lookAt(0, 0, 0);
+
+      const towerGeo = new THREE.CylinderGeometry(0.62, 0.52, 2.2, 10);
+      const tower = addToonMesh(turretGroup, towerGeo, castleCreamMat, 1.055, 20);
+      tower.position.y = 1.1;
+
+      const coneGeo = new THREE.ConeGeometry(0.84, 1.25, 10);
+      const cone = addToonMesh(
+        turretGroup,
+        coneGeo,
+        i % 4 === 0 ? roofRoyalBlueMat : roofBerryRedMat,
+        1.06,
+        20
+      );
+      cone.position.y = 2.82;
+
+      const finialGeo = new THREE.OctahedronGeometry(0.18, 0);
+      const finial = addToonMesh(turretGroup, finialGeo, toonGoldMat, 1.08, 15);
+      finial.position.y = 3.62;
+
+      group.add(turretGroup);
+    } else {
+      const tree = buildToonTree(0.95);
+      tree.position.set(px, -0.02, pz);
+      tree.rotation.y = i * 1.1;
+      group.add(tree);
+    }
+  }
+
+  // 2. Eight Orbiting Floating Toon Islands with Castles, Rotating Windmills & Waterfalls
+  const floatingToonIslands = [];
+  const spinningWindmills = [];
+
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2;
+    const dist = 17.5 + (i % 2) * 3.8;
+    const baseY = -0.25 + (i % 3) * 1.35;
+
+    const islGroup = new THREE.Group();
+    islGroup.position.set(Math.cos(ang) * dist, baseY, Math.sin(ang) * dist);
+    islGroup.lookAt(0, baseY, 0);
+
+    const islScale = 1.0 + (i % 2) * 0.22;
+    const capGeo = new THREE.CylinderGeometry(2.6 * islScale, 2.85 * islScale, 0.65 * islScale, 10);
+    const cap = addToonMesh(islGroup, capGeo, grassMat, 1.045, 18);
+    cap.position.y = -0.32 * islScale;
+
+    const cragGeo = new THREE.ConeGeometry(2.65 * islScale, 4.2 * islScale, 8);
+    cragGeo.rotateX(Math.PI);
+    const crag = addToonMesh(islGroup, cragGeo, rockTerracottaMat, 1.048, 15);
+    crag.position.y = -2.72 * islScale;
+
+    // Cartoon Waterfall Ribbon & Puffy Foam Cloud at Top
+    if (i % 2 === 0) {
+      const fallGeo = new THREE.BoxGeometry(0.85 * islScale, 4.8 * islScale, 0.12);
+      const fall = addToonMesh(islGroup, fallGeo, waterfallCyanMat, 1.04, 18);
+      fall.position.set(0, -2.5 * islScale, 2.55 * islScale);
+
+      const foam = buildPuffyToonCloud(0.42 * islScale);
+      foam.position.set(0, -0.1 * islScale, 2.58 * islScale);
+      islGroup.add(foam);
+    }
+
+    if (i % 2 === 0) {
+      // Splayed Fairytale Cartoon Castle Keep + Companion Tree
+      const castle = buildToonCastleKeep(0.92 * islScale, i % 4 === 2);
+      castle.position.set(0, 0, -0.25 * islScale);
+      islGroup.add(castle);
+
+      const sideTree = buildToonTree(0.78 * islScale);
+      sideTree.position.set(1.55 * islScale, 0, 0.65 * islScale);
+      islGroup.add(sideTree);
+    } else {
+      // Storybook Toon Windmill with Spinning Rotor Blades + Twin Trees
+      const millGroup = new THREE.Group();
+      const millTowerGeo = new THREE.CylinderGeometry(0.72 * islScale, 1.05 * islScale, 2.6 * islScale, 10);
+      const millTower = addToonMesh(millGroup, millTowerGeo, castleCreamMat, 1.05, 20);
+      millTower.position.y = 1.3 * islScale;
+
+      const millRoofGeo = new THREE.ConeGeometry(0.98 * islScale, 1.15 * islScale, 10);
+      const millRoof = addToonMesh(millGroup, millRoofGeo, roofBerryRedMat, 1.055, 20);
+      millRoof.position.y = 3.15 * islScale;
+
+      const rotorHub = new THREE.Group();
+      rotorHub.position.set(0, 2.05 * islScale, 0.88 * islScale);
+      const hubKnobGeo = new THREE.CylinderGeometry(0.22 * islScale, 0.22 * islScale, 0.32 * islScale, 10);
+      hubKnobGeo.rotateX(Math.PI / 2);
+      addToonMesh(rotorHub, hubKnobGeo, toonGoldMat, 1.07, 20);
+
+      const bladeGeo = new THREE.BoxGeometry(0.32 * islScale, 2.85 * islScale, 0.08 * islScale);
+      const b1 = addToonMesh(rotorHub, bladeGeo, toonTimberMat, 1.06, 18);
+      const b2 = addToonMesh(rotorHub, bladeGeo, toonTimberMat, 1.06, 18);
+      b2.rotation.z = Math.PI / 2;
+
+      millGroup.add(rotorHub);
+      islGroup.add(millGroup);
+      spinningWindmills.push({ mesh: rotorHub, speed: 1.35 + (i % 3) * 0.2 });
+
+      for (const sx of [-1, 1]) {
+        const t = buildToonTree(0.72 * islScale);
+        t.position.set(sx * 1.48 * islScale, 0, 0.55 * islScale);
+        islGroup.add(t);
+      }
+    }
+
+    group.add(islGroup);
+    floatingToonIslands.push({
+      mesh: islGroup,
+      baseY,
+      speed: 1.15 + (i % 3) * 0.22,
+      phase: i * 0.85
+    });
+  }
+
+  // 3. Twelve Drifting Puffy Outlined Cartoon Clouds & Floating Golden Comic Stars
+  const driftingToonClouds = [];
+  for (let i = 0; i < 12; i++) {
+    const cloud = buildPuffyToonCloud(0.95 + (i % 3) * 0.32);
+    const orbitR = 14.5 + (i % 4) * 4.2;
+    const baseY = 4.2 + (i % 4) * 1.85;
+    const ang = (i / 12) * Math.PI * 2;
+    cloud.position.set(Math.cos(ang) * orbitR, baseY, Math.sin(ang) * orbitR);
+    cloud.lookAt(0, baseY, 0);
+    group.add(cloud);
+
+    driftingToonClouds.push({
+      mesh: cloud,
+      orbitR,
+      baseY,
+      speed: (i % 2 === 0 ? 1 : -1) * (0.045 + (i % 3) * 0.015),
+      phase: i * 0.95
+    });
+  }
+
+  group.userData = {
+    floatingToonIslands,
+    spinningWindmills,
+    driftingToonClouds
+  };
+
+  return group;
+}
+
+// ============================================================================
 // GPU Particle Weather System (Stardust, Sun-Motes/Mist, Volcanic Embers)
 // ============================================================================
 function createWeatherParticleSystem() {
@@ -1497,8 +1906,15 @@ export function createWorldSceneryManager(scene) {
   const dragonCitadelGroup = buildDragonSkyCitadelGroup();
   const titanForgeGroup = buildVolcanicTitanForgeGroup();
   const hauntedGraveyardGroup = buildHauntedBloodGraveyardGroup();
+  const toonKingdomGroup = buildToonSkyKingdomGroup();
 
-  rootGroup.add(celestialGroup, dragonCitadelGroup, titanForgeGroup, hauntedGraveyardGroup);
+  rootGroup.add(
+    celestialGroup,
+    dragonCitadelGroup,
+    titanForgeGroup,
+    hauntedGraveyardGroup,
+    toonKingdomGroup
+  );
 
   const weather = createWeatherParticleSystem();
   rootGroup.add(weather.points);
@@ -1519,6 +1935,7 @@ export function createWorldSceneryManager(scene) {
     dragonCitadelGroup.visible = id === 'dragon_sky_citadel';
     titanForgeGroup.visible = id === 'volcanic_titan_forge';
     hauntedGraveyardGroup.visible = id === 'haunted_blood_graveyard';
+    toonKingdomGroup.visible = id === 'toon_sky_kingdom';
 
     if (id === 'celestial_observatory') {
       skyDomeMat.uniforms.uMode.value = 0;
@@ -1540,6 +1957,11 @@ export function createWorldSceneryManager(scene) {
       horizonSeaMat.uniforms.uMode.value = 3;
       weather.mat.color.setHex(0xff6d00);
       weather.mat.size = 0.17;
+    } else if (id === 'toon_sky_kingdom') {
+      skyDomeMat.uniforms.uMode.value = 4;
+      horizonSeaMat.uniforms.uMode.value = 4;
+      weather.mat.color.setHex(0xffbe0b);
+      weather.mat.size = 0.20;
     }
   }
 
@@ -1548,6 +1970,31 @@ export function createWorldSceneryManager(scene) {
 
     skyDomeMat.uniforms.uTime.value = elapsedTotal;
     horizonSeaMat.uniforms.uTime.value = elapsedTotal;
+
+    // 0. Animate Floating Toon Kingdom (Bobbing Toon Islands, Spinning Windmills & Drifting Outlined Clouds)
+    if (toonKingdomGroup.visible) {
+      const { floatingToonIslands, spinningWindmills, driftingToonClouds } = toonKingdomGroup.userData;
+      if (floatingToonIslands) {
+        for (const fi of floatingToonIslands) {
+          fi.mesh.position.y = fi.baseY + Math.sin(elapsedTotal * fi.speed + fi.phase) * 0.42;
+        }
+      }
+      if (spinningWindmills) {
+        for (const wm of spinningWindmills) {
+          wm.mesh.rotation.z += dt * wm.speed;
+        }
+      }
+      if (driftingToonClouds) {
+        for (const cl of driftingToonClouds) {
+          const theta = elapsedTotal * cl.speed + cl.phase;
+          const x = Math.cos(theta) * cl.orbitR;
+          const z = Math.sin(theta) * cl.orbitR;
+          const y = cl.baseY + Math.sin(elapsedTotal * 1.1 + cl.phase) * 0.35;
+          cl.mesh.position.set(x, y, z);
+          cl.mesh.lookAt(0, y, 0);
+        }
+      }
+    }
 
     // 1. Animate Futuristic Cyber Metropolis (Hover-Drone Stations & Patrolling 3D Hover-Ships)
     if (celestialGroup.visible) {
@@ -1696,7 +2143,7 @@ export function createWorldSceneryManager(scene) {
         posArr[idx + 1] += Math.sin(elapsedTotal * 1.5 + ph) * dt * 0.22;
         if (posArr[idx] > 24.0) posArr[idx] = -24.0;
       } else {
-        // Slowly ascending & orbiting stardust
+        // Slowly ascending & orbiting stardust / comic star-motes
         posArr[idx + 1] += dt * 0.42;
         posArr[idx] += Math.cos(elapsedTotal * 0.8 + ph) * dt * 0.25;
         if (posArr[idx + 1] > 13.5) posArr[idx + 1] = -1.5;

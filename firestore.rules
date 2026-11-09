@@ -39,6 +39,21 @@ service cloud.firestore {
              data.rankTier is string && data.rankTier.size() <= 32;
     }
 
+    function isValidMatchmakingTicket(data) {
+      return data.playerToken is string && data.playerToken.size() > 0 && data.playerToken.size() <= 128 &&
+             data.preferredColor is string && data.preferredColor.size() <= 8 &&
+             data.rating is number &&
+             data.status is string && data.status.size() <= 32 &&
+             data.updatedAt is number;
+    }
+
+    function isValidMultiplayerRoom(data) {
+      return data.code is string && data.code.size() > 0 && data.code.size() <= 16 &&
+             data.status is string && data.status.size() <= 32 &&
+             data.turn is string && data.turn.size() <= 4 &&
+             data.updatedAt is number;
+    }
+
     // Default deny all
     match /{document=**} {
       allow read, write: if false;
@@ -54,10 +69,29 @@ service cloud.firestore {
 
     // Public Live Leaderboard
     match /leaderboard/{userId} {
-      allow read: if isValidId(userId);
+      allow get: if isValidId(userId);
+      allow list: if existing().rating is number;
       allow create: if isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming());
       allow update: if isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming());
       allow delete: if isValidId(userId) && isOwner(userId);
+    }
+
+    // Global Cross-Device Matchmaking Queue
+    match /matchmaking_queue/{ticketId} {
+      allow get: if isValidId(ticketId);
+      allow list: if existing().updatedAt is number;
+      allow create: if isValidId(ticketId) && isValidMatchmakingTicket(incoming());
+      allow update: if isValidId(ticketId) && isValidMatchmakingTicket(incoming());
+      allow delete: if isValidId(ticketId);
+    }
+
+    // Global Cross-Device Multiplayer Rooms
+    match /multiplayer_rooms/{roomCode} {
+      allow get: if isValidId(roomCode);
+      allow list: if existing().updatedAt is number;
+      allow create: if isValidId(roomCode) && isValidMultiplayerRoom(incoming());
+      allow update: if isValidId(roomCode) && isValidMultiplayerRoom(incoming());
+      allow delete: if isValidId(roomCode);
     }
   }
 }

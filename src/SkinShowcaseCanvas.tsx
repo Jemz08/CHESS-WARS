@@ -45,7 +45,8 @@ import {
 import {
   configureGlowingPieceBodyMaterial,
   attachPieceBodyOutline,
-  createShowcaseGlowPedestalAura
+  createShowcaseGlowPedestalAura,
+  createCartoonOutlinePostProcessor
 } from './pieceOutlineAndGlow.js';
 
 interface SkinShowcaseCanvasProps {
@@ -86,6 +87,15 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
       grad.addColorStop(0.78, '#7a1905');
       grad.addColorStop(0.92, '#d9480f');
       grad.addColorStop(1.0, '#1a0402');
+    } else if (scenery.id === 'toon_sky_kingdom') {
+      grad.addColorStop(0.0, '#1d70b8');
+      grad.addColorStop(0.32, '#1d70b8');
+      grad.addColorStop(0.33, '#48cae4');
+      grad.addColorStop(0.62, '#48cae4');
+      grad.addColorStop(0.63, '#90e0ef');
+      grad.addColorStop(0.84, '#90e0ef');
+      grad.addColorStop(0.85, '#ffd166');
+      grad.addColorStop(1.0, '#ffbe0b');
     } else if (scenery.id === 'haunted_blood_graveyard') {
       grad.addColorStop(0.0, '#06020c');
       grad.addColorStop(0.38, '#1d082b');
@@ -101,20 +111,42 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const starCount = scenery.id === 'celestial_observatory' ? 240 : 120;
-    for (let i = 0; i < starCount; i++) {
-      const x = Math.random() * canvas.width;
-      const y = Math.random() * (canvas.height * 0.82);
-      const r = 0.5 + Math.random() * 1.6;
-      ctx.fillStyle =
-        scenery.id === 'volcanic_titan_forge' || scenery.id === 'haunted_blood_graveyard'
-          ? `rgba(255, 145, 35, ${0.4 + Math.random() * 0.6})`
-          : scenery.id === 'celestial_observatory'
-            ? `rgba(180, 255, 245, ${0.35 + Math.random() * 0.65})`
-            : `rgba(255, 244, 214, ${0.2 + Math.random() * 0.5})`;
+    if (scenery.id === 'toon_sky_kingdom') {
+      // Crisp comic ink step lines across the cel-shaded sky dome
+      ctx.strokeStyle = 'rgba(5, 5, 8, 0.35)';
+      ctx.lineWidth = 2;
+      for (const yRatio of [0.325, 0.625, 0.845]) {
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height * yRatio);
+        ctx.lineTo(canvas.width, canvas.height * yRatio);
+        ctx.stroke();
+      }
+      // Cartoon Sun with Bold Black Comic Ring
+      const sunX = canvas.width * 0.72;
+      const sunY = canvas.height * 0.26;
+      ctx.fillStyle = '#fff36b';
+      ctx.strokeStyle = '#050508';
+      ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.arc(sunX, sunY, 26, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
+    } else {
+      const starCount = scenery.id === 'celestial_observatory' ? 240 : 120;
+      for (let i = 0; i < starCount; i++) {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * (canvas.height * 0.82);
+        const r = 0.5 + Math.random() * 1.6;
+        ctx.fillStyle =
+          scenery.id === 'volcanic_titan_forge' || scenery.id === 'haunted_blood_graveyard'
+            ? `rgba(255, 145, 35, ${0.4 + Math.random() * 0.6})`
+            : scenery.id === 'celestial_observatory'
+              ? `rgba(180, 255, 245, ${0.35 + Math.random() * 0.65})`
+              : `rgba(255, 244, 214, ${0.2 + Math.random() * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
   const tex = new THREE.CanvasTexture(canvas);
@@ -226,6 +258,8 @@ export default function SkinShowcaseCanvas({
     glowingOutlineMaterials: Array<{ mat: THREE.Material & { opacity: number }; baseOpacity: number; phase: number }>;
     glowingShaderUniforms: Array<{ uGlowPulse: { value: number }; phase: number }>;
     isGlowingShowcaseActive: boolean;
+    isCartoonShowcaseActive: boolean;
+    postProcessor: ReturnType<typeof createCartoonOutlinePostProcessor>;
     baseRimIntensity: number;
   } | null>(null);
 
@@ -348,6 +382,8 @@ export default function SkinShowcaseCanvas({
     const vfxGroup = new THREE.Group();
     pedestalGroup.add(vfxGroup);
 
+    const postProcessor = createCartoonOutlinePostProcessor(renderer);
+
     const state = {
       scene,
       camera,
@@ -372,6 +408,8 @@ export default function SkinShowcaseCanvas({
       glowingOutlineMaterials: [] as Array<{ mat: THREE.Material & { opacity: number }; baseOpacity: number; phase: number }>,
       glowingShaderUniforms: [] as Array<{ uGlowPulse: { value: number }; phase: number }>,
       isGlowingShowcaseActive: false,
+      isCartoonShowcaseActive: false,
+      postProcessor,
       baseRimIntensity: 2.2
     };
     stageRef.current = state;
@@ -530,7 +568,7 @@ export default function SkinShowcaseCanvas({
       }
 
       camera.lookAt(state.lookTarget);
-      renderer.render(scene, camera);
+      state.postProcessor.render(scene, camera, state.isCartoonShowcaseActive);
     };
 
     animate();
@@ -543,6 +581,7 @@ export default function SkinShowcaseCanvas({
       camera.updateProjectionMatrix();
       camera.lookAt(state.lookTarget);
       renderer.setSize(w, h);
+      state.postProcessor.setSize();
     };
 
     const resizeObserver =
@@ -565,6 +604,7 @@ export default function SkinShowcaseCanvas({
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('resize', handleResize);
+      state.postProcessor.dispose();
       disposeHierarchy(scene);
       renderer.dispose();
       stageRef.current = null;
@@ -616,6 +656,15 @@ export default function SkinShowcaseCanvas({
     st.isGlowingShowcaseActive = Boolean(
       pieceSkin.isGlowing && (activeTab === 'types' || activeTab === 'pieces' || activeTab === 'boards')
     );
+    st.isCartoonShowcaseActive = Boolean(
+      (activeTab === 'types' && archetype.id === 'toon_classic') ||
+        (activeTab === 'pieces' && (pieceSkin.isCartoon || archetype.id === 'toon_classic')) ||
+        (activeTab === 'boards' &&
+          (boardSkin.id === 'toon_ink_wood_table' ||
+            pieceSkin.isCartoon ||
+            archetype.id === 'toon_classic')) ||
+        (activeTab === 'sceneries' && scenery.id === 'toon_sky_kingdom')
+    );
     st.baseRimIntensity = pieceSkin.isGlowing ? 2.45 : 2.2;
     rimLight.intensity = st.baseRimIntensity;
     const pedRingMat = ringMesh.material as THREE.MeshStandardMaterial;
@@ -645,6 +694,12 @@ export default function SkinShowcaseCanvas({
       emissive: trimEmissiveHex,
       emissiveIntensity: trimEmissiveIntensity
     });
+    configureGlowingPieceBodyMaterial(
+      trimMat,
+      pieceSkin,
+      previewColor,
+      Boolean(pieceSkin.isCartoon || archetype.id === 'toon_classic')
+    );
     applyPoliigonPbrToMaterial(trimMat, piecePbrPresets.trimPreset, {
       contextId: 'showcase',
       repeatX: 2,
@@ -697,7 +752,8 @@ export default function SkinShowcaseCanvas({
         emissive: cEmissiveHex,
         emissiveIntensity: cEmissiveIntensity
       });
-      const bodyUniforms = configureGlowingPieceBodyMaterial(cMat, pieceSkin, colorCode);
+      const isCartoonMode = Boolean(pieceSkin.isCartoon || archId === 'toon_classic');
+      const bodyUniforms = configureGlowingPieceBodyMaterial(cMat, pieceSkin, colorCode, isCartoonMode);
       if (pieceSkin.isGlowing) {
         st.glowingMaterials.push({
           mat: cMat,
@@ -759,9 +815,9 @@ export default function SkinShowcaseCanvas({
 
       sanitizeCrossContextMaterials(pieceModel, trimHex);
 
-      // Attach crisp 3D edge & silhouette outlines so glowing pieces always retain a clear, readable body
-      const outlineMats = attachPieceBodyOutline(pieceModel, pieceSkin, colorCode);
-      if (outlineMats.length > 0) {
+      // Attach crisp 3D edge & silhouette outlines so glowing and cartoon pieces always retain a clear, readable body
+      const outlineMats = attachPieceBodyOutline(pieceModel, pieceSkin, colorCode, isCartoonMode);
+      if (outlineMats.length > 0 && pieceSkin.isGlowing) {
         st.glowingOutlineMaterials.push(...outlineMats);
       }
 
@@ -911,6 +967,12 @@ export default function SkinShowcaseCanvas({
         envMapIntensity: 1.5
       });
 
+      const isToonBoard = Boolean(boardSkin.isCartoon || boardSkin.archType === 'toon_table');
+      if (isToonBoard) {
+        configureGlowingPieceBodyMaterial(lightMat, pieceSkin, 'w', true);
+        configureGlowingPieceBodyMaterial(darkMat, pieceSkin, 'b', true);
+      }
+
       const sqGeo = new THREE.BoxGeometry(sqSize * 0.96, 0.036, sqSize * 0.96);
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
@@ -924,14 +986,25 @@ export default function SkinShowcaseCanvas({
       const archGroup = new THREE.Group();
       rebuildBoardArchitectureGroup(archGroup, boardSkin, sqSize, surfaceY, borderMat, 'showcase');
       boardPreviewGroup.add(archGroup);
+      if (Array.isArray(archGroup.userData?.dynamicNodes)) {
+        for (const dn of archGroup.userData.dynamicNodes) {
+          if (dn && dn.mesh) {
+            st.floatingNodes.push({
+              mesh: dn.mesh,
+              baseY: Number(dn.baseY || 0),
+              phase: Number(dn.phase || 0)
+            });
+          }
+        }
+      }
 
-      const whiteKing = buildKingPiece(archetype.id, 'w', 0.48);
+      const whiteKing = buildKingPiece(isToonBoard ? 'toon_classic' : archetype.id, 'w', 0.48);
       if (whiteKing) {
         whiteKing.position.set(-0.5 * sqSize, surfaceY + 0.036, 1.5 * sqSize);
         boardPreviewGroup.add(whiteKing);
       }
 
-      const blackKing = buildKingPiece(archetype.id, 'b', 0.48);
+      const blackKing = buildKingPiece(isToonBoard ? 'toon_classic' : archetype.id, 'b', 0.48);
       if (blackKing) {
         blackKing.position.set(0.5 * sqSize, surfaceY + 0.036, -1.5 * sqSize);
         blackKing.rotation.y = Math.PI;
@@ -948,7 +1021,7 @@ export default function SkinShowcaseCanvas({
       baseMesh.visible = false;
       ringMesh.visible = false;
 
-      const accentHex = parseInt((scenery.previewAccentHex || '#d4af37').replace('#', ''), 16);
+      const accentHex = parseInt((scenery.accentHex || '#d4af37').replace('#', ''), 16);
       const fogHex = parseInt((scenery.fogHex || '#080b14').replace('#', ''), 16);
       scene.background = new THREE.Color(fogHex);
       rimLight.color.setHex(accentHex);
@@ -971,15 +1044,17 @@ export default function SkinShowcaseCanvas({
 
       const cragMat = new THREE.MeshStandardMaterial({
         color:
-          scenery.id === 'volcanic_titan_forge'
-            ? 0x1c0d0a
-            : scenery.id === 'celestial_observatory'
-              ? 0x15182e
-              : scenery.id === 'dragon_sky_citadel'
-                ? 0x2d2420
-                : 0x181c26,
-        roughness: 0.72,
-        metalness: 0.25
+          scenery.id === 'toon_sky_kingdom'
+            ? 0xc98a5b
+            : scenery.id === 'volcanic_titan_forge'
+              ? 0x1c0d0a
+              : scenery.id === 'celestial_observatory'
+                ? 0x15182e
+                : scenery.id === 'dragon_sky_citadel'
+                  ? 0x2d2420
+                  : 0x181c26,
+        roughness: scenery.id === 'toon_sky_kingdom' ? 0.48 : 0.72,
+        metalness: scenery.id === 'toon_sky_kingdom' ? 0.04 : 0.25
       });
       if (scenery.id === 'dragon_sky_citadel') {
         preloadDragonPeak3DAssets();
@@ -1000,6 +1075,14 @@ export default function SkinShowcaseCanvas({
         const islandSpire = new THREE.Mesh(new THREE.ConeGeometry(1.18, 0.85, 8), cragMat);
         islandSpire.rotation.x = Math.PI;
         islandSpire.position.y = -0.45;
+        if (scenery.id === 'toon_sky_kingdom') {
+          const hull = new THREE.Mesh(
+            islandSpire.geometry,
+            new THREE.MeshBasicMaterial({ color: 0x050508, side: THREE.BackSide })
+          );
+          hull.scale.setScalar(1.055);
+          islandSpire.add(hull);
+        }
         islandGroup.add(islandSpire);
       }
 
@@ -1007,12 +1090,20 @@ export default function SkinShowcaseCanvas({
       const altarPlinth = new THREE.Mesh(
         new THREE.CylinderGeometry(plinthRadius, plinthRadius + 0.05, 0.08, 32),
         new THREE.MeshStandardMaterial({
-          color: 0x10131c,
-          roughness: 0.32,
-          metalness: 0.65
+          color: scenery.id === 'toon_sky_kingdom' ? 0x52b788 : 0x10131c,
+          roughness: scenery.id === 'toon_sky_kingdom' ? 0.45 : 0.32,
+          metalness: scenery.id === 'toon_sky_kingdom' ? 0.05 : 0.65
         })
       );
       altarPlinth.position.y = -0.03;
+      if (scenery.id === 'toon_sky_kingdom') {
+        const plinthHull = new THREE.Mesh(
+          altarPlinth.geometry,
+          new THREE.MeshBasicMaterial({ color: 0x050508, side: THREE.BackSide })
+        );
+        plinthHull.scale.setScalar(1.04);
+        altarPlinth.add(plinthHull);
+      }
       islandGroup.add(altarPlinth);
 
       const rimTorus = new THREE.Mesh(
@@ -1031,8 +1122,14 @@ export default function SkinShowcaseCanvas({
 
       const miniSq = 0.14;
       const miniTileGeo = new THREE.BoxGeometry(miniSq * 0.95, 0.02, miniSq * 0.95);
-      const miniLightMat = new THREE.MeshStandardMaterial({ color: 0xe2d9c8, roughness: 0.3 });
-      const miniDarkMat = new THREE.MeshStandardMaterial({ color: 0x181d28, roughness: 0.35 });
+      const miniLightMat = new THREE.MeshStandardMaterial({
+        color: scenery.id === 'toon_sky_kingdom' ? 0xfff0c2 : 0xe2d9c8,
+        roughness: 0.3
+      });
+      const miniDarkMat = new THREE.MeshStandardMaterial({
+        color: scenery.id === 'toon_sky_kingdom' ? 0x5e3a24 : 0x181d28,
+        roughness: 0.35
+      });
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
           const tile = new THREE.Mesh(
@@ -1044,7 +1141,11 @@ export default function SkinShowcaseCanvas({
         }
       }
 
-      const altarKing = buildKingPiece(archetype.id, 'w', 0.42);
+      const altarKing = buildKingPiece(
+        scenery.id === 'toon_sky_kingdom' ? 'toon_classic' : archetype.id,
+        'w',
+        0.42
+      );
       if (altarKing) {
         altarKing.position.set(0, 0.025, 0);
         islandGroup.add(altarKing);
@@ -1058,7 +1159,126 @@ export default function SkinShowcaseCanvas({
         metalness: 0.8
       });
 
-      if (scenery.id === 'celestial_observatory') {
+      if (scenery.id === 'toon_sky_kingdom') {
+        const toonHullMat = new THREE.MeshBasicMaterial({
+          color: 0x050508,
+          side: THREE.BackSide
+        });
+        const addToonPreviewMesh = (
+          parent: THREE.Object3D,
+          geo: THREE.BufferGeometry,
+          mat: THREE.Material,
+          hullScale = 1.05
+        ) => {
+          const m = new THREE.Mesh(geo, mat);
+          const h = new THREE.Mesh(geo, toonHullMat);
+          h.scale.setScalar(hullScale);
+          m.add(h);
+          parent.add(m);
+          return m;
+        };
+
+        const creamMat = new THREE.MeshStandardMaterial({ color: 0xfff3d1, roughness: 0.42 });
+        const blueRoofMat = new THREE.MeshStandardMaterial({ color: 0x3a86ff, roughness: 0.36 });
+        const redRoofMat = new THREE.MeshStandardMaterial({ color: 0xff4d6d, roughness: 0.36 });
+        const goldToonMat = new THREE.MeshStandardMaterial({
+          color: 0xffbe0b,
+          emissive: 0xfb8500,
+          emissiveIntensity: 0.3,
+          roughness: 0.3
+        });
+        const treeGreenMat = new THREE.MeshStandardMaterial({ color: 0x52b788, roughness: 0.45 });
+        const trunkBrownMat = new THREE.MeshStandardMaterial({ color: 0x7f4f24, roughness: 0.5 });
+        const cloudWhiteMat = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          emissive: 0xe0fbfc,
+          emissiveIntensity: 0.22,
+          roughness: 0.35
+        });
+
+        // Rear Fairytale Cartoon Castle Keep + Twin Turrets on the Island Rim
+        const keepTower = addToonPreviewMesh(
+          islandGroup,
+          new THREE.CylinderGeometry(0.24, 0.20, 0.62, 10),
+          creamMat,
+          1.065
+        );
+        keepTower.position.set(0, 0.31, -0.78);
+        const keepRoof = addToonPreviewMesh(
+          islandGroup,
+          new THREE.ConeGeometry(0.32, 0.44, 10),
+          blueRoofMat,
+          1.065
+        );
+        keepRoof.position.set(0, 0.84, -0.78);
+
+        for (const sx of [-1, 1]) {
+          const sideTurret = addToonPreviewMesh(
+            islandGroup,
+            new THREE.CylinderGeometry(0.14, 0.12, 0.46, 10),
+            creamMat,
+            1.07
+          );
+          sideTurret.position.set(sx * 0.48, 0.23, -0.68);
+          const sideRoof = addToonPreviewMesh(
+            islandGroup,
+            new THREE.ConeGeometry(0.19, 0.30, 10),
+            sx > 0 ? redRoofMat : blueRoofMat,
+            1.07
+          );
+          sideRoof.position.set(sx * 0.48, 0.61, -0.68);
+
+          // Bubbly Cel-Shaded Toon Trees on Left & Right Flanks
+          const trunk = addToonPreviewMesh(
+            islandGroup,
+            new THREE.CylinderGeometry(0.045, 0.07, 0.26, 8),
+            trunkBrownMat,
+            1.08
+          );
+          trunk.position.set(sx * 0.82, 0.13, 0.18);
+          const crown = addToonPreviewMesh(
+            islandGroup,
+            new THREE.DodecahedronGeometry(0.18, 1),
+            treeGreenMat,
+            1.075
+          );
+          crown.position.set(sx * 0.82, 0.34, 0.18);
+        }
+
+        // 5 Orbiting Puffy Outlined Cartoon Clouds & Golden Comic Star Gems
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2 + 0.3;
+          const cloudNode = new THREE.Group();
+          const puffPositions: Array<[number, number, number, number]> = [
+            [0, 0, 0, 0.18],
+            [-0.14, -0.02, 0.02, 0.13],
+            [0.14, -0.02, -0.02, 0.14],
+            [0, 0.08, 0.02, 0.12]
+          ];
+          for (const [px, py, pz, pr] of puffPositions) {
+            const pMesh = addToonPreviewMesh(
+              cloudNode,
+              new THREE.SphereGeometry(pr, 14, 12),
+              cloudWhiteMat,
+              1.085
+            );
+            pMesh.position.set(px, py, pz);
+          }
+          const starGem = addToonPreviewMesh(
+            cloudNode,
+            new THREE.OctahedronGeometry(0.075, 0),
+            goldToonMat,
+            1.09
+          );
+          starGem.position.set(0, 0.24, 0);
+
+          const baseY = 0.28 + (i % 2) * 0.24;
+          cloudNode.position.set(Math.cos(ang) * 1.48, baseY, Math.sin(ang) * 1.48);
+          cloudNode.lookAt(0, baseY, 0);
+          subjectGroup.add(cloudNode);
+          st.floatingNodes.push({ mesh: cloudNode, baseY, phase: i * 1.15 });
+        }
+      } else if (scenery.id === 'celestial_observatory') {
         for (let i = 0; i < 3; i++) {
           const armillaryRing = new THREE.Mesh(
             new THREE.TorusGeometry(1.55 + i * 0.22, 0.022, 16, 64),
@@ -1426,7 +1646,7 @@ export default function SkinShowcaseCanvas({
 
     const archId = archetype.id;
     const styleIdx =
-      archId === 'classic_staunton'
+      archId === 'classic_staunton' || archId === 'toon_classic'
         ? 1
         : archId === 'arcane_cyber'
           ? 2
@@ -1434,7 +1654,7 @@ export default function SkinShowcaseCanvas({
             ? 3
             : 0;
     const primaryHex =
-      archId === 'classic_staunton'
+      archId === 'classic_staunton' || archId === 'toon_classic'
         ? 0xffd166
         : archId === 'arcane_cyber'
           ? 0x00f5d4
@@ -1444,7 +1664,7 @@ export default function SkinShowcaseCanvas({
               ? 0xff6d00
               : 0xff6b35;
     const secondaryHex =
-      archId === 'classic_staunton'
+      archId === 'classic_staunton' || archId === 'toon_classic'
         ? 0xe09f3e
         : archId === 'arcane_cyber'
           ? 0x9d4edd
@@ -1643,7 +1863,7 @@ export default function SkinShowcaseCanvas({
         }
         return true;
       });
-    } else if (archId === 'classic_staunton') {
+    } else if (archId === 'classic_staunton' || archId === 'toon_classic') {
       // Grandmaster 6-Comet Telekinetic Barrage + 8-Point Compass Star + Gyroscopic Brass Astrolabe Rings
       const starGroup = new THREE.Group();
       starGroup.position.y = 0.03;

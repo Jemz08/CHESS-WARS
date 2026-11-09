@@ -1,5 +1,5 @@
 export interface PieceArchetype {
-  id: 'gothic_warriors' | 'classic_staunton' | 'arcane_cyber' | 'dragon_elemental' | 'hollow_reapers';
+  id: 'gothic_warriors' | 'classic_staunton' | 'toon_classic' | 'arcane_cyber' | 'dragon_elemental' | 'hollow_reapers';
   name: string;
   subtitle: string;
   badge: string;
@@ -15,6 +15,7 @@ export interface PieceSkin {
   subtitle: string;
   badge?: string;
   isGlowing?: boolean;
+  isCartoon?: boolean;
   price: number;
   whiteHex: string;
   whiteRoughness: number;
@@ -43,7 +44,8 @@ export interface BoardSkin {
   name: string;
   subtitle: string;
   environmentLabel: string;
-  archType: 'gothic' | 'wood_table' | 'runic_pedestal' | 'crystal_sanctum' | 'lava_forge' | 'haunted_crypt';
+  archType: 'gothic' | 'wood_table' | 'toon_table' | 'runic_pedestal' | 'crystal_sanctum' | 'lava_forge' | 'haunted_crypt';
+  isCartoon?: boolean;
   price: number;
   lightSqHex: string;
   lightRoughness: number;
@@ -67,10 +69,11 @@ export interface BoardSkin {
 }
 
 export interface WorldScenery {
-  id: 'gothic_cathedral' | 'celestial_observatory' | 'dragon_sky_citadel' | 'volcanic_titan_forge' | 'haunted_blood_graveyard';
+  id: 'gothic_cathedral' | 'toon_sky_kingdom' | 'celestial_observatory' | 'dragon_sky_citadel' | 'volcanic_titan_forge' | 'haunted_blood_graveyard';
   name: string;
   subtitle: string;
   badge: string;
+  isCartoon?: boolean;
   price: number;
   skyPreviewGradient: string;
   accentHex: string;
@@ -107,6 +110,16 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
     strikeStyle: 'Telekinetic Vertical Ascension, 720° Spin & Gravity Anvil Crush',
     shatterStyle: '8-Point Grandmaster Compass & Astrolabe Orbs',
     flashColorHex: '#ffe082'
+  },
+  {
+    id: 'toon_classic',
+    name: 'Cartoon Classic Toon',
+    subtitle: 'Stylized cartoon-proportioned Classic set with bold pitch-black ink outlines, cel-stepped shading & expressive warhorse knights',
+    badge: 'Cartoon Outline Set',
+    price: 0,
+    strikeStyle: 'Cartoon Squash-and-Stretch Leap & Comic Anvil Smash',
+    shatterStyle: 'Comic Star-Burst & Ink Outline Pop',
+    flashColorHex: '#ffbe0b'
   },
   {
     id: 'arcane_cyber',
@@ -165,6 +178,34 @@ export const PIECE_SKINS: PieceSkin[] = [
     bladeMetalness: 0.88,
     bladeEmissiveHex: '#222832',
     bladeEmissiveIntensity: 0.25
+  },
+  {
+    id: 'toon_cel_ink',
+    name: 'Cartoon Cel-Ink & Outline',
+    subtitle: 'Vibrant cel-shaded butter-cream & midnight-indigo cartoon finish with bold pitch-black comic ink outlines & sunny gold crowns',
+    badge: '✦ Cartoon Outline',
+    isCartoon: true,
+    price: 0,
+    whiteHex: '#fff5d6',
+    whiteRoughness: 0.52,
+    whiteMetalness: 0.02,
+    whiteEmissiveHex: '#ffd166',
+    whiteEmissiveIntensity: 0.14,
+    blackHex: '#353b5c',
+    blackRoughness: 0.48,
+    blackMetalness: 0.04,
+    blackEmissiveHex: '#4361ee',
+    blackEmissiveIntensity: 0.14,
+    trimHex: '#ffbe0b',
+    trimRoughness: 0.36,
+    trimMetalness: 0.25,
+    trimEmissiveHex: '#fb8500',
+    trimEmissiveIntensity: 0.22,
+    bladeHex: '#72efdd',
+    bladeRoughness: 0.32,
+    bladeMetalness: 0.20,
+    bladeEmissiveHex: '#00b4d8',
+    bladeEmissiveIntensity: 0.28
   },
   {
     id: 'royal_gilded',
@@ -577,6 +618,33 @@ export const BOARD_SKINS: BoardSkin[] = [
     brazierLightHex: '#ffb74d'
   },
   {
+    id: 'toon_ink_wood_table',
+    name: 'Comic-Inked Wood & Gold Pedestal',
+    subtitle: 'Cel-shaded honey-birch & comic-walnut chessboard on a chunky wood-and-gold parlor pedestal with bold pitch-black ink outlines',
+    environmentLabel: 'Storybook Toon Parlor & Sunlit Cel-Gold Glow',
+    archType: 'toon_table',
+    isCartoon: true,
+    price: 0,
+    lightSqHex: '#fff0c2',
+    lightRoughness: 0.48,
+    lightMetalness: 0.02,
+    darkSqHex: '#5e3a24',
+    darkRoughness: 0.46,
+    darkMetalness: 0.04,
+    borderHex: '#8c4a27',
+    accentHex: '#ffbe0b',
+    wallLookIndex: 1,
+    floorLookIndex: 1,
+    fogHex: '#1d2238',
+    sideWindowHex: '#ffe082',
+    northWindowHex: '#fff3b0',
+    southWindowHex: '#ffb703',
+    brazierBaseRGB: [1.0, 0.90, 0.35],
+    brazierMidRGB: [1.0, 0.62, 0.08],
+    brazierTipRGB: [0.95, 0.32, 0.05],
+    brazierLightHex: '#ffbe0b'
+  },
+  {
     id: 'runic_pedestal',
     name: 'Futuristic Cyber City Plaza',
     subtitle: 'Cybernetic metropolis board bordered by 3D neon skyscrapers, holographic forcefield gates, reactor spires & hovering spaceships',
@@ -704,6 +772,27 @@ export const WORLD_SCENERIES: WorldScenery[] = [
     rimLightIntensity: 0.72
   },
   {
+    id: 'toon_sky_kingdom',
+    name: 'Floating Toon Kingdom',
+    subtitle: 'Vibrant cel-shaded sky realm with floating emerald islands, splayed fairytale castles, storybook windmills & puffy black-outlined clouds',
+    badge: '✦ Cartoon Realm',
+    isCartoon: true,
+    price: 0,
+    skyPreviewGradient: 'linear-gradient(180deg, #1d70b8 0%, #48cae4 48%, #90e0ef 76%, #ffd166 100%)',
+    accentHex: '#ffbe0b',
+    landmarksLabel: 'Outlined Floating Islands, Fairytale Castle Turrets, Storybook Windmills & Puffy Toon Clouds',
+    weatherLabel: 'Drifting Puffy Outlined Clouds & Twinkling Comic Star-Motes',
+    fogHex: '#2b5876',
+    fogDensity: 0.0028,
+    hemiSkyHex: '#fff8d6',
+    hemiGroundHex: '#3a506b',
+    hemiIntensity: 1.05,
+    keyLightHex: '#fff6cc',
+    keyLightIntensity: 3.05,
+    rimLightHex: '#48cae4',
+    rimLightIntensity: 1.25
+  },
+  {
     id: 'celestial_observatory',
     name: 'Futuristic Cyber Metropolis',
     subtitle: 'Low-poly futuristic city sector with neon-lit skyscrapers, curved overpass bridge, holographic forcefield gates & patrolling hover-ships',
@@ -824,13 +913,13 @@ const ECONOMY_STORAGE_KEY = 'wizard_chess_economy_v1';
 export function loadEconomyState(): EconomyState {
   const defaultState: EconomyState = {
     gold: 150, // Starter Gold so players can test unlocking a piece type, skin, board style, or world scenery right away
-    ownedPieceTypes: ['gothic_warriors'],
+    ownedPieceTypes: ['gothic_warriors', 'toon_classic'],
     activePieceType: 'gothic_warriors',
-    ownedPieceSkins: ['classic_stone'],
+    ownedPieceSkins: ['classic_stone', 'toon_cel_ink'],
     activePieceSkin: 'classic_stone',
-    ownedBoardSkins: ['obsidian_sanctum'],
+    ownedBoardSkins: ['obsidian_sanctum', 'toon_ink_wood_table'],
     activeBoardSkin: 'obsidian_sanctum',
-    ownedSceneries: ['gothic_cathedral'],
+    ownedSceneries: ['gothic_cathedral', 'toon_sky_kingdom'],
     activeScenery: 'gothic_cathedral',
     stats: {
       wins: 0,
@@ -843,36 +932,40 @@ export function loadEconomyState(): EconomyState {
     const raw = localStorage.getItem(ECONOMY_STORAGE_KEY);
     if (!raw) return defaultState;
     const parsed = JSON.parse(raw);
+    const savedPieceTypes =
+      Array.isArray(parsed.ownedPieceTypes) && parsed.ownedPieceTypes.length > 0
+        ? parsed.ownedPieceTypes
+        : defaultState.ownedPieceTypes;
+    const savedPieceSkins =
+      Array.isArray(parsed.ownedPieceSkins) && parsed.ownedPieceSkins.length > 0
+        ? parsed.ownedPieceSkins
+        : defaultState.ownedPieceSkins;
+    const savedBoardSkins =
+      Array.isArray(parsed.ownedBoardSkins) && parsed.ownedBoardSkins.length > 0
+        ? parsed.ownedBoardSkins
+        : defaultState.ownedBoardSkins;
+    const savedSceneries =
+      Array.isArray(parsed.ownedSceneries) && parsed.ownedSceneries.length > 0
+        ? parsed.ownedSceneries
+        : defaultState.ownedSceneries;
     return {
       gold: typeof parsed.gold === 'number' ? parsed.gold : defaultState.gold,
-      ownedPieceTypes:
-        Array.isArray(parsed.ownedPieceTypes) && parsed.ownedPieceTypes.length > 0
-          ? parsed.ownedPieceTypes
-          : defaultState.ownedPieceTypes,
+      ownedPieceTypes: Array.from(new Set([...savedPieceTypes, 'toon_classic'])),
       activePieceType:
         typeof parsed.activePieceType === 'string'
           ? parsed.activePieceType
           : defaultState.activePieceType,
-      ownedPieceSkins:
-        Array.isArray(parsed.ownedPieceSkins) && parsed.ownedPieceSkins.length > 0
-          ? parsed.ownedPieceSkins
-          : defaultState.ownedPieceSkins,
+      ownedPieceSkins: Array.from(new Set([...savedPieceSkins, 'toon_cel_ink'])),
       activePieceSkin:
         typeof parsed.activePieceSkin === 'string'
           ? parsed.activePieceSkin
           : defaultState.activePieceSkin,
-      ownedBoardSkins:
-        Array.isArray(parsed.ownedBoardSkins) && parsed.ownedBoardSkins.length > 0
-          ? parsed.ownedBoardSkins
-          : defaultState.ownedBoardSkins,
+      ownedBoardSkins: Array.from(new Set([...savedBoardSkins, 'toon_ink_wood_table'])),
       activeBoardSkin:
         typeof parsed.activeBoardSkin === 'string'
           ? parsed.activeBoardSkin
           : defaultState.activeBoardSkin,
-      ownedSceneries:
-        Array.isArray(parsed.ownedSceneries) && parsed.ownedSceneries.length > 0
-          ? parsed.ownedSceneries
-          : defaultState.ownedSceneries,
+      ownedSceneries: Array.from(new Set([...savedSceneries, 'toon_sky_kingdom'])),
       activeScenery:
         typeof parsed.activeScenery === 'string'
           ? parsed.activeScenery

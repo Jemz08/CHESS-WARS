@@ -25,7 +25,9 @@ import {
   subscribeToAuth,
   saveUserDataToCloud,
   loadUserDataFromCloud,
+  getLatestLocalCloudSaveSnapshot,
   subscribeToLeaderboard,
+  type CloudUserProfile,
   type LeaderboardPlayer
 } from './firebase';
 import SkinShowcaseCanvas from './SkinShowcaseCanvas';
@@ -208,6 +210,8 @@ interface WizardChessAPI {
   applyWorldScenery?: (scenery: unknown, options?: { flyToVista?: boolean }) => void;
   startBotMatch?: (difficulty: 'easy' | 'medium' | 'hard', side: 'w' | 'b', timeControl?: string) => void;
   startPassAndPlayMatch?: (autoFlip: boolean, timeControl?: string) => void;
+  quitMatchToLobby?: () => void;
+  surrenderMatch?: (surrenderingColor?: 'w' | 'b') => boolean;
   startOnlineMatchmaking?: (preferredColor?: 'w' | 'b' | 'any', rating?: number) => Promise<void>;
   cancelOnlineMatchmaking?: (reason?: string) => Promise<void>;
   createMultiplayerRoom?: (preferredColor: 'w' | 'b') => Promise<{ code: string; color: 'w' | 'b'; room: unknown }>;
@@ -455,6 +459,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [cloudSyncMessage, setCloudSyncMessage] = useState<string>('');
+  const [lastCloudSaveSnap, setLastCloudSaveSnap] = useState<CloudUserProfile | null>(() =>
+    getLatestLocalCloudSaveSnapshot()
+  );
   const [leaderboardPlayers, setLeaderboardPlayers] = useState<LeaderboardPlayer[]>(INITIAL_SANCTUM_LEADERBOARD);
 
   // Sound and Volume Settings
@@ -507,6 +514,8 @@ export default function App() {
   const [botSide, setBotSide] = useState<'w' | 'b'>('w');
   const [inCheck, setInCheck] = useState(false);
   const [checkedColor, setCheckedColor] = useState<'w' | 'b' | null>(null);
+  const [isGameOver, setIsGameOver] = useState(false);
+  const [surrenderConfirmOpen, setSurrenderConfirmOpen] = useState(false);
 
   // Bullet, Blitz & Rapid Time Control State
   const [timeControlCategory, setTimeControlCategory] = useState<TimeControlCategory>('blitz');
@@ -709,6 +718,101 @@ export default function App() {
     localStorage.setItem('wizardchess_commander_name', trimmed);
   };
 
+  const formatCloudSaveTime = (iso?: string) => {
+    if (!iso) return 'Recently saved';
+    try {
+      const dt = new Date(iso);
+      if (Number.isNaN(dt.getTime())) return 'Recently saved';
+      return dt.toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Recently saved';
+    }
+  };
+
+  const applyRestoredCloudSave = (cloudData: CloudUserProfile, strictRestore = false) => {
+    setLastCloudSaveSnap(cloudData);
+    setEconomy((prev) => {
+      const nextGold = strictRestore
+        ? typeof cloudData.gold === 'number'
+          ? cloudData.gold
+          : prev.gold
+        : Math.max(prev.gold, cloudData.gold || 0);
+      const nextWins = strictRestore
+        ? typeof cloudData.wins === 'number'
+          ? cloudData.wins
+          : prev.stats.wins
+        : Math.max(prev.stats.wins, cloudData.wins || 0);
+      const nextCaptures = strictRestore
+        ? typeof cloudData.captures === 'number'
+          ? cloudData.captures
+          : prev.stats.captures
+        : Math.max(prev.stats.captures, cloudData.captures || 0);
+      const nextTotalGold = strictRestore
+        ? typeof cloudData.totalGoldEarned === 'number'
+          ? cloudData.totalGoldEarned
+          : prev.stats.totalGoldEarned
+        : Math.max(prev.stats.totalGoldEarned, cloudData.totalGoldEarned || 0);
+
+      const merged: EconomyState = {
+        gold: nextGold,
+        ownedPieceTypes: Array.from(
+          new Set([...prev.ownedPieceTypes, ...(cloudData.ownedPieceTypes || []), 'toon_classic'])
+        ),
+        activePieceType: cloudData.activePieceType || prev.activePieceType,
+        ownedPieceSkins: Array.from(
+          new Set([...prev.ownedPieceSkins, ...(cloudData.ownedPieceSkins || []), 'toon_cel_ink'])
+        ),
+        activePieceSkin: cloudData.activePieceSkin || prev.activePieceSkin,
+        ownedBoardSkins: Array.from(
+          new Set([...prev.ownedBoardSkins, ...(cloudData.ownedBoardSkins || []), 'toon_ink_wood_table'])
+        ),
+        activeBoardSkin: cloudData.activeBoardSkin || prev.activeBoardSkin,
+        ownedSceneries: Array.from(
+          new Set([...prev.ownedSceneries, ...(cloudData.ownedSceneries || []), 'toon_sky_kingdom'])
+        ),
+        activeScenery: cloudData.activeScenery || prev.activeScenery,
+        stats: {
+          wins: nextWins,
+          captures: nextCaptures,
+          totalGoldEarned: nextTotalGold
+        }
+      };
+      saveEconomyState(merged);
+
+      // Immediately update showcase & live 3D engine with restored loadout
+      const eng = getEngine();
+      if (eng) {
+        const pArch = PIECE_ARCHETYPES.find((a) => a.id === merged.activePieceType) || PIECE_ARCHETYPES[0];
+        const pSkin = PIECE_SKINS.find((s) => s.id === merged.activePieceSkin) || PIECE_SKINS[0];
+        const bSkin = BOARD_SKINS.find((s) => s.id === merged.activeBoardSkin) || BOARD_SKINS[0];
+        const wScenery = WORLD_SCENERIES.find((w) => w.id === merged.activeScenery) || WORLD_SCENERIES[0];
+        eng.applyPieceSkin?.(pSkin);
+        eng.applyPieceArchetype?.(pArch);
+        eng.applyBoardSkin?.(bSkin);
+        eng.applyWorldScenery?.(wScenery);
+      }
+      return merged;
+    });
+
+    if (cloudData.activePieceType) setShowcaseArchetypeId(cloudData.activePieceType);
+    if (cloudData.activePieceSkin) setShowcasePieceSkinId(cloudData.activePieceSkin);
+    if (cloudData.activeBoardSkin) setShowcaseBoardSkinId(cloudData.activeBoardSkin);
+    if (cloudData.activeScenery) setShowcaseSceneryId(cloudData.activeScenery);
+
+    if (cloudData.photoURL && (strictRestore || !localStorage.getItem('wizardchess_custom_photo'))) {
+      setCustomProfilePhoto(cloudData.photoURL);
+    }
+    if (cloudData.displayName && (strictRestore || !localStorage.getItem('wizardchess_commander_name'))) {
+      setCustomCommanderName(cloudData.displayName);
+      localStorage.setItem('wizardchess_commander_name', cloudData.displayName);
+    }
+  };
+
   // Subscribe to Firebase Auth and Firestore Cloud Sync
   useEffect(() => {
     const unsubAuth = subscribeToAuth(async (user) => {
@@ -719,51 +823,21 @@ export default function App() {
         try {
           const cloudData = await loadUserDataFromCloud(user.uid);
           if (cloudData) {
-            setEconomy((prev) => {
-              const merged: EconomyState = {
-                gold: Math.max(prev.gold, cloudData.gold || 0),
-                ownedPieceTypes: Array.from(
-                  new Set([...prev.ownedPieceTypes, ...(cloudData.ownedPieceTypes || [])])
-                ),
-                activePieceType: cloudData.activePieceType || prev.activePieceType,
-                ownedPieceSkins: Array.from(
-                  new Set([...prev.ownedPieceSkins, ...(cloudData.ownedPieceSkins || [])])
-                ),
-                activePieceSkin: cloudData.activePieceSkin || prev.activePieceSkin,
-                ownedBoardSkins: Array.from(
-                  new Set([...prev.ownedBoardSkins, ...(cloudData.ownedBoardSkins || [])])
-                ),
-                activeBoardSkin: cloudData.activeBoardSkin || prev.activeBoardSkin,
-                ownedSceneries: Array.from(
-                  new Set([...prev.ownedSceneries, ...(cloudData.ownedSceneries || [])])
-                ),
-                activeScenery: cloudData.activeScenery || prev.activeScenery,
-                stats: {
-                  wins: Math.max(prev.stats.wins, cloudData.wins || 0),
-                  captures: Math.max(prev.stats.captures, cloudData.captures || 0),
-                  totalGoldEarned: Math.max(prev.stats.totalGoldEarned, cloudData.totalGoldEarned || 0)
-                }
-              };
-              saveEconomyState(merged);
-              return merged;
-            });
-            if (cloudData.photoURL && !localStorage.getItem('wizardchess_custom_photo')) {
-              setCustomProfilePhoto(cloudData.photoURL);
-            }
-            if (cloudData.displayName && !localStorage.getItem('wizardchess_commander_name')) {
-              setCustomCommanderName(cloudData.displayName);
-            }
+            applyRestoredCloudSave(cloudData, false);
             setCloudSyncStatus('synced');
-            setCloudSyncMessage('Cloud save restored & synced.');
+            setCloudSyncMessage(
+              `Cloud save restored (${cloudData.gold} Gold · ${cloudData.wins} Wins · ${formatCloudSaveTime(cloudData.updatedAt)})`
+            );
           } else {
             // First time cloud user: upload local progress to Firestore
-            await saveUserDataToCloud(
+            const savedSnap = await saveUserDataToCloud(
               user,
               economy,
               playerRating,
               rankProgress.currentTier.id,
               rankProgress.currentTier.numeral
             );
+            if (savedSnap) setLastCloudSaveSnap(savedSnap);
             setCloudSyncStatus('synced');
             setCloudSyncMessage('Local progress backed up to Cloud.');
           }
@@ -798,20 +872,105 @@ export default function App() {
       const user = await loginWithGoogle();
       if (user) {
         setCurrentUser(user);
-        await saveUserDataToCloud(
-          user,
-          economy,
-          playerRating,
-          rankProgress.currentTier.id,
-          rankProgress.currentTier.numeral
-        );
-        setCloudSyncStatus('synced');
-        setCloudSyncMessage(`Signed in as ${user.displayName || user.email}`);
+        const existingCloudSave = await loadUserDataFromCloud(user.uid);
+        if (existingCloudSave) {
+          applyRestoredCloudSave(existingCloudSave, false);
+          setCloudSyncStatus('synced');
+          setCloudSyncMessage(
+            `Signed in & loaded save (${existingCloudSave.gold} Gold · ${existingCloudSave.wins} Wins)`
+          );
+          setBountyToast({
+            id: Date.now(),
+            amount: 0,
+            label: `Google Connected · Loaded ${existingCloudSave.gold} Gold & ${existingCloudSave.wins} Wins`
+          });
+        } else {
+          const savedSnap = await saveUserDataToCloud(
+            user,
+            economy,
+            playerRating,
+            rankProgress.currentTier.id,
+            rankProgress.currentTier.numeral
+          );
+          if (savedSnap) setLastCloudSaveSnap(savedSnap);
+          setCloudSyncStatus('synced');
+          setCloudSyncMessage(`Signed in as ${user.displayName || user.email} · Progress Saved`);
+        }
       }
     } catch (err) {
       console.warn('Google sign-in error:', err);
       setCloudSyncStatus('error');
       setCloudSyncMessage('Google sign-in cancelled or failed.');
+    }
+  };
+
+  const handleLoadLastSave = async () => {
+    try {
+      getEngine()?.playLobbyClickSfx?.('unlock');
+      setCloudSyncStatus('syncing');
+      setCloudSyncMessage('Loading last saved progress from Google Cloud...');
+
+      let activeUser = currentUser;
+      if (!activeUser) {
+        activeUser = await loginWithGoogle();
+        if (activeUser) {
+          setCurrentUser(activeUser);
+        }
+      }
+
+      if (!activeUser) {
+        const localFallback = getLatestLocalCloudSaveSnapshot();
+        if (localFallback) {
+          applyRestoredCloudSave(localFallback, true);
+          setCloudSyncStatus('synced');
+          setCloudSyncMessage(
+            `Loaded last save (${localFallback.gold} Gold · ${localFallback.wins} Wins · ${formatCloudSaveTime(localFallback.updatedAt)})`
+          );
+          setBountyToast({
+            id: Date.now(),
+            amount: 0,
+            label: `Loaded Last Save · ${localFallback.gold} Gold & ${localFallback.wins} Wins!`
+          });
+          return;
+        }
+        setCloudSyncStatus('error');
+        setCloudSyncMessage('Sign in with Google to load your cloud save.');
+        return;
+      }
+
+      const cloudData = await loadUserDataFromCloud(activeUser.uid);
+      if (cloudData) {
+        applyRestoredCloudSave(cloudData, true);
+        setCloudSyncStatus('synced');
+        setCloudSyncMessage(
+          `Loaded Last Save: ${cloudData.gold} Gold · ${cloudData.wins} Wins (${formatCloudSaveTime(cloudData.updatedAt)})`
+        );
+        setBountyToast({
+          id: Date.now(),
+          amount: 0,
+          label: `Loaded Last Save · ${cloudData.gold} Gold & ${cloudData.wins} Wins Restored!`
+        });
+      } else {
+        const savedSnap = await saveUserDataToCloud(
+          activeUser,
+          economy,
+          playerRating,
+          rankProgress.currentTier.id,
+          rankProgress.currentTier.numeral
+        );
+        if (savedSnap) setLastCloudSaveSnap(savedSnap);
+        setCloudSyncStatus('synced');
+        setCloudSyncMessage('No prior save found — current progress saved as your new Cloud checkpoint!');
+        setBountyToast({
+          id: Date.now(),
+          amount: 0,
+          label: 'Created New Google Cloud Save Checkpoint!'
+        });
+      }
+    } catch (err) {
+      console.warn('Load cloud save error:', err);
+      setCloudSyncStatus('error');
+      setCloudSyncMessage('Failed to load last cloud save.');
     }
   };
 
@@ -829,22 +988,30 @@ export default function App() {
 
   const handleManualCloudSync = async () => {
     if (!currentUser) {
-      handleGoogleLogin();
+      await handleGoogleLogin();
       return;
     }
     setCloudSyncStatus('syncing');
     setCloudSyncMessage('Uploading latest match spoils & inventory...');
     try {
-      await saveUserDataToCloud(
+      const savedSnap = await saveUserDataToCloud(
         currentUser,
         economy,
         playerRating,
         rankProgress.currentTier.id,
         rankProgress.currentTier.numeral
       );
+      if (savedSnap) setLastCloudSaveSnap(savedSnap);
       setCloudSyncStatus('synced');
-      setCloudSyncMessage('All progress backed up to Google Cloud!');
+      setCloudSyncMessage(
+        `Progress saved to Google Cloud (${economy.gold} Gold · ${economy.stats.wins} Wins)`
+      );
       getEngine()?.playLobbyClickSfx?.('unlock');
+      setBountyToast({
+        id: Date.now(),
+        amount: 0,
+        label: `Cloud Save Updated · ${economy.gold} Gold & ${economy.stats.wins} Wins Backed Up!`
+      });
     } catch {
       setCloudSyncStatus('error');
       setCloudSyncMessage('Cloud sync failed.');
@@ -1155,6 +1322,12 @@ export default function App() {
       setActiveRoomCode(d.roomCode || null);
       setInCheck(Boolean(d.inCheck));
       setCheckedColor(d.checkedColor || null);
+      if (typeof d.gameOver === 'boolean') {
+        setIsGameOver(d.gameOver);
+        if (d.gameOver) {
+          setSurrenderConfirmOpen(false);
+        }
+      }
       if (d.currentTurn === 'w' || d.currentTurn === 'b') {
         setActiveClockTurn(d.currentTurn);
       }
@@ -1238,6 +1411,9 @@ export default function App() {
       const d = (ev as CustomEvent).detail;
       if (!d) return;
       setHasStartedGame(true);
+      setIsGameOver(false);
+      setSurrenderConfirmOpen(false);
+      setGameMode('multi');
       setOnlineQueueStatus('matched');
       setMatchmakingTimedOut(false);
       setActiveRoomCode(d.code || null);
@@ -1251,6 +1427,8 @@ export default function App() {
         `Matched with Suitable Challenger${oppRatingText}! Playing as ${d.color === 'b' ? 'Black' : 'White'} in Room ${d.code}`
       );
       setActiveDialog('none');
+      setMobileSheetOpen(false);
+      setHudEntranceEpoch((prev) => prev + 1);
     };
 
     const handleMatchmakingTick = (ev: Event) => {
@@ -1292,6 +1470,7 @@ export default function App() {
       );
       if (d.bothReady) {
         setHasStartedGame(true);
+        setGameMode('multi');
         setActiveDialog('none');
       }
     };
@@ -1420,14 +1599,33 @@ export default function App() {
   };
 
   // --- Arena Mode Actions ---
+  const handleOpenSurrenderConfirm = () => {
+    if (isGameOver) return;
+    getEngine()?.playLobbyClickSfx?.('card');
+    setMobileSheetOpen(false);
+    setSurrenderConfirmOpen(true);
+  };
+
+  const handleConfirmSurrender = () => {
+    setSurrenderConfirmOpen(false);
+    setMobileSheetOpen(false);
+    setPendingTurnHandoff(null);
+    getEngine()?.playLobbyClickSfx?.('close');
+    getEngine()?.surrenderMatch?.();
+    setIsGameOver(true);
+  };
+
   const handleStartBotGame = () => {
     requestAppFullscreenPortrait();
     const eng = getEngine();
     eng?.startBotMatch?.(botDifficulty, botSide, timeControlPresetId);
     setHasStartedGame(true);
+    setIsGameOver(false);
+    setSurrenderConfirmOpen(false);
     setGameMode('single');
     setActiveDialog('none');
     setMobileSheetOpen(false);
+    setHudEntranceEpoch((prev) => prev + 1);
   };
 
   const handleStartPassGame = () => {
@@ -1435,9 +1633,12 @@ export default function App() {
     const eng = getEngine();
     eng?.startPassAndPlayMatch?.(passAutoFlip, timeControlPresetId);
     setHasStartedGame(true);
+    setIsGameOver(false);
+    setSurrenderConfirmOpen(false);
     setGameMode('pass');
     setActiveDialog('none');
     setMobileSheetOpen(false);
+    setHudEntranceEpoch((prev) => prev + 1);
   };
 
   const handleQuickMatchmaking = async () => {
@@ -1969,6 +2170,17 @@ export default function App() {
             </button>
             <button
               type="button"
+              className="hud-btn hud-micro-btn hud-surrender-btn"
+              id="btn-hud-surrender-top"
+              disabled={isGameOver}
+              onClick={handleOpenSurrenderConfirm}
+              title="Surrender Current Match"
+            >
+              <span className="surrender-flag-icon" aria-hidden="true">🏳</span>
+              <span>Surrender</span>
+            </button>
+            <button
+              type="button"
               className={`hud-btn mobile-controls-trigger ${mobileSheetOpen ? 'active' : ''}`}
               id="btn-mobile-controls"
               aria-expanded={mobileSheetOpen}
@@ -2039,7 +2251,7 @@ export default function App() {
 
           <button
             type="button"
-            className="gold-wallet-btn"
+            className="gold-wallet-btn hud-badge-entrance-gold"
             id="gold-wallet-badge"
             onClick={() => {
               setMobileSheetOpen(false);
@@ -2054,19 +2266,31 @@ export default function App() {
             <span className="gold-wallet-amount">{economy.gold}</span>
           </button>
 
-          {inCheck && (
-            <div
-              className="check-indicator-badge active"
-              id="check-indicator-badge"
-              role="status"
-              aria-live="assertive"
-            >
-              <span className="check-indicator-icon" aria-hidden="true">
-                <PlaySwordsVectorIcon size={Math.round(12 * hudViewport.fontScale)} />
-              </span>
-              <span className="check-indicator-label">CHECK!</span>
-            </div>
-          )}
+          <div
+            key={`check-badge-${hudEntranceEpoch}-${inCheck ? 'active' : 'standby'}`}
+            className={`check-indicator-badge hud-badge-entrance-check ${inCheck ? 'active' : 'standby'}`}
+            id="check-indicator-badge"
+            role="status"
+            aria-live={inCheck ? 'assertive' : 'polite'}
+            title={
+              inCheck
+                ? `${checkedColor === 'b' ? 'Black' : 'White'} Sovereign is in Check!`
+                : 'Check Alert Status: Both Kings Safe'
+            }
+          >
+            <span className="check-indicator-icon" aria-hidden="true">
+              <PlaySwordsVectorIcon size={Math.round(12 * hudViewport.fontScale)} />
+            </span>
+            <span className="check-indicator-label">
+              {inCheck
+                ? checkedColor === 'b'
+                  ? 'BLACK IN CHECK!'
+                  : checkedColor === 'w'
+                    ? 'WHITE IN CHECK!'
+                    : 'CHECK!'
+                : 'CHECK ALERT: CLEAR'}
+            </span>
+          </div>
         </div>
 
         <div
@@ -2151,9 +2375,23 @@ export default function App() {
             className="hud-btn"
             id="btn-reset"
             title="Restart Match on the Altar"
-            onClick={() => setMobileSheetOpen(false)}
+            onClick={() => {
+              setMobileSheetOpen(false);
+              setSurrenderConfirmOpen(false);
+              setIsGameOver(false);
+            }}
           >
             Restart
+          </button>
+          <button
+            type="button"
+            className="hud-btn hud-surrender-btn"
+            id="btn-surrender"
+            disabled={isGameOver}
+            title="Surrender and Concede the Current Match"
+            onClick={handleOpenSurrenderConfirm}
+          >
+            🏳 Surrender
           </button>
 
           <div className="mobile-sheet-section-label">Quick Audio &amp; HUD</div>
@@ -2421,36 +2659,84 @@ export default function App() {
                 <span className="gateway-card-chevron" aria-hidden="true">›</span>
               </button>
 
-              {/* 3. LOGIN (GOOGLE) */}
-              <button
-                type="button"
+              {/* 3. LOGIN (GOOGLE) + LOAD LAST SAVE / PROGRESS */}
+              <div
                 className={`gateway-action-card login-card ${currentUser ? 'signed-in' : ''}`}
-                onClick={() => {
-                  if (currentUser) {
-                    setActiveDialog('settings');
-                  } else {
-                    handleGoogleLogin();
-                  }
-                }}
+                role="region"
+                aria-label="Google Cloud Login and Load Last Save"
               >
                 <div className="gateway-card-glow" aria-hidden="true"></div>
-                <div className="gateway-card-icon" aria-hidden="true">
-                  {currentUser ? <CloudCheckVectorIcon size={28} /> : <GoogleShieldVectorIcon size={28} />}
+                <div
+                  className="gateway-login-main-click"
+                  onClick={() => {
+                    if (currentUser) {
+                      setActiveDialog('settings');
+                    } else {
+                      handleGoogleLogin();
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (currentUser) setActiveDialog('settings');
+                      else handleGoogleLogin();
+                    }
+                  }}
+                >
+                  <div className="gateway-card-icon" aria-hidden="true">
+                    {currentUser ? <CloudCheckVectorIcon size={28} /> : <GoogleShieldVectorIcon size={28} />}
+                  </div>
+                  <div className="gateway-card-content">
+                    <span className="gateway-card-title">
+                      {currentUser ? 'GOOGLE SYNCED' : 'LOGIN (GOOGLE)'}
+                    </span>
+                    <span className="gateway-card-sub">
+                      {currentUser
+                        ? `${currentUser.displayName || currentUser.email} · Cloud Active`
+                        : 'Sign In, Save & Load Player Progress from Cloud'}
+                    </span>
+                    {lastCloudSaveSnap && (
+                      <span className="gateway-card-save-meta">
+                        Last Save: {lastCloudSaveSnap.gold}G · {lastCloudSaveSnap.wins}W ·{' '}
+                        {formatCloudSaveTime(lastCloudSaveSnap.updatedAt)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="gateway-card-content">
-                  <span className="gateway-card-title">
-                    {currentUser ? 'GOOGLE SYNCED' : 'LOGIN (GOOGLE)'}
-                  </span>
-                  <span className="gateway-card-sub">
-                    {currentUser
-                      ? `${currentUser.displayName || currentUser.email} · Cloud Active`
-                      : 'Save & Sync Player Progress to Cloud'}
-                  </span>
+
+                <div className="gateway-login-quick-actions">
+                  <button
+                    type="button"
+                    className="gateway-load-save-btn"
+                    id="btn-gateway-load-save"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLoadLastSave();
+                    }}
+                    title="Load Last Saved Progress from Google Cloud"
+                  >
+                    Load Last Save
+                  </button>
+                  <button
+                    type="button"
+                    className="gateway-sync-save-btn"
+                    id="btn-gateway-sync-save"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (currentUser) {
+                        handleManualCloudSync();
+                      } else {
+                        handleGoogleLogin();
+                      }
+                    }}
+                    title={currentUser ? 'Save Current Progress to Cloud' : 'Sign In with Google'}
+                  >
+                    {currentUser ? 'Save Now' : 'Sign In'}
+                  </button>
                 </div>
-                <span className="gateway-card-chevron" aria-hidden="true">
-                  {currentUser ? <SettingsGearVectorIcon size={18} /> : '›'}
-                </span>
-              </button>
+              </div>
 
               {/* 4. LIVE LEADERBOARDS */}
               <button
@@ -3655,14 +3941,22 @@ export default function App() {
                           onClick={() => handleInspectInShowcase('boards', bSkin.id)}
                         >
                           <div className="skin-swatch-row">
-                            <div
-                              className="board-mini-preview"
-                              style={{ borderColor: bSkin.borderHex }}
-                            >
-                              <span style={{ background: bSkin.lightSqHex }} />
-                              <span style={{ background: bSkin.darkSqHex }} />
-                              <span style={{ background: bSkin.darkSqHex }} />
-                              <span style={{ background: bSkin.lightSqHex }} />
+                            <div className="skin-swatch-pair">
+                              <div
+                                className="board-mini-preview"
+                                style={{
+                                  borderColor: bSkin.isCartoon ? '#050508' : bSkin.borderHex,
+                                  boxShadow: bSkin.isCartoon ? `0 0 0 2px ${bSkin.accentHex}` : undefined
+                                }}
+                              >
+                                <span style={{ background: bSkin.lightSqHex }} />
+                                <span style={{ background: bSkin.darkSqHex }} />
+                                <span style={{ background: bSkin.darkSqHex }} />
+                                <span style={{ background: bSkin.lightSqHex }} />
+                              </div>
+                              {bSkin.isCartoon && (
+                                <span className="skin-archetype-badge">✦ Cartoon Table</span>
+                              )}
                             </div>
                             <div className="skin-status-badges">
                               {isInspecting && (
@@ -4282,19 +4576,40 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SECTION 3: GOOGLE CLOUD SAVE & AUTH */}
+              {/* SECTION 3: GOOGLE CLOUD SAVE, LOAD LAST SAVE & AUTH */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Google Cloud Save &amp; Authentication</h3>
+                <h3 className="settings-section-title">Google Cloud Save &amp; Load Progress</h3>
                 <div className="cloud-save-card">
                   <div className="cloud-card-info">
                     <div className="cloud-card-title">
-                      {currentUser ? 'Cloud Backup Active' : 'Sign In with Google'}
+                      {currentUser ? 'Cloud Backup & Load Progress Active' : 'Sign In with Google · Load or Save Progress'}
                     </div>
                     <p className="cloud-card-desc">
                       {currentUser
-                        ? `Connected as ${currentUser.displayName || currentUser.email}. All Gold, equipped piece sets, and match victories are safely backed up to Firebase Firestore.`
-                        : 'Link your Google Account to preserve your Gold, equipped 3D piece sets, and victory rank across all mobile devices and browsers.'}
+                        ? `Connected as ${currentUser.displayName || currentUser.email}. Restore your last cloud save or back up your current Gold, 3D piece sets, finishes, and victories to Firebase Firestore.`
+                        : 'Link your Google Account to load your last saved progress or back up your Gold, unlocked 3D piece sets, and victory rank across devices.'}
                     </p>
+
+                    {lastCloudSaveSnap && (
+                      <div className="cloud-last-save-summary" id="cloud-last-save-summary">
+                        <div className="cloud-save-summary-head">
+                          <span className="cloud-save-summary-kicker">Last Cloud Save Checkpoint</span>
+                          <span className="cloud-save-summary-time">
+                            {formatCloudSaveTime(lastCloudSaveSnap.updatedAt)}
+                          </span>
+                        </div>
+                        <div className="cloud-save-summary-metrics">
+                          <span>Treasury: <strong>{lastCloudSaveSnap.gold} Gold</strong></span>
+                          <span aria-hidden="true">·</span>
+                          <span>Victories: <strong>{lastCloudSaveSnap.wins}</strong></span>
+                          <span aria-hidden="true">·</span>
+                          <span>Captures: <strong>{lastCloudSaveSnap.captures || 0}</strong></span>
+                          <span aria-hidden="true">·</span>
+                          <span>Rating: <strong>{lastCloudSaveSnap.rating || 1000} ELO</strong></span>
+                        </div>
+                      </div>
+                    )}
+
                     {cloudSyncMessage && (
                       <div className={`cloud-status-badge ${cloudSyncStatus}`}>
                         {cloudSyncMessage}
@@ -4307,10 +4622,19 @@ export default function App() {
                       <>
                         <button
                           type="button"
+                          className="sanctum-action-btn load-save-btn"
+                          id="btn-cloud-load-last-save"
+                          onClick={handleLoadLastSave}
+                        >
+                          Load Last Save / Progress
+                        </button>
+                        <button
+                          type="button"
                           className="sanctum-action-btn sync-btn"
+                          id="btn-cloud-save-progress"
                           onClick={handleManualCloudSync}
                         >
-                          Sync Progress Now
+                          Save Progress Now
                         </button>
                         <button
                           type="button"
@@ -4321,13 +4645,24 @@ export default function App() {
                         </button>
                       </>
                     ) : (
-                      <button
-                        type="button"
-                        className="sanctum-action-btn google-login-btn"
-                        onClick={handleGoogleLogin}
-                      >
-                        Sign In with Google
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="sanctum-action-btn load-save-btn"
+                          id="btn-cloud-login-load-save"
+                          onClick={handleLoadLastSave}
+                        >
+                          Sign In &amp; Load Last Save
+                        </button>
+                        <button
+                          type="button"
+                          className="sanctum-action-btn google-login-btn"
+                          id="btn-cloud-google-login"
+                          onClick={handleGoogleLogin}
+                        >
+                          Sign In with Google
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -4358,6 +4693,57 @@ export default function App() {
         )}
         <div className="captured-pill" id="captured-tray"></div>
       </div>
+
+      {/* Surrender Confirmation Modal */}
+      {surrenderConfirmOpen && (
+        <div
+          className="surrender-modal-backdrop"
+          id="surrender-confirm-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="surrender-modal-title"
+          onClick={() => setSurrenderConfirmOpen(false)}
+        >
+          <div className="surrender-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="sanctum-corner tl" aria-hidden="true"></div>
+            <div className="sanctum-corner tr" aria-hidden="true"></div>
+            <div className="sanctum-corner bl" aria-hidden="true"></div>
+            <div className="sanctum-corner br" aria-hidden="true"></div>
+
+            <div className="surrender-modal-kicker">✦ SANCTUM CONCESSION ✦</div>
+            <div className="surrender-modal-icon" aria-hidden="true">🏳</div>
+            <h3 className="surrender-modal-title" id="surrender-modal-title">
+              Surrender Match?
+            </h3>
+            <p className="surrender-modal-desc">
+              {gameMode === 'pass'
+                ? `${activeClockTurn === 'w' ? 'White (Player 1)' : 'Black (Player 2)'} will concede the Obsidian Altar and grant immediate victory to ${activeClockTurn === 'w' ? 'Black (Player 2)' : 'White (Player 1)'}.`
+                : 'Concede the Obsidian Altar to your opponent and end the current match immediately.'}
+            </p>
+            <div className="surrender-modal-actions">
+              <button
+                type="button"
+                className="surrender-confirm-btn"
+                id="btn-confirm-surrender"
+                onClick={handleConfirmSurrender}
+              >
+                Confirm Surrender
+              </button>
+              <button
+                type="button"
+                className="surrender-cancel-btn"
+                id="btn-cancel-surrender"
+                onClick={() => {
+                  getEngine()?.playLobbyClickSfx?.('card');
+                  setSurrenderConfirmOpen(false);
+                }}
+              >
+                Keep Fighting
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div id="checkmate-overlay" role="status" aria-live="polite">
         <div className="checkmate-banner">

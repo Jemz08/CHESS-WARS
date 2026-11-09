@@ -3157,7 +3157,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
           }
 
           compassStar.scale.setScalar(0.14 + u * 0.62);
-          compassStar.rotation.z += dt * 10.0;
+          compassStar.rotation.y += dt * 10.0;
           gyro1.scale.setScalar(0.16 + u * 0.52);
           gyro1.rotation.z += dt * 12.0;
           gyro2.scale.setScalar(0.14 + u * 0.46);
@@ -3483,7 +3483,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
       magicCircleShaderMat.uniforms.uTime.value = elapsed;
       magicCircleShaderMat.uniforms.uProgress.value = u;
       magicCircleMesh.scale.setScalar(0.28 + ease * 0.72);
-      magicCircleMesh.rotation.z += dt * (styleIndex === 2 ? 2.4 : 1.4);
+      magicCircleMesh.rotation.y += dt * (styleIndex === 2 ? 2.4 : 1.4);
 
       fresnelSphereShaderMat.uniforms.uTime.value = elapsed;
       fresnelSphereShaderMat.uniforms.uDissolve.value = Math.min(1, u * 1.12);
@@ -3525,10 +3525,10 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
           empDome.rotation.y += dt * 3.5;
 
           hexGrid1.scale.setScalar(0.16 + ease * 0.85);
-          hexGrid1.rotation.z += dt * 4.5;
+          hexGrid1.rotation.y += dt * 4.5;
           hexGrid2.scale.setScalar(0.12 + ease * 0.62);
           hexGrid2.position.y = 0.12 + ease * 0.55;
-          hexGrid2.rotation.z -= dt * 5.5;
+          hexGrid2.rotation.y -= dt * 5.5;
 
           pMat.opacity = 0.95 * Math.pow(1 - u, 1.3);
           sMat.opacity = 0.72 * Math.pow(1 - u, 1.4);
@@ -3586,7 +3586,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
             vr.mesh.position.y = 0.06 + vr.idx * 0.18 + u * 0.68;
             const rS = (0.14 + vr.idx * 0.06) * (1 + ease * 1.35);
             vr.mesh.scale.set(rS, 1, rS);
-            vr.mesh.rotation.z += dt * (8 + vr.idx * 2);
+            vr.mesh.rotation.y += dt * (8 + vr.idx * 2);
           }
 
           pMat.opacity = 0.95 * Math.pow(1 - u, 1.25);
@@ -3607,7 +3607,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
 
       const starSigil2 = new THREE.Mesh(sharedStarRingGeo, cMat);
       starSigil2.position.y = 0.026;
-      starSigil2.rotation.z = Math.PI / 8;
+      starSigil2.rotation.y = Math.PI / 8;
       group.add(starSigil2);
 
       const astrolabeRings = [];
@@ -3634,9 +3634,9 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
           const ease = 1 - Math.pow(1 - u, 3);
           stepCommonUnityShaders(u, elapsed, dt, ease);
           starSigil1.scale.setScalar(0.16 + ease * 0.88);
-          starSigil1.rotation.z += dt * 2.8;
+          starSigil1.rotation.y += dt * 2.8;
           starSigil2.scale.setScalar(0.12 + ease * 0.68);
-          starSigil2.rotation.z -= dt * 3.4;
+          starSigil2.rotation.y -= dt * 3.4;
 
           for (let i = 0; i < astrolabeRings.length; i++) {
             const ar = astrolabeRings[i];
@@ -3744,7 +3744,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
             vr.mesh.position.y = 0.06 + vr.idx * 0.18 + u * 0.65;
             const rS = (0.14 + vr.idx * 0.06) * (1 + ease * 1.32);
             vr.mesh.scale.set(rS, 1, rS);
-            vr.mesh.rotation.z += dt * (7.5 + vr.idx * 2);
+            vr.mesh.rotation.y += dt * (7.5 + vr.idx * 2);
           }
           for (const hs of halloweenSprites) {
             const spinSpd = hs.isGhost ? 2.4 : 5.2;
@@ -3792,7 +3792,7 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
         const ease = 1 - Math.pow(1 - u, 3);
         stepCommonUnityShaders(u, elapsed, dt, ease);
         roseRing.scale.setScalar(0.14 + ease * 0.72);
-        roseRing.rotation.z += dt * 2.2;
+        roseRing.rotation.y += dt * 2.2;
         for (const cs of crossSpires) {
           const r = 0.18 + ease * 0.34;
           cs.mesh.position.set(Math.cos(cs.ang) * r, 0.14 + ease * 0.52, Math.sin(cs.ang) * r);
