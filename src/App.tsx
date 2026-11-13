@@ -234,6 +234,15 @@ interface WizardChessAPI {
   setLobbyMusicVolume?: (vol: number) => number;
   getLobbyMusicVolume?: () => number;
   announceSanctumEvent?: (eventType: string, payload?: Record<string, unknown>) => void;
+  setGraphicsQuality?: (mode: 'auto' | 'lite' | 'balanced' | 'ultra') => string;
+  getGraphicsQuality?: () => 'auto' | 'lite' | 'balanced' | 'ultra';
+  getPerformanceStats?: () => {
+    graphicsQuality: 'auto' | 'lite' | 'balanced' | 'ultra';
+    effectiveQuality: 'lite' | 'balanced' | 'ultra';
+    fps: number;
+    wasmEvalMs: number;
+    wasmWorkerActive: boolean;
+  };
   getState?: () => {
     gameMode: 'single' | 'pass' | 'multi';
     botDifficulty: 'easy' | 'medium' | 'hard';
@@ -622,6 +631,25 @@ export default function App() {
       }
     } catch (e) {}
   }
+
+  const [graphicsQuality, setGraphicsQualityState] = useState<'auto' | 'lite' | 'balanced' | 'ultra'>(() => {
+    try {
+      const saved = localStorage.getItem('wizard_chess_graphics_quality');
+      if (saved === 'auto' || saved === 'lite' || saved === 'balanced' || saved === 'ultra') {
+        return saved;
+      }
+    } catch {}
+    return 'auto';
+  });
+  const [effectiveQuality, setEffectiveQuality] = useState<'lite' | 'balanced' | 'ultra'>('balanced');
+  const [liveFps, setLiveFps] = useState<number>(60);
+  const [wasmEvalMs, setWasmEvalMs] = useState<number>(0.4);
+
+  const handleSelectGraphicsQuality = (mode: 'auto' | 'lite' | 'balanced' | 'ultra') => {
+    setGraphicsQualityState(mode);
+    getEngine()?.playLobbyClickSfx?.('tab');
+    getEngine()?.setGraphicsQuality?.(mode);
+  };
 
   const handleMusicVolumeChange = (newVol: number) => {
     setMusicVolume(newVol);
@@ -1491,6 +1519,15 @@ export default function App() {
       showRewardToast(0, `CHECK! · ${sideLabel} King Under Attack!`);
     };
 
+    const handlePerfUpdate = (ev: Event) => {
+      const d = (ev as CustomEvent).detail;
+      if (!d) return;
+      if (d.graphicsQuality) setGraphicsQualityState(d.graphicsQuality);
+      if (d.effectiveQuality) setEffectiveQuality(d.effectiveQuality);
+      if (typeof d.fps === 'number') setLiveFps(d.fps);
+      if (typeof d.wasmEvalMs === 'number') setWasmEvalMs(d.wasmEvalMs);
+    };
+
     window.addEventListener('wizardchess:piececaptured', handlePieceCaptured);
     window.addEventListener('wizardchess:matchwon', handleMatchWon);
     window.addEventListener('wizardchess:statechange', handleStateChange);
@@ -1505,6 +1542,7 @@ export default function App() {
     window.addEventListener('wizardchess:roomupdate', handleRoomUpdate);
     window.addEventListener('wizardchess:turnswitch', handleTurnSwitch);
     window.addEventListener('wizardchess:checkalert', handleCheckAlert);
+    window.addEventListener('wizardchess:perfupdate', handlePerfUpdate);
 
     return () => {
       window.removeEventListener('wizardchess:piececaptured', handlePieceCaptured);
@@ -1521,6 +1559,7 @@ export default function App() {
       window.removeEventListener('wizardchess:roomupdate', handleRoomUpdate);
       window.removeEventListener('wizardchess:turnswitch', handleTurnSwitch);
       window.removeEventListener('wizardchess:checkalert', handleCheckAlert);
+      window.removeEventListener('wizardchess:perfupdate', handlePerfUpdate);
     };
   }, [passPrivacyCurtain]);
 
@@ -2392,6 +2431,47 @@ export default function App() {
             onClick={handleOpenSurrenderConfirm}
           >
             🏳 Surrender
+          </button>
+
+          <div className="mobile-sheet-section-label">
+            Graphics Quality ({liveFps} FPS · WASM {wasmEvalMs}ms)
+          </div>
+
+          <button
+            type="button"
+            className={`hud-btn ${graphicsQuality === 'auto' ? 'active' : ''}`}
+            id="btn-quality-auto"
+            onClick={() => handleSelectGraphicsQuality('auto')}
+            title={`Adaptive FPS Scaling (Currently active: ${effectiveQuality.toUpperCase()})`}
+          >
+            Auto ({effectiveQuality.toUpperCase()})
+          </button>
+          <button
+            type="button"
+            className={`hud-btn ${graphicsQuality === 'lite' ? 'active' : ''}`}
+            id="btn-quality-lite"
+            onClick={() => handleSelectGraphicsQuality('lite')}
+            title="Lite Mode: Fastest 3D FPS, 1.0x DPR, single-pass rendering"
+          >
+            Lite (Fast)
+          </button>
+          <button
+            type="button"
+            className={`hud-btn ${graphicsQuality === 'balanced' ? 'active' : ''}`}
+            id="btn-quality-balanced"
+            onClick={() => handleSelectGraphicsQuality('balanced')}
+            title="Balanced Mode: 1.25x DPR, on-demand shadows & cel outlines"
+          >
+            Balanced
+          </button>
+          <button
+            type="button"
+            className={`hud-btn ${graphicsQuality === 'ultra' ? 'active' : ''}`}
+            id="btn-quality-ultra"
+            onClick={() => handleSelectGraphicsQuality('ultra')}
+            title="Ultra Mode: 1.5x DPR, full shaders, soft shadows & weather"
+          >
+            Ultra
           </button>
 
           <div className="mobile-sheet-section-label">Quick Audio &amp; HUD</div>
@@ -4501,7 +4581,40 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SECTION 2: AUDIO VOLUME & MUTE CONTROLS */}
+              {/* SECTION 2: 3D GRAPHICS QUALITY & RUST/WASM PERFORMANCE ENGINE */}
+              <div className="settings-section" id="settings-performance-section">
+                <h3 className="settings-section-title">
+                  3D Graphics Quality &amp; Rust/WASM Engine
+                </h3>
+                <p className="settings-section-sub">
+                  Off-thread WebAssembly tactical AI engine ({wasmEvalMs}ms move eval) paired with adaptive WebGL resolution &amp; shader scaling ({liveFps} FPS).
+                </p>
+                <div className="rank-ladder-pills" role="group" aria-label="3D Graphics Quality Preset">
+                  {(
+                    [
+                      { id: 'auto', name: 'Auto (Adaptive)', tag: `${effectiveQuality.toUpperCase()}` },
+                      { id: 'lite', name: 'Lite (Fastest)', tag: '1.0x DPR' },
+                      { id: 'balanced', name: 'Balanced', tag: '1.25x DPR' },
+                      { id: 'ultra', name: 'Ultra', tag: '1.5x DPR' }
+                    ] as const
+                  ).map((q) => {
+                    const isSelected = graphicsQuality === q.id;
+                    return (
+                      <button
+                        key={q.id}
+                        type="button"
+                        className={`rank-tier-chip ${isSelected ? 'selected earned' : ''}`}
+                        onClick={() => handleSelectGraphicsQuality(q.id)}
+                      >
+                        <span className="chip-name">{q.name}</span>
+                        <span className="chip-req">{isSelected ? 'ACTIVE' : q.tag}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 3: AUDIO VOLUME & MUTE CONTROLS */}
               <div className="settings-section">
                 <h3 className="settings-section-title">Audio &amp; Volume Controls</h3>
                 <div className="settings-volume-list">

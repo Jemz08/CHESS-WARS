@@ -33,6 +33,7 @@ import {
   resetCloudMultiplayerRoom,
   subscribeCloudMultiplayerRoom
 } from './firebase';
+import { createRustWasmChessBridge } from './rustWasmChessEngine.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -71,14 +72,52 @@ export function initWizardChess() {
     const isAutomatedTest = Boolean(
       navigator.webdriver || new URLSearchParams(window.location.search).get('autotest') === '1'
     );
+    const isSoftwareGl = (() => {
+      try {
+        const probeCanvas = document.createElement('canvas');
+        const gl = probeCanvas.getContext('webgl2') || probeCanvas.getContext('webgl');
+        if (!gl) return true;
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        const param = ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER;
+        const gpu = String(gl.getParameter(param) || '');
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+        return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
+      } catch (e) {
+        return false;
+      }
+    })();
+
+    let graphicsQuality = (() => {
+      try {
+        const saved = localStorage.getItem('wizard_chess_graphics_quality');
+        if (saved === 'lite' || saved === 'balanced' || saved === 'ultra' || saved === 'auto') {
+          return saved;
+        }
+      } catch (e) {}
+      return 'auto';
+    })();
+
+    let effectiveQuality = isSoftwareGl ? 'lite' : graphicsQuality === 'auto' ? 'balanced' : graphicsQuality;
+    let currentFps = 60;
+    let fpsFrameCount = 0;
+    let fpsAccumTime = 0;
+    let lowFpsStreak = 0;
+    let highFpsStreak = 0;
+    let sceneryFrameSkipToggle = false;
+
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: !isSoftwareGl,
       powerPreference: 'high-performance',
       preserveDrawingBuffer: isAutomatedTest
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    renderer.shadowMap.enabled = true;
+    const getTargetPixelRatio = (tier) => {
+      if (isSoftwareGl || tier === 'lite') return Math.min(window.devicePixelRatio || 1, 1.0);
+      if (tier === 'balanced') return Math.min(window.devicePixelRatio || 1, 1.25);
+      return Math.min(window.devicePixelRatio || 1, 1.5);
+    };
+    renderer.setPixelRatio(getTargetPixelRatio(effectiveQuality));
+    renderer.shadowMap.enabled = !isSoftwareGl && effectiveQuality !== 'lite';
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
@@ -3793,29 +3832,58 @@ export function initWizardChess() {
     const activeMoveTweens = [];
 
     // =========================================================================
-    // Single-Player Tactical AI (Auto-Plays Opponent Turn + Manual AI Button)
+    // Single-Player Tactical AI (Rust/WASM Linear-Memory + Off-Thread Worker)
     // =========================================================================
+    const rustWasmEngine = createRustWasmChessBridge();
+    let aiWorkerPending = false;
+
+    function emitPerfUpdate() {
+      window.dispatchEvent(
+        new CustomEvent('wizardchess:perfupdate', {
+          detail: {
+            graphicsQuality,
+            effectiveQuality,
+            fps: currentFps,
+            wasmEvalMs: rustWasmEngine.getLastComputeMs(),
+            wasmWorkerActive: rustWasmEngine.isWorkerActive()
+          }
+        })
+      );
+    }
+
+    function applyEffectiveGraphicsQuality(nextTier) {
+      const validTier = nextTier === 'lite' || nextTier === 'balanced' || nextTier === 'ultra' ? nextTier : 'balanced';
+      effectiveQuality = validTier;
+      renderer.setPixelRatio(getTargetPixelRatio(effectiveQuality));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      cartoonPostProcessor.setSize();
+      const shadowsOn = !isSoftwareGl && effectiveQuality !== 'lite';
+      if (renderer.shadowMap.enabled !== shadowsOn) {
+        renderer.shadowMap.enabled = shadowsOn;
+        renderer.shadowMap.needsUpdate = true;
+      }
+      emitPerfUpdate();
+    }
+
+    function setGraphicsQuality(mode = 'auto') {
+      const normalized =
+        mode === 'lite' || mode === 'balanced' || mode === 'ultra' || mode === 'auto' ? mode : 'auto';
+      graphicsQuality = normalized;
+      try {
+        localStorage.setItem('wizard_chess_graphics_quality', graphicsQuality);
+      } catch (e) {}
+      lowFpsStreak = 0;
+      highFpsStreak = 0;
+      const resolved =
+        graphicsQuality === 'auto' ? (isSoftwareGl ? 'lite' : 'balanced') : graphicsQuality;
+      applyEffectiveGraphicsQuality(resolved);
+      renderMainScene();
+      return graphicsQuality;
+    }
+
     function evaluateBoardForColor(aiColor) {
       const oppColor = aiColor === 'w' ? 'b' : 'w';
-      let total = 0;
-      for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-          const p = boardState[r][c];
-          if (!p) continue;
-          const sign = p.color === aiColor ? 1 : -1;
-          let val = PIECE_VALUES[p.type] || 100;
-          const centerBonus = (3.5 - Math.abs(3.5 - r)) * 8 + (3.5 - Math.abs(3.5 - c)) * 8;
-          if (p.type === 'knight' || p.type === 'bishop') {
-            val += centerBonus * 1.4;
-          } else if (p.type === 'pawn') {
-            const adv = p.color === 'w' ? (6 - r) : (r - 1);
-            val += adv * 14 + (3.5 - Math.abs(3.5 - c)) * 5;
-          } else if (p.type === 'queen') {
-            val += centerBonus * 0.6;
-          }
-          total += sign * val;
-        }
-      }
+      let total = rustWasmEngine.evaluateBoardFast(boardState, aiColor);
       if (isKingInCheck(oppColor, boardState)) total += 55;
       if (isKingInCheck(aiColor, boardState)) total -= 55;
       return total;
@@ -3824,160 +3892,21 @@ export function initWizardChess() {
     function chooseSmartAIMove(color) {
       const legalMoves = getAllLegalMoves(color);
       if (legalMoves.length === 0) return null;
-
-      // Easy Bot: Forgiving 1-ply with high randomness so beginners can set up attacks
-      if (botDifficulty === 'easy') {
-        if (Math.random() < 0.38) {
-          return legalMoves[Math.floor(Math.random() * legalMoves.length)];
-        }
-        let bestEasy = -Infinity;
-        let easyCandidates = [];
-        for (const m of legalMoves) {
-          const target = boardState[m.toR][m.toC];
-          let score = target ? PIECE_VALUES[target.type] * 0.65 : 0;
-          score += (Math.random() - 0.5) * 220;
-          if (score > bestEasy) {
-            bestEasy = score;
-            easyCandidates = [m];
-          }
-        }
-        return easyCandidates[0] || legalMoves[0];
+      const wasmMove = rustWasmEngine.computeBestMoveSync(boardState, color, botDifficulty);
+      emitPerfUpdate();
+      if (
+        wasmMove &&
+        legalMoves.some(
+          (m) =>
+            m.fromR === wasmMove.fromR &&
+            m.fromC === wasmMove.fromC &&
+            m.toR === wasmMove.toR &&
+            m.toC === wasmMove.toC
+        )
+      ) {
+        return wasmMove;
       }
-
-      // Hard Bot: 2-ply tactical minimax with alpha-beta pruning & positional evaluation
-      if (botDifficulty === 'hard') {
-        const oppColor = color === 'w' ? 'b' : 'w';
-        let bestHardScore = -Infinity;
-        let hardCandidates = [];
-
-        // Order captures and central moves first for better alpha-beta cutoffs
-        const orderedMoves = [...legalMoves].sort((a, b) => {
-          const capA = boardState[a.toR][a.toC] ? PIECE_VALUES[boardState[a.toR][a.toC].type] : 0;
-          const capB = boardState[b.toR][b.toC] ? PIECE_VALUES[boardState[b.toR][b.toC].type] : 0;
-          return capB - capA;
-        });
-
-        for (const m of orderedMoves) {
-          const piece = boardState[m.fromR][m.fromC];
-          const savedTarget = boardState[m.toR][m.toC];
-          boardState[m.toR][m.toC] = piece;
-          boardState[m.fromR][m.fromC] = null;
-
-          // Evaluate opponent's strongest reply (2nd ply)
-          let worstReplyScore = Infinity;
-          const oppPseudoMoves = [];
-          for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-              const op = boardState[r][c];
-              if (op && op.color === oppColor) {
-                const pm = getPseudoMovesForPiece(r, c, boardState);
-                for (const om of pm) {
-                  oppPseudoMoves.push({ fromR: r, fromC: c, toR: om.r, toC: om.c });
-                }
-              }
-            }
-          }
-
-          if (oppPseudoMoves.length === 0) {
-            worstReplyScore = isKingInCheck(oppColor, boardState) ? 50000 : 0;
-          } else {
-            for (const om of oppPseudoMoves) {
-              const opPiece = boardState[om.fromR][om.fromC];
-              const opTarget = boardState[om.toR][om.toC];
-              boardState[om.toR][om.toC] = opPiece;
-              boardState[om.fromR][om.fromC] = null;
-              if (!isKingInCheck(oppColor, boardState)) {
-                const evalScore = evaluateBoardForColor(color);
-                if (evalScore < worstReplyScore) {
-                  worstReplyScore = evalScore;
-                }
-              }
-              boardState[om.fromR][om.fromC] = opPiece;
-              boardState[om.toR][om.toC] = opTarget;
-              if (worstReplyScore < bestHardScore - 20) break; // Alpha-beta cutoff
-            }
-          }
-
-          boardState[m.fromR][m.fromC] = piece;
-          boardState[m.toR][m.toC] = savedTarget;
-
-          if (worstReplyScore === Infinity) {
-            // Opponent had no legal moves (checkmate or stalemate!)
-            worstReplyScore = isKingInCheck(oppColor, boardState) ? 50000 : 0;
-          }
-
-          const jitter = (Math.random() - 0.5) * 6;
-          const finalScore = worstReplyScore + jitter;
-          if (finalScore > bestHardScore + 1) {
-            bestHardScore = finalScore;
-            hardCandidates = [m];
-          } else if (Math.abs(finalScore - bestHardScore) <= 1) {
-            hardCandidates.push(m);
-          }
-        }
-
-        return hardCandidates[Math.floor(Math.random() * hardCandidates.length)] || legalMoves[0];
-      }
-
-      // Medium Bot: Balanced tactical evaluation
-      let bestScore = -Infinity;
-      let bestCandidates = [];
-
-      for (const m of legalMoves) {
-        const piece = boardState[m.fromR][m.fromC];
-        const target = boardState[m.toR][m.toC];
-        let score = 0;
-
-        // Material gain on capture
-        if (target) {
-          score += PIECE_VALUES[target.type] * 1.15 - PIECE_VALUES[piece.type] * 0.08;
-        }
-
-        // Center control bonus
-        const centerDist = Math.abs(3.5 - m.toR) + Math.abs(3.5 - m.toC);
-        score += (7 - centerDist) * 8;
-
-        // Pawn advancement bonus
-        if (piece.type === 'pawn') {
-          const advance = color === 'w' ? (6 - m.toR) : (m.toR - 1);
-          score += advance * 12;
-        }
-
-        // Simulate move to check if destination is hanging or gives check
-        boardState[m.toR][m.toC] = piece;
-        boardState[m.fromR][m.fromC] = null;
-        const oppColor = color === 'w' ? 'b' : 'w';
-        if (isKingInCheck(oppColor, boardState)) {
-          score += 45;
-        }
-        // Check if opponent can recapture on destination square
-        for (let rr = 0; rr < 8; rr++) {
-          for (let cc = 0; cc < 8; cc++) {
-            const opp = boardState[rr][cc];
-            if (opp && opp.color === oppColor) {
-              const oppMoves = getPseudoMovesForPiece(rr, cc, boardState);
-              if (oppMoves.some((om) => om.r === m.toR && om.c === m.toC)) {
-                score -= PIECE_VALUES[piece.type] * 0.75;
-                break;
-              }
-            }
-          }
-        }
-        boardState[m.fromR][m.fromC] = piece;
-        boardState[m.toR][m.toC] = target;
-
-        // Small jitter so AI varies openings
-        score += (Math.random() - 0.5) * 14;
-
-        if (score > bestScore + 1) {
-          bestScore = score;
-          bestCandidates = [m];
-        } else if (Math.abs(score - bestScore) <= 1) {
-          bestCandidates.push(m);
-        }
-      }
-
-      return bestCandidates[Math.floor(Math.random() * bestCandidates.length)] || legalMoves[0];
+      return legalMoves[0];
     }
 
     function triggerAIMoveNow() {
@@ -3993,25 +3922,60 @@ export function initWizardChess() {
         aiTimer = null;
       }
       if (!matchStarted || lobbyPaused) return;
-      if (gameOver || isAnimatingMove || preMoveHighlightTask) return;
+      if (gameOver || isAnimatingMove || preMoveHighlightTask || aiWorkerPending) return;
       if (scriptedGameActive) return;
       if (gameMode !== 'single' || !aiAutoPlay) return;
 
       const aiColor = playerColor === 'w' ? 'b' : 'w';
       if (currentTurn === aiColor) {
         const aiThinkDelayMs =
-          timeControlCategory === 'bullet' ? 210 : timeControlCategory === 'blitz' ? 360 : 520;
-        aiTimer = setTimeout(() => {
+          timeControlCategory === 'bullet' ? 140 : timeControlCategory === 'blitz' ? 240 : 340;
+        aiTimer = setTimeout(async () => {
           aiTimer = null;
           if (
-            matchStarted &&
-            !lobbyPaused &&
-            !scriptedGameActive &&
-            gameMode === 'single' &&
-            currentTurn === aiColor &&
-            !isAnimatingMove &&
-            !gameOver
+            !matchStarted ||
+            lobbyPaused ||
+            scriptedGameActive ||
+            gameMode !== 'single' ||
+            currentTurn !== aiColor ||
+            isAnimatingMove ||
+            gameOver
           ) {
+            return;
+          }
+          aiWorkerPending = true;
+          try {
+            const res = await rustWasmEngine.computeBestMoveAsync(boardState, aiColor, botDifficulty);
+            aiWorkerPending = false;
+            emitPerfUpdate();
+            if (
+              matchStarted &&
+              !lobbyPaused &&
+              !scriptedGameActive &&
+              gameMode === 'single' &&
+              currentTurn === aiColor &&
+              !isAnimatingMove &&
+              !gameOver
+            ) {
+              const legalMoves = getAllLegalMoves(aiColor);
+              const candidate = res?.move;
+              if (
+                candidate &&
+                legalMoves.some(
+                  (m) =>
+                    m.fromR === candidate.fromR &&
+                    m.fromC === candidate.fromC &&
+                    m.toR === candidate.toR &&
+                    m.toC === candidate.toC
+                )
+              ) {
+                executeChessMove(candidate.fromR, candidate.fromC, candidate.toR, candidate.toC);
+              } else {
+                triggerAIMoveNow();
+              }
+            }
+          } catch (e) {
+            aiWorkerPending = false;
             triggerAIMoveNow();
           }
         }, aiThinkDelayMs);
@@ -7489,7 +7453,21 @@ export function initWizardChess() {
         cathedralBounds: CATHEDRAL_BOUNDS,
         solidColumnsCount: CATHEDRAL_SOLID_PILLARS.filter((p) => p.isColumn).length,
         brazierPillars: CATHEDRAL_SOLID_PILLARS.filter((p) => !p.isColumn),
-        telemetry: cameraTelemetry
+        telemetry: cameraTelemetry,
+        graphicsQuality,
+        effectiveQuality,
+        fps: currentFps,
+        wasmEvalMs: rustWasmEngine.getLastComputeMs(),
+        wasmWorkerActive: rustWasmEngine.isWorkerActive()
+      }),
+      setGraphicsQuality: (mode) => setGraphicsQuality(mode),
+      getGraphicsQuality: () => graphicsQuality,
+      getPerformanceStats: () => ({
+        graphicsQuality,
+        effectiveQuality,
+        fps: currentFps,
+        wasmEvalMs: rustWasmEngine.getLastComputeMs(),
+        wasmWorkerActive: rustWasmEngine.isWorkerActive()
       }),
       captureScreenshot: async (filename) => {
         renderer.render(scene, camera);
@@ -7624,6 +7602,10 @@ export function initWizardChess() {
     };
 
     function renderMainScene() {
+      if (effectiveQuality === 'lite') {
+        renderer.render(scene, camera);
+        return;
+      }
       const isCartoonScene = Boolean(
         whitePieceArchetype === 'toon_classic' ||
           blackPieceArchetype === 'toon_classic' ||
@@ -7645,15 +7627,58 @@ export function initWizardChess() {
     };
 
     // =========================================================================
-    // Main Animation Loop
+    // Main Animation Loop (Zero-GC Pre-Allocated Scratch Vectors & Adaptive FPS)
     // =========================================================================
     let elapsedTotal = 0;
+    const _prevCamPos = new THREE.Vector3();
+    const _camForward = new THREE.Vector3();
+    const _camRight = new THREE.Vector3();
+    const _camHorizDir = new THREE.Vector3();
+    const _camMoveDelta = new THREE.Vector3();
+    const _camBeforeMovePos = new THREE.Vector3();
+    const _camActualMoveDelta = new THREE.Vector3();
+    const _camLookOffset = new THREE.Vector3();
+    const _camNewOffset = new THREE.Vector3();
+
     function stepScene(dt, doRender = true) {
       elapsedTotal += dt;
-      const prevCamPos = camera.position.clone();
+      _prevCamPos.copy(camera.position);
+
+      // Track rolling FPS & Adaptive Graphics Quality scaling
+      if (doRender && dt > 0.0005 && dt < 0.5) {
+        fpsFrameCount++;
+        fpsAccumTime += dt;
+        if (fpsAccumTime >= 0.65) {
+          currentFps = Math.min(120, Math.max(10, Math.round(fpsFrameCount / fpsAccumTime)));
+          fpsFrameCount = 0;
+          fpsAccumTime = 0;
+
+          if (graphicsQuality === 'auto' && !isSoftwareGl) {
+            if (currentFps < 44) {
+              lowFpsStreak++;
+              highFpsStreak = 0;
+              if (lowFpsStreak >= 2) {
+                lowFpsStreak = 0;
+                if (effectiveQuality === 'ultra') applyEffectiveGraphicsQuality('balanced');
+                else if (effectiveQuality === 'balanced') applyEffectiveGraphicsQuality('lite');
+              }
+            } else if (currentFps >= 57) {
+              highFpsStreak++;
+              lowFpsStreak = 0;
+              if (highFpsStreak >= 5 && effectiveQuality === 'lite') {
+                highFpsStreak = 0;
+                applyEffectiveGraphicsQuality('balanced');
+              }
+            } else {
+              lowFpsStreak = 0;
+              highFpsStreak = 0;
+            }
+          }
+          emitPerfUpdate();
+        }
+      }
 
       // Advance Dual Chess Clocks (Bullet, Blitz, Rapid) during active thinking time
-      // Paused while move/capture animations play so 3D combat animations never penalize fast Bullet clocks
       if (
         matchStarted &&
         !lobbyPaused &&
@@ -7692,7 +7717,7 @@ export function initWizardChess() {
         mixer.update(dt);
       }
 
-      // Advance procedural animations on non-Gothic 3D piece archetypes (Staunton, Arcane Cyber-Mech, Dragon Elemental)
+      // Advance procedural animations on non-Gothic 3D piece archetypes
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
           const p = boardState[r][c];
@@ -7711,7 +7736,7 @@ export function initWizardChess() {
         checkBeaconMat.opacity = 0.16 + (Math.sin(elapsedTotal * 5.2) * 0.5 + 0.5) * 0.18;
       }
 
-      // Advance levitating board architecture nodes (Runic Obelisks, Floating Crystals, Forge Embers)
+      // Advance levitating board architecture nodes
       if (Array.isArray(boardArchGroup.userData.dynamicNodes)) {
         for (const node of boardArchGroup.userData.dynamicNodes) {
           if (node.mesh) {
@@ -7741,32 +7766,31 @@ export function initWizardChess() {
         if (done) activeMoveTweens.splice(i, 1);
       }
 
-      // Feature 4: Video-game style WASD + R/F camera translation AND Arrow-key camera rotation
-      // with separate UI-configurable Move Speed & Rot Speed (both default 10%) and smooth ease-in / ease-out velocity damping
+      // Feature 4: Video-game style WASD + R/F camera translation AND Arrow-key camera rotation (Zero-GC)
       if (!isAnimatingMove) {
         const moveSpeedScale = cameraKeySpeedPct / 100;
         const rotSpeedScale = cameraRotSpeedPct / 100;
-        const maxMoveSpeed = 3.2 * moveSpeedScale; // 0.32 m/s at default 10%
-        const maxVertSpeed = 2.6 * moveSpeedScale; // 0.26 m/s at default 10%
-        const maxRotSpeed = 1.2 * rotSpeedScale;   // 0.12 rad/s at default 10%
+        const maxMoveSpeed = 3.2 * moveSpeedScale;
+        const maxVertSpeed = 2.6 * moveSpeedScale;
+        const maxRotSpeed = 1.2 * rotSpeedScale;
 
-        const forward = new THREE.Vector3().subVectors(orbitControls.target, camera.position);
-        forward.y = 0;
-        if (forward.lengthSq() < 1e-6) {
-          camera.getWorldDirection(forward);
-          forward.y = 0;
+        _camForward.subVectors(orbitControls.target, camera.position);
+        _camForward.y = 0;
+        if (_camForward.lengthSq() < 1e-6) {
+          camera.getWorldDirection(_camForward);
+          _camForward.y = 0;
         }
-        forward.normalize();
-        const right = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+        _camForward.normalize();
+        _camRight.set(-_camForward.z, 0, _camForward.x).normalize();
 
-        const horizDir = new THREE.Vector3(0, 0, 0);
-        if (heldCameraKeys.has('KeyW')) horizDir.add(forward);
-        if (heldCameraKeys.has('KeyS')) horizDir.sub(forward);
-        if (heldCameraKeys.has('KeyD')) horizDir.add(right);
-        if (heldCameraKeys.has('KeyA')) horizDir.sub(right);
-        if (horizDir.lengthSq() > 1e-6) horizDir.normalize();
+        _camHorizDir.set(0, 0, 0);
+        if (heldCameraKeys.has('KeyW')) _camHorizDir.add(_camForward);
+        if (heldCameraKeys.has('KeyS')) _camHorizDir.sub(_camForward);
+        if (heldCameraKeys.has('KeyD')) _camHorizDir.add(_camRight);
+        if (heldCameraKeys.has('KeyA')) _camHorizDir.sub(_camRight);
+        if (_camHorizDir.lengthSq() > 1e-6) _camHorizDir.normalize();
 
-        const desiredMoveVel = horizDir.multiplyScalar(maxMoveSpeed);
+        const desiredMoveVel = _camHorizDir.multiplyScalar(maxMoveSpeed);
         if (heldCameraKeys.has('KeyR')) desiredMoveVel.y += maxVertSpeed;
         if (heldCameraKeys.has('KeyF')) desiredMoveVel.y -= maxVertSpeed;
 
@@ -7777,7 +7801,6 @@ export function initWizardChess() {
         if (heldCameraKeys.has('ArrowUp')) desiredPitchVel += maxRotSpeed;
         if (heldCameraKeys.has('ArrowDown')) desiredPitchVel -= maxRotSpeed;
 
-        // Smooth ease-in when keys are pressed and smooth ease-out when keys are released
         const easeAlpha = 1 - Math.exp(-Math.max(0.001, dt) * 7.5);
         keyMoveVelocity.lerp(desiredMoveVel, easeAlpha);
         keyRotVelocity.yaw += (desiredYawVel - keyRotVelocity.yaw) * easeAlpha;
@@ -7796,18 +7819,18 @@ export function initWizardChess() {
           activeCamTransition = null;
 
           if (hasActiveMove) {
-            const moveDelta = keyMoveVelocity.clone().multiplyScalar(dt);
-            const beforeMovePos = camera.position.clone();
-            camera.position.add(moveDelta);
-            enforceCathedralBoundsAndSolidColumns(beforeMovePos, camera.position, orbitControls.target);
-            const actualMoveDelta = camera.position.clone().sub(beforeMovePos);
-            orbitControls.target.add(actualMoveDelta);
+            _camMoveDelta.copy(keyMoveVelocity).multiplyScalar(dt);
+            _camBeforeMovePos.copy(camera.position);
+            camera.position.add(_camMoveDelta);
+            enforceCathedralBoundsAndSolidColumns(_camBeforeMovePos, camera.position, orbitControls.target);
+            _camActualMoveDelta.copy(camera.position).sub(_camBeforeMovePos);
+            orbitControls.target.add(_camActualMoveDelta);
           }
 
           if (hasActiveRot) {
-            const lookOffset = new THREE.Vector3().subVectors(orbitControls.target, camera.position);
-            const dist = Math.max(0.5, lookOffset.length());
-            const dir = lookOffset.normalize();
+            _camLookOffset.subVectors(orbitControls.target, camera.position);
+            const dist = Math.max(0.5, _camLookOffset.length());
+            const dir = _camLookOffset.normalize();
             let yaw = Math.atan2(dir.x, dir.z);
             let pitch = Math.asin(Math.max(-0.98, Math.min(0.98, dir.y)));
 
@@ -7815,12 +7838,12 @@ export function initWizardChess() {
             pitch = Math.max(-1.35, Math.min(1.35, pitch + keyRotVelocity.pitch * dt));
 
             const cosP = Math.cos(pitch);
-            const newOffset = new THREE.Vector3(
+            _camNewOffset.set(
               Math.sin(yaw) * cosP * dist,
               Math.sin(pitch) * dist,
               Math.cos(yaw) * cosP * dist
             );
-            orbitControls.target.copy(camera.position).add(newOffset);
+            orbitControls.target.copy(camera.position).add(_camNewOffset);
           }
 
           if (heldCameraKeys.size > 0) {
@@ -7837,7 +7860,7 @@ export function initWizardChess() {
         const ease = easeInOutCubic(u);
         camera.position.lerpVectors(activeCamTransition.startPos, activeCamTransition.endPos, ease);
         orbitControls.target.lerpVectors(activeCamTransition.startTarget, activeCamTransition.endTarget, ease);
-        enforceCathedralBoundsAndSolidColumns(prevCamPos, camera.position, orbitControls.target);
+        enforceCathedralBoundsAndSolidColumns(_prevCamPos, camera.position, orbitControls.target);
         camera.lookAt(orbitControls.target);
         if (u >= 1) {
           activeCamTransition = null;
@@ -7845,10 +7868,10 @@ export function initWizardChess() {
         }
       } else if (orbitControls.enabled && !isAnimatingMove) {
         orbitControls.update();
-        enforceCathedralBoundsAndSolidColumns(prevCamPos, camera.position, orbitControls.target);
+        enforceCathedralBoundsAndSolidColumns(_prevCamPos, camera.position, orbitControls.target);
         camera.lookAt(orbitControls.target);
       } else if (isAnimatingMove) {
-        enforceCathedralBoundsAndSolidColumns(prevCamPos, camera.position, orbitControls.target);
+        enforceCathedralBoundsAndSolidColumns(_prevCamPos, camera.position, orbitControls.target);
         camera.lookAt(orbitControls.target);
       }
 
@@ -7875,7 +7898,6 @@ export function initWizardChess() {
           d.vel.x *= 0.72;
           d.vel.z *= 0.72;
         }
-        // Bounce flying stone shards off intact pieces on the board so all statues feel solid
         if (d.mesh.position.y < BOARD_SURFACE_Y + 0.48) {
           for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
@@ -7949,33 +7971,37 @@ export function initWizardChess() {
         ps.material.opacity = Math.min(0.95, Math.pow(lifeRatio, 0.78) * 1.15);
       }
 
-      // Advance volumetric GLSL brazier flames & active warm firelight flicker
-      for (let i = 0; i < brazierFireUniforms.length; i++) {
-        brazierFireUniforms[i].uTime.value = elapsedTotal;
-      }
-
-      // Advance 3D World Scenery sky shaders, orbiting landmarks, soaring dragons & particle weather
-      worldSceneryManager.update(dt, elapsedTotal);
       // Advance Piece-Specific 3D Kill VFX & Procedural Camera Shake
       sfxVfxManager.update(dt, camera);
-      for (let i = 0; i < brazierGlowSprites.length; i++) {
-        const sp = brazierGlowSprites[i];
-        const baseOp = sp.userData.baseOpacity || 0.4;
-        const seed = sp.userData.seed || 0;
-        sp.material.opacity =
-          baseOp +
-          Math.sin(elapsedTotal * 5.2 + seed) * 0.045 +
-          Math.cos(elapsedTotal * 8.4 + seed * 1.3) * 0.025;
-      }
-      for (let i = 0; i < brazierLights.length; i++) {
-        const baseInt = brazierLights[i].userData.baseIntensity || 3.2;
-        brazierLights[i].intensity =
-          baseInt +
-          Math.sin(elapsedTotal * 5.6 + i * 1.7) * 0.28 +
-          Math.cos(elapsedTotal * 9.1 + i) * 0.16;
+
+      // In Lite mode, throttle background scenery & brazier flicker to every 2nd frame
+      sceneryFrameSkipToggle = !sceneryFrameSkipToggle;
+      const shouldStepScenery = effectiveQuality !== 'lite' || sceneryFrameSkipToggle || !doRender;
+      if (shouldStepScenery) {
+        const sceneryDt = effectiveQuality === 'lite' && doRender ? dt * 2 : dt;
+        for (let i = 0; i < brazierFireUniforms.length; i++) {
+          brazierFireUniforms[i].uTime.value = elapsedTotal;
+        }
+        worldSceneryManager.update(sceneryDt, elapsedTotal);
+        for (let i = 0; i < brazierGlowSprites.length; i++) {
+          const sp = brazierGlowSprites[i];
+          const baseOp = sp.userData.baseOpacity || 0.4;
+          const seed = sp.userData.seed || 0;
+          sp.material.opacity =
+            baseOp +
+            Math.sin(elapsedTotal * 5.2 + seed) * 0.045 +
+            Math.cos(elapsedTotal * 8.4 + seed * 1.3) * 0.025;
+        }
+        for (let i = 0; i < brazierLights.length; i++) {
+          const baseInt = brazierLights[i].userData.baseIntensity || 3.2;
+          brazierLights[i].intensity =
+            baseInt +
+            Math.sin(elapsedTotal * 5.6 + i * 1.7) * 0.28 +
+            Math.cos(elapsedTotal * 9.1 + i) * 0.16;
+        }
       }
 
-      // Pulse glowing finishes (armor body, radiant trim/crowns, and plasma/aether blades)
+      // Pulse glowing finishes
       const sidePieceMats = [
         whitePieceMat,
         whiteTrimMat,
@@ -8002,7 +8028,10 @@ export function initWizardChess() {
         }
       }
 
-      if (isAnimatingMove || activeMoveTweens.length > 0 || shatterDebris.length > 0 || checkmateState.active) {
+      if (
+        renderer.shadowMap.enabled &&
+        (isAnimatingMove || activeMoveTweens.length > 0 || shatterDebris.length > 0 || checkmateState.active)
+      ) {
         renderer.shadowMap.needsUpdate = true;
       }
 
