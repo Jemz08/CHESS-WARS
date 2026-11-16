@@ -5,52 +5,93 @@ interface IconProps {
   className?: string;
 }
 
-// Actual vector paths extracted from the Itch.io / Kenney Board Game Icons & Game Icons packs (/public/assets/ui/icons/*.svg)
-const ITCH_PATHS = {
-  crownA:
-    'M26 -9.65 L22 14.95 21.9 15.35 Q21.2 18.95 14.95 21.45 11.25 22.95 6.7 23.6 L0 24 -6.6 23.6 Q-11.25 22.95 -14.9 21.45 L-14.85 21.45 Q-21.2 18.95 -21.85 15.35 L-21.95 14.95 -25.95 -9.65 Q-26.1 -10.5 -25.6 -11.15 -25.15 -11.8 -24.35 -11.95 -23.6 -12.15 -22.9 -11.65 L-12.65 -4.8 -1.7 -23 -0.65 -23.85 Q0 -24.1 0.7 -23.85 L1.75 -23 12.65 -4.8 22.9 -11.65 Q23.6 -12.15 24.4 -11.95 25.15 -11.8 25.65 -11.15 26.1 -10.5 26 -9.65 M-5.4 8.6 Q-6 9.15 -6 10 -6 10.85 -5.4 11.45 L-1.4 15.45 Q-0.85 16 0 16 0.85 16 1.45 15.45 L5.45 11.45 Q6 10.85 6 10 6 9.15 5.45 8.6 L1.45 4.6 Q0.85 4 0 4 -0.85 4 -1.4 4.6 L-5.4 8.6',
-  crownB:
-    'M6 -20 Q6 -18.4 5.3 -17.1 L12.65 -4.8 19 -9.05 Q19 -11.1 20.45 -12.55 21.95 -14 24 -14 26.05 -14 27.5 -12.55 29 -11.05 29 -9 29 -6.95 27.5 -5.5 26.45 -4.4 25.1 -4.1 L22 14.95 21.9 15.35 Q21.2 18.95 14.95 21.45 11.25 22.95 6.7 23.6 L0 24 -6.6 23.6 Q-11.25 22.95 -14.9 21.45 L-14.85 21.45 Q-21.2 18.95 -21.85 21.45 L-21.95 14.95 -25.05 -4.1 Q-26.45 -4.4 -27.55 -5.5 -29 -6.95 -29 -9 -29 -11.05 -27.55 -12.55 -26.05 -14 -24 -14 -21.95 -14 -20.5 -12.55 -19.05 -11.1 -19 -9.05 L-12.65 -4.8 -5.25 -17.1 Q-6 -18.4 -6 -20 -6 -22.45 -4.25 -24.25 -2.45 -26 0 -26 2.5 -26 4.2 -24.25 6 -22.45 6 -20 M-5.4 8.6 Q-6 9.15 -6 10 -6 10.85 -5.4 11.45 L-1.4 15.45 Q-0.85 16 0 16 0.85 16 1.45 15.45 L5.45 11.45 Q6 10.85 6 10 6 9.15 5.45 8.6 L1.45 4.6 Q0.85 4 0 4 -0.85 4 -1.4 4.6 L-5.4 8.6',
-  sword:
-    'M13.5 -26.45 Q14.25 -27 15.25 -27 L24.4 -27 Q25.35 -27 26.05 -26.45 L26.25 -26.3 Q27 -25.5 27 -24.45 L27 -15.2 Q27 -14.25 26.25 -13.4 L2.2 10.65 4 12.45 4.3 12.1 Q4.45 11.85 4.8 11.8 L5.4 11.65 6.15 11.65 Q7.15 11.65 7.95 12.4 L8.1 12.55 Q8.7 13.3 8.7 14.2 L8.7 20.35 Q8.7 21.3 8.1 22 L7.8 22.3 Q7.05 22.9 6.15 22.9 L0 22.9 Q-2.7 22.9 -2.6 20.35 L-2.6 19.75 Q-2.6 19.05 -2.1 18.6 L-1.65 18.1 -2 17.8 -5.55 14.35 -9.6 18.4 -9.6 24.4 Q-9.6 25.45 -10.4 26.2 -11.15 27 -12.2 27 L-24.35 27 Q-27 27 -27 24.4 L-27 12.15 Q-27 9.55 -24.35 9.55 L-18.45 9.55 -14.4 5.5 -18.15 1.65 -18.65 2.2 Q-19.1 2.55 -19.8 2.55 L-20.3 2.55 Q-23 2.55 -22.95 0 L-22.95 -6.15 Q-22.95 -8.75 -20.3 -8.75 L-14.15 -8.75 Q-13.2 -8.75 -12.35 -7.95 L-12.2 -7.8 Q-11.7 -7.05 -11.7 -6.15 L-11.7 -5.45 Q-11.7 -4.85 -12.15 -4.35 L-12.5 -3.95 -10.7 -2.15 13.35 -26.3 13.5 -26.45',
-  shield:
-    'M22.3 -19.55 Q24.4 -19.35 25.75 -17.75 27.15 -16.2 27 -14.1 26.25 4.45 16.3 16.8 10.2 24.3 2.35 28.05 L0.1 28.5 -2.15 28.05 Q-10.1 24.3 -16.2 16.8 -26.15 4.45 -26.9 -14.1 -27 -16.2 -25.65 -17.75 -24.3 -19.35 -22.2 -19.55 -13.35 -20.4 -4.4 -27 -2.4 -28.4 0.1 -28.4 2.5 -28.4 4.5 -27 13.45 -20.45 22.3 -19.55',
-  tokensStack:
-    'M-6 14 Q-6 10.3 -8.65 7.65 -11.3 5 -15 5 -17.8 5 -20 6.5 L-21.35 7.6 -21.4 7.65 Q-24 10.3 -24 14 -24 17.7 -21.35 20.35 -18.7 23 -15 23 -11.3 23 -8.65 20.35 -6 17.7 -6 14 M23 8 Q23 4.3 20.35 1.65 17.7 -1 14 -1 10.4 -1 7.85 1.45 L7.65 1.6 7.6 1.65 Q5 4.3 5 8 5 11.7 7.65 14.35 10.3 17 14 17 17.7 17 20.35 14.35 23 11.7 23 8 M2 -17 Q2 -20.7 -0.65 -23.35 -3.3 -26 -7 -26 -10.7 -26 -13.35 -23.4 L-13.4 -23.35 Q-16 -20.7 -16 -17 -16 -15.7 -15.65 -14.5 -15.05 -12.35 -13.35 -10.65 -10.7 -8 -7 -8 -3.3 -8 -0.65 -10.65 1.05 -12.35 1.7 -14.5 L2 -17 M-22 -4 L-21.8 -6.5 -22 -9 -22 -17 Q-22 -23.15 -17.6 -27.6 -13.15 -32 -7 -32 -0.8 -32 3.6 -27.6 8 -23.2 8 -17 L8 -9 7.8 -6.5 7.9 -5.75 Q10.7 -7 14 -7 20.2 -7 24.6 -2.6 29 1.8 29 8 L29 11 Q29 17.2 24.6 21.55 L24.55 21.6 Q20.2 26 14 26 7.8 26 3.4 21.6 1.1 19.3 0 16.5 L0 17 Q0 23.2 -4.4 27.55 L-4.45 27.6 Q-8.8 32 -15 32 -21.2 32 -25.6 27.6 -30 23.2 -30 17 L-30 14 Q-30 7.85 -25.6 3.4 -23.9 1.7 -21.9 0.7 L-22 -4',
-  pouch:
-    'M9.8 -25.45 Q11.2 -24.65 10.95 -21.75 L10.95 -21.7 Q9.9 -14.95 6.15 -13.85 3.6 -12.75 0.1 -13.05 L-0.1 -13.05 Q-3.6 -12.75 -6.2 -13.85 -9.9 -14.95 -10.95 -21.7 L-10.95 -21.75 Q-11.2 -24.65 -9.8 -25.45 L-5.9 -25.35 -5.95 -25.35 Q-2.8 -24 0 -24 2.8 -24 5.9 -25.35 L9.8 -25.45 M0 26 Q-19.7 25.75 -18.95 12.85 -17.15 -2.4 -10.5 -8.6 -8.6 -10.6 -5.3 -9.7 -2.6 -8.7 -0.15 -8.7 2.6 -8.7 5.35 -9.7 8.65 -10.6 10.55 -8.6 17.15 -2.4 18.95 12.85 19.75 25.75 0 26 M26.5 -8.8 Q27.15 -7.75 26.9 -6.5 26.6 -5.3 25.55 -4.65 L24.65 -4.25 26.7 -0.25 Q27.2 0.95 26.75 2.1 26.25 3.25 25.1 3.75 L22.75 3.8 Q21.6 3.3 21.1 2.2 17.85 -5.2 11.2 -10.5 10.4 -11.1 10.15 -12 9.85 -12.9 10.15 -13.75 10.4 -14.65 11.2 -15.25 11.9 -15.9 12.8 -15.95 21.6 -16.7 26.5 -8.8',
-  award:
-    'M9.6 -19.9 Q7.25 -22.85 8.35 -26 L8.65 -26.45 9 -26.65 Q12.25 -27.8 15.1 -25.4 18.2 -22.85 16.25 -19.25 L15.8 -18.8 Q12.25 -16.8 9.6 -19.9 M17.45 -16.35 Q19.65 -20.7 23.85 -21 L24.5 -20.9 24.95 -20.6 Q28 -17.3 26.55 -12.65 25.3 -7.5 20 -8 L19.55 -8.1 19.3 -7.7 Q16.2 -3.5 11.5 -5.8 7.3 -8.05 7 -12.4 L7.1 -13.1 7.35 -13.55 Q10.6 -16.7 15.1 -15.25 L16.85 -14.55 17.45 -16.35 M21.75 -0.75 Q25.25 -3.3 28.9 -1.8 L29.4 -1.45 29.65 -1.1 Q30.85 2.85 27.8 5.95 24.7 9.5 20.5 6.95 L20.15 6.65 19.85 6.9 Q15.6 9 12.6 5.25 10.05 1.6 11.55 -1.85 L11.9 -2.45 12.25 -2.65 Q16.2 -3.85 19.35 -0.85 L20.55 0.45 21.75 -0.75 M-21.75 -0.75 L-20.55 0.45 -19.35 -0.85 Q-16.2 -3.85 -12.25 -2.65 L-11.9 -2.45 -11.55 -1.85 Q-10.05 1.6 -12.6 5.25 -15.6 9 -19.85 6.9 L-20.15 6.65 -20.5 6.95 Q-24.7 9.5 -27.8 5.95 -30.85 2.85 -29.65 -1.1 L-29.4 -1.45 -28.9 -1.8 Q-25.25 -3.3 -21.75 -0.75 M-17.45 -16.35 L-16.85 -14.55 -15.1 -15.25 Q-10.6 -16.7 -7.35 -13.55 L-7.1 -13.1 -7 -12.4 Q-7.3 -8.05 -11.5 -5.8 -16.2 -3.5 -19.3 -7.7 L-19.55 -8.1 -20 -8 Q-25.3 -7.5 -26.55 -12.65 -28 -17.3 -24.95 -20.6 L-24.5 -20.9 -23.85 -21 Q-19.65 -20.7 -17.45 -16.35 M-9.6 -19.9 Q-12.25 -16.8 -15.8 -18.8 L-16.25 -19.25 Q-18.2 -22.85 -15.1 -25.4 -12.25 -27.8 -9 -26.65 L-8.65 -26.45 -8.35 -26 Q-7.25 -22.85 -9.6 -19.9 M15.95 23.4 Q16.85 24.2 17 25.45 17.1 26.65 16.3 27.65 15.5 28.55 14.3 28.7 13.05 28.8 12.1 28 6.85 23.6 0.15 21.4 -6.5 23.6 -11.75 28 -12.75 28.8 -13.95 28.7 -15.2 28.55 -16 27.65 -16.8 26.65 -16.65 25.45 -16.55 24.2 -15.6 23.4 -12.85 21.1 -9.7 19.3 L-13.75 19 Q-14.75 18.95 -15.45 18.4 -18.25 19.95 -21 17.7 -24.45 15.2 -23.9 11.35 L-23.75 10.95 -23.25 10.5 Q-20.15 8.65 -16.45 10.4 -15.65 10.8 -15.1 11.35 L-14.15 9.9 Q-11.7 6.6 -7.8 7.05 L-7.45 7.2 -7.05 7.7 Q-5.25 10.4 -6.45 13.65 L0.2 15.15 Q3.2 14.25 6.5 13.7 5.25 10.45 7.05 7.7 L7.45 7.2 7.8 7.05 Q11.7 6.6 14.15 9.9 L15.1 11.35 Q15.65 10.8 16.45 10.4 20.15 8.65 23.25 10.5 L23.75 10.95 23.9 11.35 Q24.45 15.2 21 17.7 18.35 19.85 15.6 18.5 14.9 18.95 14 19 L10.05 19.3 Q13.15 21.1 15.95 23.4',
-  watchtower:
-    'M9 -11 L9 -16 Q9 -17.25 9.9 -18.1 10.75 -19 12 -19 L16 -19 Q17.25 -19 18.15 -18.1 19 -17.25 19 -16 L19 -4 Q19 -2.75 18.15 -1.85 L15 1.25 15 10.75 18.15 13.9 Q19 14.75 19 16 L19 20 Q19 21.25 18.15 22.15 17.25 23 16 23 L8 23 Q6.75 23 5.9 22.15 5 21.25 5 20 L5 8 Q5 5.95 3.55 4.5 2.05 3 0 3 -2.05 3 -3.5 4.5 -5 5.95 -5 8 L-5 20 Q-5 21.25 -5.85 22.15 -6.75 23 -8 23 L-16 23 Q-17.25 23 -18.1 22.15 -19 21.25 -19 20 L-19 16 Q-19 14.75 -18.1 13.9 L-15 10.75 -15 1.25 -18.1 -1.85 Q-19 -2.75 -19 -4 L-19 -16 Q-19 -17.25 -18.1 -18.1 -17.25 -19 -16 -19 L-12 -19 Q-10.75 -19 -9.85 -18.1 -9 -17.25 -9 -16 L-9 -11 -7 -11 -7 -16 Q-7 -17.25 -6.1 -18.1 -5.25 -19 -4 -19 L4 -19 Q5.25 -19 6.15 -18.1 7 -17.25 7 -16 L7 -11 9 -11',
-  skull:
-    'M9 12 Q11.55 12 13.2 10.35 15 8.55 15 6 15 3.6 13.2 1.8 11.55 0 9 0 6.45 0 4.65 1.8 3 3.45 3 6 3 8.55 4.65 10.35 6.45 12 9 12 M-9 12 Q-6.45 12 -4.8 10.35 -3 8.55 -3 6 -3 3.6 -4.8 1.8 -6.45 0 -9 0 -11.55 0 -13.35 1.8 -15 3.45 -15 6 -15 8.55 -13.35 10.35 -11.55 12 -9 12 M0 -30 Q11.1 -30 19.05 -22.5 27 -15 27 -4.5 27 1.5 24 7.2 L24 12 Q24 14.55 22.2 16.35 20.55 18 18 18 L12 18 12 24 Q12 26.55 10.2 28.35 8.55 30 6 30 L-6 30 Q-8.55 30 -10.35 28.35 -12 26.55 -12 24 L-12 18 -18 18 Q-20.55 18 -22.35 16.35 -24 14.55 -24 12 L-24 7.2 Q-27 1.95 -27 -4.5 -27 -15 -19.05 -22.5 -11.25 -30 0 -30',
-  hourglass:
-    'M-11.8 -0.65 Q-17.65 -7.6 -18 -18 -18 -18.45 -18.3 -18.7 -18.6 -19 -19 -19 L-20.1 -19 -20.7 -19.25 -21 -20 -21 -26 -20.7 -26.65 -20.65 -26.7 -20 -27 20 -27 20.75 -26.7 21 -26 21 -20 20.8 -19.25 20.75 -19.2 20.1 -19 19 -19 Q18.6 -19 18.3 -18.7 18 -18.45 18 -18 17.65 -7.6 11.85 -0.65 L11.6 0 11.85 0.65 Q17.65 7.6 18 18.05 18 18.45 18.3 18.75 L19 19 20.1 19 20.75 19.3 21 20 21 26 20.8 26.75 20.75 26.8 20 27 -20 27 -20.7 26.75 -21 26 -21 20 -20.7 19.35 -20.65 19.3 Q-20.45 19 -20.1 19 L-19 19 -18.3 18.75 Q-18 18.45 -18 18.05 -17.65 7.6 -11.8 0.65 L-11.6 0 -11.8 -0.65 M4.15 -0.8 Q4.35 -1.65 5 -2.15 L5.2 -2.4 Q11.6 -8.3 12 -17.95 L11.9 -18.45 11.5 -18.85 11 -19 -10.95 -19 -11.45 -18.85 -11.8 -18.45 -11.95 -17.95 Q-11.6 -8.2 -5.05 -2.3 L-5 -2.25 -4.95 -2.2 Q-4.35 -1.65 -4.1 -0.8 L-4 0 -4.1 0.85 -4.15 1.05 -4.8 2.1 -5 2.25 Q-11.6 8.15 -11.95 18 L-11.8 18.5 -11.45 18.85 -10.95 19 11 19 11.5 18.85 11.9 18.5 12 17.95 Q11.6 8.15 5.05 2.25 4.4 1.7 4.15 1.05 L4.15 0.85 4 0 Q4 -0.4 4.15 -0.8 M-4 -10 L4 -10 Q4.85 -10 5.45 -9.4 6 -8.85 6 -8 6 -7.15 5.45 -6.55 L1.45 -2.55 Q0.85 -2 0 -2 -0.85 -2 -1.4 -2.55 L-5.4 -6.55 Q-6 -7.15 -6 -8 -6 -8.85 -5.4 -9.4 -4.85 -10 -4 -10 M-8.6 16 Q-7.6 9.85 -3.6 5.7 L-3.25 5.4 Q-2.2 4.3 -1.65 3 L1.65 3 Q2.2 4.3 3.3 5.4 L3.35 5.4 3.35 5.45 Q7.6 9.6 8.65 16 L-8.6 16',
-  bookOpen:
-    'M-1 24.85 Q-6.75 21.5 -19.05 21 -21.85 20.9 -25.05 20.95 L-26.95 21 -27.3 21 -27.95 21 -28 21 -28.3 21 -28.95 21 -29.95 20.75 -30.7 20.05 -31 19 -31 -17 Q-31 -17.85 -30.4 -18.4 -29.85 -19 -29 -19 L-26 -19 -26 11 Q-26 12.2 -25.15 13.1 L-25.05 13.2 Q-24.25 13.95 -23.1 14 L-18.05 14.3 Q-6.65 15.25 -1.3 17.8 L0 18.1 1.35 17.8 Q6.4 15.35 16.95 14.35 L23.15 14 Q24.15 13.95 24.95 13.3 L25.15 13.1 Q26 12.2 26 11 L26 -19 29 -19 Q29.85 -19 30.45 -18.4 31 -17.85 31 -17 L31 19 30.75 20.05 30 20.75 28.95 21 28.3 21 28 21 27.95 21 27.3 21 26.95 21 24.95 20.95 17.95 21.05 Q6.55 21.7 1.05 24.85 L0 25.1 -1 24.85 M0 13.1 Q-5.75 10.25 -21 9.1 L-22 9 -22 -23 -20.9 -22.9 Q-10.85 -22.1 -6.25 -21 -2.65 -20.15 -0.2 -19 L0 -18.9 0.25 -19 Q2.7 -20.15 6.3 -21 10.15 -21.9 22 -23 L22 9 17.95 9.4 Q5.35 10.45 0 13.1',
-  lockClosed:
-    'M-8 -10 L-8 -6 8 -6 8 -10 Q8 -13.3 5.65 -15.65 3.3 -18 0 -18 -3.3 -18 -5.65 -15.7 L-5.7 -15.65 Q-8 -13.3 -8 -10 M16 -6 Q20 -6 20 -2 L20 22 Q20 23.95 19.05 24.95 18.05 26 16 26 L-16 26 Q-18.05 26 -19.05 24.95 -20 23.95 -20 22 L-20 -2 Q-20 -6 -16 -6 L-16 -10 Q-16 -16.6 -11.35 -21.3 L-11.3 -21.35 Q-6.6 -26 0 -26 6.6 -26 11.3 -21.3 16 -16.6 16 -10 L16 -6 M0 2 Q-2.05 2 -3.5 3.45 L-3.55 3.5 Q-5 4.95 -5 7 -5 9.05 -3.55 10.5 L-2.45 11.35 -2.1 11.75 -2 12.2 -2 15.75 Q-2 16.55 -1.4 17.15 -0.8 17.75 0 17.75 0.8 17.75 1.4 17.15 2 16.55 2 15.75 L2 12.2 2.15 11.75 2.5 11.35 3.5 10.55 3.55 10.5 Q5 9.05 5 7 5 4.95 3.5 3.45 2.05 2 0 2',
-  fire:
-    'M15.3 -10.2 Q21.9 -0.8 20.85 8.65 L20.85 8.9 Q19.55 16.75 15.05 22 12.9 25.6 8.35 26.9 L8.4 26.75 Q9.6 23.85 8.35 18.7 L8.3 18.65 Q4.15 7.1 0.35 4.05 -0.35 3.45 -1.1 3.6 -2.05 3.65 -2.55 4.45 -3 5 -2.95 5.85 L-2.95 5.9 Q-2.85 10.65 -5.7 14.65 -9.25 18.25 -8.8 22.65 L-8.75 22.75 Q-8.35 25.3 -7.1 27 -18.9 24 -20.9 11.85 -21.85 3.1 -14.8 -4.1 -7.65 -13.7 -8 -25.15 -8.1 -26.3 -7.45 -27.05 -6.9 -27.9 -5.95 -27.95 -5.1 -28.1 -4.35 -27.45 6.55 -18.25 10.1 -5.3 10.95 -7.05 11.2 -9.05 11.3 -10.15 12.15 -10.8 12.85 -11.4 13.85 -11.2 14.7 -11.05 15.3 -10.2',
-  arrowClockwise:
-    'M-13.25 21.3 Q-21.85 16.3 -24.4 6.8 -26.95 -2.85 -21.95 -11.5 L-21.95 -11.45 Q-17.05 -20.05 -7.4 -22.65 2.2 -25.35 10.85 -20.3 19.45 -15.35 22.05 -5.7 23.1 -1.8 22.9 2 L24.35 0.75 Q25.25 -0.05 26.5 0 27.75 0.1 28.55 1.05 29.4 1.95 29.3 3.2 29.2 4.45 28.3 5.25 L18.15 14.1 Q17.45 14.7 16.6 14.85 L14.9 14.6 Q14.05 14.2 13.6 13.45 L6.7 2.35 Q6.05 1.25 6.35 0.1 6.6 -1.15 7.7 -1.8 8.75 -2.45 9.95 -2.15 11.15 -1.9 11.8 -0.8 L12.9 0.95 Q12.95 -1.05 12.4 -3.05 L12.4 -3.1 Q10.85 -8.75 5.85 -11.65 0.8 -14.55 -4.75 -13 L-4.8 -13 Q-10.45 -11.5 -13.3 -6.5 -16.25 -1.45 -14.75 4.25 L-14.75 4.2 Q-13.25 9.75 -8.2 12.7 L-8.15 12.7 -5.6 13.95 Q-3.7 14.7 -2.85 16.6 -2 18.45 -2.7 20.4 -3.45 22.3 -5.35 23.15 L-9.15 23.3 Q-11.25 22.5 -13.2 21.35 L-13.25 21.3',
+/**
+ * Cozy FreeGameUI-inspired rounded vector silhouettes & botanical paths
+ * Designed for Warm Honey-Wood, Cream Parchment & Soft Gold Medallions
+ */
+const COZY_PATHS = {
+  roundedShield:
+    'M0 -28 C12 -28 22 -23 25 -17 C27 -2 21 15 3 26 C1 27.5 -1 27.5 -3 26 C-21 15 -27 -2 -25 -17 C-22 -23 -12 -28 0 -28 Z',
+  cozySword:
+    'M-18 18 L-11 11 M-14 21 L-21 14 C-22.5 12.5 -22.5 10 -21 8.5 L-17 4.5 L-4.5 17 L-8.5 21 C-10 22.5 -12.5 22.5 -14 21 Z M-15 2 L14 -24 C17 -26.5 22 -26.5 24.5 -24 C26.5 -22 26.5 -17 24 -14 L-2 15 Z',
+  cozyCrown:
+    'M-21 13 L-24 -6 C-24.4 -8.5 -21.5 -10 -19.5 -8.2 L-11 -0.5 L-2.2 -15.5 C-1.1 -17.5 1.1 -17.5 2.2 -15.5 L11 -0.5 L19.5 -8.2 C21.5 -10 24.4 -8.5 24 -6 L21 13 C20.5 16.5 17 19 13 19 H-13 C-17 19 -20.5 16.5 -21 13 Z',
+  cozyTrophy:
+    'M-15 -18 H15 V-6 C15 4 8.5 11 0 11 C-8.5 11 -15 4 -15 -6 Z M-15 -13 H-22 C-24 -13 -25 -11 -24.5 -8 C-23.5 -2 -19 2 -14 2 M15 -13 H22 C24 -13 25 -11 24.5 -8 C23.5 -2 19 2 14 2 M0 11 V20 M-11 21 H11 C13 21 14 22.5 14 24.5 H-14 C-14 22.5 -13 21 -11 21 Z',
+  cozyPouch:
+    'M-9 -19 C-11 -22 -9 -25 -5 -24 C-2 -23 2 -23 5 -24 C9 -25 11 -22 9 -19 L6 -13 C16 -8 21 4 19 15 C17.5 22 10 25 0 25 C-10 25 -17.5 22 -19 15 C-21 4 -16 -8 -6 -13 Z',
+  cozyFlame:
+    'M2 -25 C12 -15 19 -3 17 9 C15.5 18.5 8.5 25 0 25 C-9.5 25 -17 17.5 -17 7.5 C-17 1 -13 -5 -9 -9 C-9 -3 -5 0 -2 -4 C1 -8 -3 -17 2 -25 Z',
+  cozyHourglass:
+    'M-15 -22 H15 M-15 22 H15 M-12 -22 C-12 -10 -3 -4 -3 0 C-3 4 -12 10 -12 22 H12 C12 10 3 4 3 0 C3 -4 12 -10 12 -22 Z',
   chessKing:
-    'M-7.1 -16.1 Q-5.7 -17.5 -4 -18.2 L-4 -20 -6 -20 Q-6.85 -20 -7.4 -20.55 -8 -21.15 -8 -22 L-8 -26 Q-8 -26.85 -7.4 -27.4 -6.85 -28 -6 -28 L-4 -28 -4 -30 Q-4 -30.85 -3.4 -31.4 -2.85 -32 -2 -32 L2 -32 Q2.85 -32 3.45 -31.4 4 -30.85 4 -30 L4 -28 6 -28 Q6.85 -28 7.45 -27.4 8 -26.85 8 -26 L8 -22 Q8 -21.15 7.45 -20.55 6.85 -20 6 -20 L4 -20 4 -18.2 Q5.65 -17.5 7.05 -16.1 8.45 -14.7 9.2 -13 L-9.2 -13 Q-8.5 -14.7 -7.1 -16.1 M-9 14 L-9 10 -10 10 Q-11.65 10 -12.85 8.8 -14 7.65 -14 6 L-14 3.45 -13.95 3.45 -13.3 1.75 -15.9 -7.15 -15.85 -8.5 Q-15.65 -9.15 -15.05 -9.55 -14.5 -9.95 -13.75 -10 L13.75 -10 Q14.5 -9.95 15.05 -9.55 L15.9 -8.5 Q16.1 -7.8 15.9 -7.15 L13.3 1.75 Q13.85 2.5 14 3.45 L14 6 Q14 7.65 12.8 8.8 11.65 10 10 10 L9 10 9 14 10 14 Q11.65 14 12.8 15.15 13.8 16.15 14 17.45 L14 21 -14 21 -14 17.45 -13.95 17.45 Q-13.8 16.15 -12.85 15.15 -11.65 14 -10 14 L-9 14 M15 32 L-15 32 Q-16.65 32 -17.85 30.8 -19 29.65 -19 28 L-19 25.45 -18.95 25.45 Q-18.8 24.15 -17.85 23.15 L-17.65 23 17.65 23 17.8 23.15 Q18.8 24.15 19 25.45 L19 28 Q19 29.65 17.8 30.8 16.65 32 15 32',
+    'M0 -27 V-19 M-4 -23 H4 M-9 -14 C-9 -17 9 -17 9 -14 L12 -3 C12 2 8 5 7 11 L9 18 H-9 L-7 11 C-8 5 -12 2 -12 -3 Z M-13 22 H13 C15 22 16 23.5 16 25.5 H-16 C-16 23.5 -15 22 -13 22 Z',
   chessQueen:
-    'M-7.1 -22.1 Q-5.75 -23.45 -4.1 -24.15 -5 -25.4 -5 -27 -5 -29.05 -3.55 -30.55 -2.05 -32 0 -32 2.05 -32 3.5 -30.55 5 -29.05 5 -27 5 -25.4 4.1 -24.15 L7.05 -22.1 Q9.1 -20.05 9.75 -17.4 L6.85 -15.55 2.95 -18.1 3 -18.1 Q1.6 -19 0 -19 -1.6 -19 -2.85 -18.1 L-6.85 -15.55 -9.7 -17.4 Q-9.1 -20.05 -7.1 -22.1 M-9 14 L-9 4 -10 4 Q-11.65 4 -12.85 2.8 -14 1.65 -14 0 L-14 -1.8 -12.6 -1.85 -15.9 -13.15 -15.85 -14.5 Q-15.65 -15.15 -15.05 -15.55 -14.5 -15.95 -13.75 -16 -13.05 -16 -12.45 -15.6 L-6.85 -12 -1.25 -15.6 Q-0.7 -16 0 -16 0.7 -16 1.3 -15.6 L6.85 -12 12.45 -15.6 Q13.05 -16 13.75 -16 14.5 -15.95 15.05 -15.55 L15.9 -14.5 Q16.1 -13.8 15.9 -13.15 L12.6 -1.85 14 -1.8 14 0 Q14 1.65 12.8 2.8 11.65 4 10 4 L9 4 9 14 10 14 Q11.65 14 12.8 15.15 13.8 16.15 14 17.45 L14 21 -14 21 -14 17.45 -13.95 17.45 Q-13.8 16.15 -12.85 15.15 -11.65 14 -10 14 L-9 14 M15 32 L-15 32 Q-16.65 32 -17.85 30.8 -19 29.65 -19 28 L-19 25.45 -18.95 25.45 Q-18.8 24.15 -17.85 23.15 L-17.65 23 17.65 23 17.8 23.15 Q18.8 24.15 19 25.45 L19 28 Q19 29.65 17.8 30.8 16.65 32 15 32',
+    'M-17 -11 L-9 -2 L0 -14 L9 -2 L17 -11 L13 13 H-13 Z M-13 18 H13 C15 18 16 20 16 22 H-16 C-16 20 -15 18 -13 18 Z',
   chessRook:
-    'M-17 17.45 L-16.95 17.45 Q-16.8 16.15 -15.85 15.15 -14.65 14 -13 14 L-12 14 -12 -6.15 -18.4 -12.55 Q-19 -13.15 -19 -14 L-19 -26 Q-19 -26.85 -18.4 -27.4 -17.85 -28 -17 -28 L-11 -28 Q-10.15 -28 -9.55 -27.4 -9 -26.85 -9 -26 L-9 -20 -5 -20 -5 -26 Q-5 -26.85 -4.4 -27.4 -3.85 -28 -3 -28 L3 -28 Q3.85 -28 4.45 -27.4 5 -26.85 5 -26 L5 -20 9 -20 9 -26 Q9 -26.85 9.6 -27.4 10.15 -28 11 -28 L17 -28 Q17.85 -28 18.45 -27.4 19 -26.85 19 -26 L19 -14 Q19 -13.15 18.45 -12.55 L12 -6.1 12 14 13 14 Q14.65 14 15.8 15.15 16.8 16.15 17 17.45 L17 21 -17 21 -17 17.45 M18 32 L-18 32 Q-19.65 32 -20.85 30.8 -22 29.65 -22 28 L-22 25.45 -21.95 25.45 Q-21.8 24.15 -20.85 23.15 L-20.65 23 20.65 23 20.8 23.15 Q21.8 24.15 22 25.45 L22 28 Q22 29.65 20.8 30.8 19.65 32 18 32',
+    'M-13 -18 V-11 H-7 V-18 H-2 V-11 H2 V-18 H7 V-11 H13 V-18 H16 V-6 L11 -1 L13 17 H-13 L-11 -1 L-16 -6 V-18 Z M-15 21 H15 C16.5 21 17.5 22.5 17.5 24.5 H-17.5 C-17.5 22.5 -16.5 21 -15 21 Z',
   chessBishop:
-    'M-10 14 L-7.55 1.8 -8.5 1.1 Q-11.35 -1.25 -11.9 -4.35 L-12 -5.85 -12 -6.35 Q-11.75 -13.5 -8.5 -18.7 -6.85 -21.2 -4.9 -22.5 -6 -24 -6 -26 -6 -28.5 -4.25 -30.3 -2.5 -32 0 -32 2.5 -32 4.25 -30.3 6 -28.5 6 -26 6 -24 4.9 -22.5 L6.9 -20.7 Q8.75 -18.45 6.65 -16.2 L2.25 -11.75 Q1.5 -11.05 1.5 -10 1.5 -8.95 2.25 -8.2 2.95 -7.5 4 -7.5 5.05 -7.5 5.8 -8.2 L8.25 -10.65 Q11.6 -13.75 11.95 -8.2 L12 -7.4 12 -5.85 11.9 -4.35 Q11.35 -1.25 8.45 1.1 L7.55 1.8 10 14 13 14 Q14.65 14 15.8 15.15 16.8 16.15 17 17.45 L17 21 -17 21 -17 17.45 -16.95 17.45 Q-16.8 16.15 -15.85 15.15 -14.65 14 -13 14 L-10 14 M18 32 L-18 32 Q-19.65 32 -20.85 30.8 -22 29.65 -22 28 L-22 25.45 -21.95 25.45 Q-21.8 24.15 -20.85 23.15 L-20.65 23 20.65 23 20.8 23.15 Q21.8 24.15 22 25.45 L22 28 Q22 29.65 20.8 30.8 19.65 32 18 32',
+    'M0 -23 C2.5 -23 4.5 -21 4.5 -18.5 C4.5 -16 2.5 -14 0 -14 C-2.5 -14 -4.5 -16 -4.5 -18.5 C-4.5 -21 -2.5 -23 0 -23 Z M0 -13 C9 -8 11 3 8 13 L11 18 H-11 L-8 13 C-11 3 -9 -8 0 -13 Z M-14 22 H14',
   chessKnight:
-    'M-17 17.45 L-16.95 17.45 Q-16.8 16.15 -15.85 15.15 -14.7 14.05 -13.15 14 -11.4 10.05 -5.9 5.75 -2.05 2.65 1.65 -4.6 L1.75 -6.1 0.9 -5.85 1 -6 Q-6.55 0.5 -12.5 -0.05 -15.8 -0.3 -16.9 -3.5 L-17 -4.2 -16.8 -4.85 -8.15 -19.15 -10.4 -21.35 Q-10.85 -21.8 -10.85 -22.45 -10.85 -23.1 -10.4 -23.55 -9.95 -24 -9.3 -24 L3.05 -24 3.15 -24 Q16.3 -23.45 17 -10.25 L17 2.1 17 2.25 Q16.1 9.75 13.95 14.1 15 14.35 15.8 15.15 16.8 16.15 17 17.45 L17 21 -17 21 -17 17.45 M18 32 L-18 32 Q-19.65 32 -20.85 30.8 -22 29.65 -22 28 L-22 25.45 -21.95 25.45 Q-21.8 24.15 -20.85 23.15 L-20.65 23 20.65 23 20.8 23.15 Q21.8 24.15 22 25.45 L22 28 Q22 29.65 20.8 30.8 19.65 32 18 32',
+    'M-6 -19 L4 -21 C12 -19 16 -10 14 2 L11 17 H-12 L-8 4 C-3 3 0 -1 -1 -5 L-9 -2 C-13 -1 -16 -4 -14 -9 L-8 -16 Z M-14 21 H14',
   chessPawn:
-    'M10 -18 Q10 -14.55 8 -12 9.65 -12 10.8 -10.85 11.8 -9.85 12 -8.55 L12 -6 Q12 -4.35 10.8 -3.2 L9.3 -2.2 12 14 13 14 Q14.65 14 15.8 15.15 16.8 16.15 17 17.45 L17 21 -17 21 -17 17.45 -16.95 17.45 Q-16.8 16.15 -15.85 15.15 -14.65 14 -13 14 L-12 14 -9.3 -2.2 -10.85 -3.2 Q-12 -4.35 -12 -6 L-12 -8.55 -11.95 -8.55 Q-11.8 -9.85 -10.85 -10.85 -9.65 -12 -8 -12 -10 -14.55 -10 -18 -10 -22.15 -7.1 -25.15 -4.15 -28 0 -28 4.15 -28 7.05 -25.15 10 -22.15 10 -18 M18 32 L-18 32 Q-19.65 32 -20.85 30.8 -22 29.65 -22 28 L-22 25.45 -21.95 25.45 Q-21.8 24.15 -20.85 23.15 L-20.65 23 20.65 23 20.8 23.15 Q21.8 24.15 22 25.45 L22 28 Q22 29.65 20.8 30.8 19.65 32 18 32',
+    'M0 -20 C5.5 -20 10 -15.5 10 -10 C10 -5.5 7 -2 3 -0.5 L9 17 H-9 L-3 -0.5 C-7 -2 -10 -5.5 -10 -10 C-10 -15.5 -5.5 -20 0 -20 Z M-13 21 H13'
 };
 
 /**
- * 1. PLAY — Crossed Swords & Shield Crest (Redesigned from Itch.io `sword.svg` + `shield.svg`)
+ * Shared Warm Honey-Wood, Cream Parchment & Soft Gold Medallion Base
+ */
+const CozyMedallionBase: React.FC<{
+  idPrefix: string;
+  innerTintTop?: string;
+  innerTintBottom?: string;
+}> = ({ idPrefix, innerTintTop = '#FFFDF7', innerTintBottom = '#F3DFBA' }) => (
+  <>
+    <defs>
+      <linearGradient id={`${idPrefix}_woodRim`} x1="-32" y1="-32" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#FCE394" />
+        <stop offset="45%" stopColor="#E09F32" />
+        <stop offset="100%" stopColor="#8C5410" />
+      </linearGradient>
+      <radialGradient id={`${idPrefix}_creamCore`} cx="38%" cy="30%" r="70%">
+        <stop offset="0%" stopColor={innerTintTop} />
+        <stop offset="72%" stopColor={innerTintBottom} />
+        <stop offset="100%" stopColor="#E2C38D" />
+      </radialGradient>
+      <linearGradient id={`${idPrefix}_goldArt`} x1="-22" y1="-24" x2="22" y2="24" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#FFF6C9" />
+        <stop offset="42%" stopColor="#F5C344" />
+        <stop offset="88%" stopColor="#C88214" />
+        <stop offset="100%" stopColor="#8A5208" />
+      </linearGradient>
+    </defs>
+    {/* Warm Drop Shadow */}
+    <circle cx="0" cy="2.2" r="32" fill="rgba(104, 62, 16, 0.24)" />
+    {/* Outer Honey-Gold Beveled Ring */}
+    <circle cx="0" cy="0" r="32" fill={`url(#${idPrefix}_woodRim)`} stroke="#6E3F08" strokeWidth="2.2" />
+    {/* Warm Parchment Cream Core */}
+    <circle cx="0" cy="0" r="27" fill={`url(#${idPrefix}_creamCore)`} stroke="#C68B34" strokeWidth="1.6" />
+    {/* Cozy Stitched Inner Filigree Ring */}
+    <circle
+      cx="0"
+      cy="0"
+      r="23.5"
+      fill="none"
+      stroke="#D49B3E"
+      strokeWidth="1.1"
+      strokeDasharray="3.2 2.6"
+      opacity="0.72"
+    />
+    {/* Top & Bottom Mini Leaf/Star Dots */}
+    <circle cx="0" cy="-29.3" r="1.7" fill="#FFFDF5" />
+    <circle cx="0" cy="29.3" r="1.7" fill="#FFFDF5" />
+    <circle cx="-29.3" cy="0" r="1.7" fill="#FFFDF5" />
+    <circle cx="29.3" cy="0" r="1.7" fill="#FFFDF5" />
+  </>
+);
+
+/**
+ * 1. PLAY — Cozy Honey-Wood Shield & Crossed Storybook Swords Badge
  */
 export const PlaySwordsVectorIcon: React.FC<IconProps> = ({ size = 28, className = '' }) => (
   <svg
@@ -59,38 +100,40 @@ export const PlaySwordsVectorIcon: React.FC<IconProps> = ({ size = 28, className
     viewBox="-36 -36 72 72"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={`game-vector-icon ${className}`}
+    className={`game-vector-icon cozy-vector-badge ${className}`}
   >
-    <defs>
-      <linearGradient id="itchBladeSteel" x1="-27" y1="-27" x2="27" y2="27" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FFF7D6" />
-        <stop offset="45%" stopColor="#F3CE68" />
-        <stop offset="100%" stopColor="#9E7118" />
-      </linearGradient>
-      <linearGradient id="itchShieldCore" x1="0" y1="-28" x2="0" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#2A2010" />
-        <stop offset="100%" stopColor="#0E131F" />
-      </linearGradient>
-    </defs>
+    <CozyMedallionBase idPrefix="cozyPlay" innerTintTop="#FFFDF6" innerTintBottom="#F8E4B8" />
+    {/* Cozy Rounded Shield */}
     <path
-      d={ITCH_PATHS.shield}
-      fill="url(#itchShieldCore)"
-      stroke="url(#itchBladeSteel)"
-      strokeWidth="3.2"
-      transform="scale(0.95)"
+      d={COZY_PATHS.roundedShield}
+      fill="url(#cozyPlay_goldArt)"
+      stroke="#6E3F08"
+      strokeWidth="2.4"
+      transform="scale(0.68)"
     />
-    <g transform="scale(0.88)">
-      <path d={ITCH_PATHS.sword} fill="url(#itchBladeSteel)" />
-      <path d={ITCH_PATHS.sword} fill="url(#itchBladeSteel)" transform="scale(-1, 1)" />
+    {/* Crossed Rounded Blades */}
+    <g stroke="#5C3406" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M-15 15 L15 -15" stroke="#FFFDF9" strokeWidth="4.6" />
+      <path d="M-15 15 L15 -15" stroke="#D98B1E" strokeWidth="2.4" />
+      <path d="M-16 8 L-8 16" stroke="#8C5410" strokeWidth="3.2" />
+      <path d="M15 15 L-15 -15" stroke="#FFFDF9" strokeWidth="4.6" />
+      <path d="M15 15 L-15 -15" stroke="#D98B1E" strokeWidth="2.4" />
+      <path d="M8 16 L16 8" stroke="#8C5410" strokeWidth="3.2" />
     </g>
-    <polygon points="0,-6 6,0 0,6 -6,0" fill="#EF4444" stroke="#FFF3C4" strokeWidth="1.5" />
+    {/* Center Cozy Star Gem */}
+    <polygon
+      points="0,-7 2.2,-2.2 7,0 2.2,2.2 0,7 -2.2,2.2 -7,0 -2.2,-2.2"
+      fill="#FF6B4A"
+      stroke="#FFFDF6"
+      strokeWidth="1.4"
+    />
   </svg>
 );
 
 export const CrossedSwordsVectorIcon = PlaySwordsVectorIcon;
 
 /**
- * 2. SKINS — Royal Reliquary Crown & Shield (Redesigned from Itch.io `crown_a.svg` + `shield.svg`)
+ * 2. SKINS — Cozy Royal Crown & Leaf Medallion Badge
  */
 export const SkinsCrownVectorIcon: React.FC<IconProps> = ({ size = 28, className = '' }) => (
   <svg
@@ -99,33 +142,31 @@ export const SkinsCrownVectorIcon: React.FC<IconProps> = ({ size = 28, className
     viewBox="-36 -36 72 72"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={`game-vector-icon ${className}`}
+    className={`game-vector-icon cozy-vector-badge ${className}`}
   >
-    <defs>
-      <linearGradient id="itchCrownGold" x1="-26" y1="-24" x2="26" y2="24" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FFF5C2" />
-        <stop offset="40%" stopColor="#F5D061" />
-        <stop offset="85%" stopColor="#C99322" />
-        <stop offset="100%" stopColor="#85580A" />
-      </linearGradient>
-      <radialGradient id="itchCrownBack" cx="50%" cy="40%" r="65%">
-        <stop offset="0%" stopColor="#261D3A" />
-        <stop offset="100%" stopColor="#0C101B" />
-      </radialGradient>
-    </defs>
-    <circle cx="0" cy="0" r="32" fill="url(#itchCrownBack)" stroke="url(#itchCrownGold)" strokeWidth="3.2" />
-    <circle cx="0" cy="0" r="27.5" stroke="#F5D76E" strokeWidth="1" strokeDasharray="3 2.5" opacity="0.55" />
-    <path d={ITCH_PATHS.crownA} fill="url(#itchCrownGold)" transform="translate(0, 1) scale(0.86)" />
-    <circle cx="0" cy="-20" r="3" fill="#38BDF8" stroke="#FFF" strokeWidth="0.9" />
-    <circle cx="-21" cy="-9" r="2.5" fill="#F43F5E" stroke="#FFF" strokeWidth="0.8" />
-    <circle cx="21" cy="-9" r="2.5" fill="#10B981" stroke="#FFF" strokeWidth="0.8" />
+    <CozyMedallionBase idPrefix="cozyCrown" innerTintTop="#FFFDF7" innerTintBottom="#F6E2BA" />
+    <path
+      d={COZY_PATHS.cozyCrown}
+      fill="url(#cozyCrown_goldArt)"
+      stroke="#6E3F08"
+      strokeWidth="2.4"
+      strokeLinejoin="round"
+      transform="translate(0, 2) scale(0.84)"
+    />
+    {/* Crown Pillow Band */}
+    <rect x="-14" y="12" width="28" height="4.5" rx="2.2" fill="#E85D4A" stroke="#6E3F08" strokeWidth="1.4" />
+    {/* Crown Pearl Tips & Cabochons */}
+    <circle cx="0" cy="-14" r="3.2" fill="#38BDF8" stroke="#FFFDF7" strokeWidth="1.2" />
+    <circle cx="-18" cy="-6" r="2.7" fill="#F43F5E" stroke="#FFFDF7" strokeWidth="1.1" />
+    <circle cx="18" cy="-6" r="2.7" fill="#10B981" stroke="#FFFDF7" strokeWidth="1.1" />
+    <circle cx="0" cy="4" r="2.4" fill="#FFFDF7" />
   </svg>
 );
 
 export const ArmoryChestVectorIcon = SkinsCrownVectorIcon;
 
 /**
- * 3. LOGIN (GOOGLE) — Sanctum Shield Crest (Redesigned from Itch.io `shield.svg` + `crown_b.svg`)
+ * 3. LOGIN (GOOGLE) — Cozy Sky-Parchment & Gold Crest Seal
  */
 export const GoogleShieldVectorIcon: React.FC<IconProps> = ({ size = 28, className = '' }) => (
   <svg
@@ -134,45 +175,27 @@ export const GoogleShieldVectorIcon: React.FC<IconProps> = ({ size = 28, classNa
     viewBox="-36 -36 72 72"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={`game-vector-icon ${className}`}
+    className={`game-vector-icon cozy-vector-badge ${className}`}
   >
-    <defs>
-      <linearGradient id="itchWardShield" x1="-26" y1="-28" x2="26" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#1E3A5F" />
-        <stop offset="55%" stopColor="#0F1E36" />
-        <stop offset="100%" stopColor="#08101E" />
-      </linearGradient>
-      <linearGradient id="itchWardRim" x1="-27" y1="-28" x2="27" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FFF3C4" />
-        <stop offset="50%" stopColor="#E5B842" />
-        <stop offset="100%" stopColor="#8A6214" />
-      </linearGradient>
-    </defs>
+    <CozyMedallionBase idPrefix="cozyGoogle" innerTintTop="#F7FCFF" innerTintBottom="#DCEFFC" />
     <path
-      d={ITCH_PATHS.shield}
-      fill="url(#itchWardShield)"
-      stroke="url(#itchWardRim)"
-      strokeWidth="3.6"
-      transform="scale(1.06)"
+      d={COZY_PATHS.roundedShield}
+      fill="#FFFDF8"
+      stroke="#B87818"
+      strokeWidth="2.5"
+      transform="scale(0.76)"
     />
     <path
-      d={ITCH_PATHS.shield}
-      fill="none"
-      stroke="#93C5FD"
-      strokeWidth="1.2"
-      strokeDasharray="3 2"
-      opacity="0.6"
-      transform="scale(0.86)"
-    />
-    <path
-      d="M8 -3 H0 V3 H5.5 C4.8 6.2 2.4 8 0 8 C-4.4 8 -8 4.4 -8 0 C-8 -4.4 -4.4 -8 0 -8 C2.1 -8 3.9 -7.1 5.2 -5.8 L9.2 -9.8 C6.8 -12.1 3.6 -13.5 0 -13.5 C-7.5 -13.5 -13.5 -7.5 -13.5 0 C-13.5 7.5 -7.5 13.5 0 13.5 C7 13.5 13 8.5 13 0 C13 -1.1 12.9 -2.1 12.7 -3 H8 Z"
-      fill="url(#itchWardRim)"
+      d="M7.5 -2.5 H0 V2.8 H4.8 C4.2 5.5 2.1 7 0 7 C-3.9 7 -7 3.9 -7 0 C-7 -3.9 -3.9 -7 0 -7 C1.8 -7 3.4 -6.2 4.6 -5.1 L8.1 -8.6 C6 -10.6 3.2 -11.8 0 -11.8 C-6.6 -11.8 -11.8 -6.6 -11.8 0 C-11.8 6.6 -6.6 11.8 0 11.8 C6.1 11.8 11.4 7.4 11.4 0 C11.4 -0.9 11.3 -1.8 11.1 -2.5 H7.5 Z"
+      fill="url(#cozyGoogle_goldArt)"
+      stroke="#7A4808"
+      strokeWidth="0.9"
     />
   </svg>
 );
 
 /**
- * 4. GOOGLE SYNCED — Emerald Sanctum Shield Seal (Redesigned from Itch.io `shield.svg` + Checkmark)
+ * 4. GOOGLE SYNCED — Cozy Meadow-Emerald & Gold Check Medallion
  */
 export const CloudCheckVectorIcon: React.FC<IconProps> = ({ size = 28, className = '' }) => (
   <svg
@@ -181,31 +204,14 @@ export const CloudCheckVectorIcon: React.FC<IconProps> = ({ size = 28, className
     viewBox="-36 -36 72 72"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={`game-vector-icon ${className}`}
+    className={`game-vector-icon cozy-vector-badge ${className}`}
   >
-    <defs>
-      <linearGradient id="itchSyncEmerald" x1="-26" y1="-28" x2="26" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#065F46" />
-        <stop offset="60%" stopColor="#064E3B" />
-        <stop offset="100%" stopColor="#022C22" />
-      </linearGradient>
-      <linearGradient id="itchSyncRim" x1="-26" y1="-28" x2="26" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#A7F3D0" />
-        <stop offset="50%" stopColor="#34D399" />
-        <stop offset="100%" stopColor="#059669" />
-      </linearGradient>
-    </defs>
+    <CozyMedallionBase idPrefix="cozySync" innerTintTop="#F4FFF8" innerTintBottom="#CCF5DC" />
+    <circle cx="0" cy="0" r="18" fill="#22A06B" stroke="#8C5410" strokeWidth="2.2" />
     <path
-      d={ITCH_PATHS.shield}
-      fill="url(#itchSyncEmerald)"
-      stroke="url(#itchSyncRim)"
-      strokeWidth="3.6"
-      transform="scale(1.06)"
-    />
-    <path
-      d="M-10 1 L-3 8 L12 -7"
-      stroke="#ECFDF5"
-      strokeWidth="5"
+      d="M-8 0.5 L-2.2 6.5 L9 -5"
+      stroke="#FFFDF7"
+      strokeWidth="4.4"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -213,7 +219,7 @@ export const CloudCheckVectorIcon: React.FC<IconProps> = ({ size = 28, className
 );
 
 /**
- * 5. LIVE LEADERBOARDS — Grandmaster Laurel & Crown Award (Redesigned from Itch.io `award.svg` + `crown_b.svg`)
+ * 5. LIVE LEADERBOARDS — Cozy Golden Chalice & Laurel Wreath Medallion
  */
 export const TrophyChaliceVectorIcon: React.FC<IconProps> = ({ size = 28, className = '' }) => (
   <svg
@@ -222,26 +228,34 @@ export const TrophyChaliceVectorIcon: React.FC<IconProps> = ({ size = 28, classN
     viewBox="-36 -36 72 72"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={`game-vector-icon ${className}`}
+    className={`game-vector-icon cozy-vector-badge ${className}`}
   >
-    <defs>
-      <linearGradient id="itchAwardGold" x1="-28" y1="-28" x2="28" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FFF7CC" />
-        <stop offset="40%" stopColor="#F5C84C" />
-        <stop offset="85%" stopColor="#B88218" />
-        <stop offset="100%" stopColor="#7C530A" />
-      </linearGradient>
-    </defs>
-    <circle cx="0" cy="0" r="32" fill="#101522" stroke="url(#itchAwardGold)" strokeWidth="2.8" />
-    <path d={ITCH_PATHS.award} fill="url(#itchAwardGold)" transform="scale(0.92)" />
-    <path d={ITCH_PATHS.crownB} fill="url(#itchAwardGold)" transform="translate(0, -3) scale(0.42)" />
+    <CozyMedallionBase idPrefix="cozyTrophy" innerTintTop="#FFFDF7" innerTintBottom="#F7E3B6" />
+    {/* Left & Right Botanical Laurel Sprigs */}
+    <path
+      d="M-19 10 C-23 2 -21 -9 -14 -15 M19 10 C23 2 21 -9 14 -15"
+      stroke="#5A9E4B"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+    />
+    {/* Rounded Trophy Goblet */}
+    <path
+      d={COZY_PATHS.cozyTrophy}
+      fill="url(#cozyTrophy_goldArt)"
+      stroke="#6E3F08"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      transform="scale(0.78)"
+    />
+    <polygon points="0,-10 1.8,-5.5 6.5,-5.5 2.8,-2.5 4.2,2 0,-0.8 -4.2,2 -2.8,-2.5 -6.5,-5.5 -1.8,-5.5" fill="#FFFDF7" />
   </svg>
 );
 
 export const TrophyVectorIcon = TrophyChaliceVectorIcon;
 
 /**
- * 6. SETTINGS — Ornate Astrolabe / Gear Medallion (Redesigned from Itch.io `game-icons` gear + Sanctum medallion)
+ * 6. SETTINGS — Cozy Honey-Wood & Brass Sun-Gear Medallion
  */
 export const SettingsGearVectorIcon: React.FC<IconProps> = ({ size = 28, className = '' }) => (
   <svg
@@ -250,33 +264,28 @@ export const SettingsGearVectorIcon: React.FC<IconProps> = ({ size = 28, classNa
     viewBox="-36 -36 72 72"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={`game-vector-icon ${className}`}
+    className={`game-vector-icon cozy-vector-badge ${className}`}
   >
-    <defs>
-      <linearGradient id="itchGearGold" x1="-28" y1="-28" x2="28" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FFF3C4" />
-        <stop offset="45%" stopColor="#E5B842" />
-        <stop offset="100%" stopColor="#8A6214" />
-      </linearGradient>
-    </defs>
-    <circle cx="0" cy="0" r="31" fill="#111726" stroke="url(#itchGearGold)" strokeWidth="2.8" />
-    <g stroke="url(#itchGearGold)" strokeWidth="5.5" strokeLinecap="round">
-      <line x1="0" y1="-24" x2="0" y2="-17" />
-      <line x1="0" y1="17" x2="0" y2="24" />
-      <line x1="-24" y1="0" x2="-17" y2="0" />
-      <line x1="17" y1="0" x2="24" y2="0" />
-      <line x1="-17" y1="-17" x2="-12" y2="-12" />
-      <line x1="12" y1="12" x2="17" y2="17" />
-      <line x1="17" y1="-17" x2="12" y2="-12" />
-      <line x1="-12" y1="12" x2="-17" y2="17" />
+    <CozyMedallionBase idPrefix="cozyGear" innerTintTop="#FFFDF7" innerTintBottom="#F4E0B8" />
+    <g stroke="#6E3F08" strokeWidth="5.2" strokeLinecap="round">
+      <line x1="0" y1="-19" x2="0" y2="19" />
+      <line x1="-19" y1="0" x2="19" y2="0" />
+      <line x1="-13.5" y1="-13.5" x2="13.5" y2="13.5" />
+      <line x1="13.5" y1="-13.5" x2="-13.5" y2="13.5" />
     </g>
-    <circle cx="0" cy="0" r="16" fill="#171F32" stroke="url(#itchGearGold)" strokeWidth="3.5" />
-    <circle cx="0" cy="0" r="6.5" fill="url(#itchGearGold)" />
+    <g stroke="url(#cozyGear_goldArt)" strokeWidth="3.6" strokeLinecap="round">
+      <line x1="0" y1="-18.5" x2="0" y2="18.5" />
+      <line x1="-18.5" y1="0" x2="18.5" y2="0" />
+      <line x1="-13" y1="-13" x2="13" y2="13" />
+      <line x1="13" y1="-13" x2="-13" y2="13" />
+    </g>
+    <circle cx="0" cy="0" r="13.5" fill="url(#cozyGear_goldArt)" stroke="#6E3F08" strokeWidth="2.2" />
+    <circle cx="0" cy="0" r="6" fill="#FFFDF6" stroke="#8C5410" strokeWidth="1.8" />
   </svg>
 );
 
 /**
- * 7. 3D LIVE PREVIEW EYE — Arcane Scrying Lens Icon
+ * 7. 3D LIVE PREVIEW EYE — Cozy Golden Scrying Lens with Star Glint
  */
 export const Eye3DPreviewVectorIcon: React.FC<IconProps> = ({ size = 16, className = '' }) => (
   <svg
@@ -288,16 +297,20 @@ export const Eye3DPreviewVectorIcon: React.FC<IconProps> = ({ size = 16, classNa
     className={`game-vector-icon ${className}`}
   >
     <path
-      d="M1.5 12C3.7 7.3 7.5 4.5 12 4.5C16.5 4.5 20.3 7.3 22.5 12C20.3 16.7 16.5 19.5 12 19.5C7.5 19.5 3.7 16.7 1.5 12Z"
+      d="M2 12C4.2 7.5 7.8 5 12 5C16.2 5 19.8 7.5 22 12C19.8 16.5 16.2 19 12 19C7.8 19 4.2 16.5 2 12Z"
+      fill="rgba(255, 248, 224, 0.65)"
       stroke="currentColor"
-      strokeWidth="1.9"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
-    <circle cx="12" cy="12" r="3.5" fill="currentColor" />
+    <circle cx="12" cy="12" r="3.6" fill="currentColor" />
+    <circle cx="10.8" cy="10.8" r="1.2" fill="#FFFDF7" />
   </svg>
 );
 
 /**
- * 8. GOLD TREASURY COIN STACK — Redesigned from Itch.io `tokens_stack.svg`
+ * 8. GOLD TREASURY COIN — Sunlit Star Coin Medallion
  */
 export const GoldCoinVectorIcon: React.FC<IconProps> = ({ size = 18, className = '' }) => (
   <svg
@@ -306,50 +319,49 @@ export const GoldCoinVectorIcon: React.FC<IconProps> = ({ size = 18, className =
     viewBox="-36 -36 72 72"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
-    className={`game-vector-icon ${className}`}
+    className={`game-vector-icon cozy-vector-badge ${className}`}
   >
-    <defs>
-      <radialGradient id="sanctumGoldMedallion" cx="35%" cy="28%" r="72%">
-        <stop offset="0%" stopColor="#261D0A" />
-        <stop offset="70%" stopColor="#141007" />
-        <stop offset="100%" stopColor="#090704" />
-      </radialGradient>
-      <linearGradient id="sanctumGoldFoil" x1="-28" y1="-30" x2="28" y2="30" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FFF5C0" />
-        <stop offset="35%" stopColor="#F5D061" />
-        <stop offset="75%" stopColor="#C99322" />
-        <stop offset="100%" stopColor="#8A5E0B" />
-      </linearGradient>
-    </defs>
-    <circle cx="0" cy="0" r="33" fill="url(#sanctumGoldMedallion)" stroke="url(#sanctumGoldFoil)" strokeWidth="3.8" />
-    <circle cx="0" cy="0" r="28" stroke="#F5D76E" strokeWidth="1" strokeDasharray="3 2.5" opacity="0.55" />
-    <path d={ITCH_PATHS.tokensStack} fill="url(#sanctumGoldFoil)" transform="scale(0.76)" />
+    <CozyMedallionBase idPrefix="cozyCoin" innerTintTop="#FFF9D6" innerTintBottom="#F5C84C" />
+    <circle cx="0" cy="0" r="20" fill="url(#cozyCoin_goldArt)" stroke="#7A4808" strokeWidth="2.2" />
+    <polygon
+      points="0,-13 3.6,-3.8 13,-3.8 5.4,1.8 8.2,11 0,5.5 -8.2,11 -5.4,1.8 -13,-3.8 -3.6,-3.8"
+      fill="#FFFDF5"
+      stroke="#8C5410"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 
 /**
- * 9. COMMANDER ROYAL SIGIL AVATAR — Redesigned using Itch.io Board Game Icons (`chess_king`, `chess_queen`, `crown_a`, `sword`, `shield`, `fire`)
+ * 9. COMMANDER ROYAL SIGIL AVATAR — Cozy Carved Ivory & Honey-Gold Emblem
  */
 export const CommanderSigilVectorIcon: React.FC<IconProps & { sigil: string }> = ({
   sigil,
   size = 36,
   className = '',
 }) => {
-  let pathData = ITCH_PATHS.chessKing;
-  let scale = 0.85;
+  let pathData = COZY_PATHS.chessKing;
+  let scale = 0.92;
   if (sigil === '♕' || sigil === '♛') {
-    pathData = ITCH_PATHS.chessQueen;
+    pathData = COZY_PATHS.chessQueen;
+  } else if (sigil === '♖' || sigil === '♜') {
+    pathData = COZY_PATHS.chessRook;
+  } else if (sigil === '♗' || sigil === '♝') {
+    pathData = COZY_PATHS.chessBishop;
+  } else if (sigil === '♘' || sigil === '♞') {
+    pathData = COZY_PATHS.chessKnight;
+  } else if (sigil === '♙' || sigil === '♟' || sigil === '▲') {
+    pathData = COZY_PATHS.chessPawn;
   } else if (sigil === '🐉' || sigil === '◆') {
-    pathData = ITCH_PATHS.fire;
-    scale = 0.9;
-  } else if (sigil === '⚔' || sigil === '▲') {
-    pathData = ITCH_PATHS.sword;
-  } else if (sigil === '⚡' || sigil === '✦') {
-    pathData = ITCH_PATHS.crownB;
+    pathData = COZY_PATHS.cozyFlame;
+  } else if (sigil === '⚔') {
+    pathData = COZY_PATHS.cozySword;
+  } else if (sigil === '⚡' || sigil === '✦' || sigil === '◈') {
+    pathData = COZY_PATHS.cozyCrown;
   } else if (sigil === '🛡' || sigil === '❖') {
-    pathData = ITCH_PATHS.shield;
-  } else if (sigil === '◈') {
-    pathData = ITCH_PATHS.crownA;
+    pathData = COZY_PATHS.roundedShield;
+    scale = 0.78;
   }
 
   return (
@@ -359,21 +371,23 @@ export const CommanderSigilVectorIcon: React.FC<IconProps & { sigil: string }> =
       viewBox="-36 -36 72 72"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={`game-vector-icon ${className}`}
+      className={`game-vector-icon cozy-sigil-icon ${className}`}
     >
       <defs>
-        <linearGradient id="itchSigilGold" x1="-26" y1="-28" x2="26" y2="28" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#FFF7D6" />
-          <stop offset="45%" stopColor="#F5D061" />
-          <stop offset="85%" stopColor="#C89120" />
-          <stop offset="100%" stopColor="#7C520A" />
+        <linearGradient id="cozySigilFill" x1="-22" y1="-26" x2="22" y2="26" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFFDF6" />
+          <stop offset="45%" stopColor="#FCE08B" />
+          <stop offset="85%" stopColor="#DF9B28" />
+          <stop offset="100%" stopColor="#8E540C" />
         </linearGradient>
       </defs>
       <path
         d={pathData}
-        fill="url(#itchSigilGold)"
-        stroke="#422C05"
-        strokeWidth="1.6"
+        fill="url(#cozySigilFill)"
+        stroke="#5C3608"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
         transform={`scale(${scale})`}
       />
     </svg>
@@ -381,82 +395,386 @@ export const CommanderSigilVectorIcon: React.FC<IconProps & { sigil: string }> =
 };
 
 /**
- * 10. Gold Bounty Pouch Vector Icon (Redesigned from Itch.io `pouch.svg`)
+ * 10. Gold Bounty Pouch Vector Icon — Cozy Stitched Treasure Pouch Badge
  */
 export const ItchPouchBountyIcon: React.FC<IconProps> = ({ size = 22, className = '' }) => (
-  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon ${className}`}>
-    <defs>
-      <linearGradient id="bountyPouchGold" x1="-24" y1="-26" x2="24" y2="26" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FFF7CC" />
-        <stop offset="45%" stopColor="#F5D061" />
-        <stop offset="100%" stopColor="#B47B16" />
-      </linearGradient>
-    </defs>
-    <circle cx="0" cy="0" r="32" fill="#1C1507" stroke="url(#bountyPouchGold)" strokeWidth="3.5" />
-    <path d={ITCH_PATHS.pouch} fill="url(#bountyPouchGold)" transform="scale(0.85)" />
-  </svg>
-);
-
-export const ItchRotateCameraIcon: React.FC<IconProps> = ({ size = 15, className = '' }) => (
-  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon ${className}`}>
-    <path d={ITCH_PATHS.arrowClockwise} fill="currentColor" transform="scale(1.05)" />
-  </svg>
-);
-
-/**
- * 11. BULLET MODE ICON — Blazing Fire & Ultra-Fast Bolt Crest
- */
-export const BulletModeVectorIcon: React.FC<IconProps> = ({ size = 22, className = '' }) => (
-  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon ${className}`}>
-    <defs>
-      <linearGradient id="bulletFireGrad" x1="-24" y1="-28" x2="24" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FFF7D6" />
-        <stop offset="45%" stopColor="#FB923C" />
-        <stop offset="100%" stopColor="#DC2626" />
-      </linearGradient>
-    </defs>
-    <circle cx="0" cy="0" r="32" fill="#1F0D0D" stroke="url(#bulletFireGrad)" strokeWidth="3.2" />
-    <path d={ITCH_PATHS.fire} fill="url(#bulletFireGrad)" transform="scale(0.84)" />
-  </svg>
-);
-
-/**
- * 12. BLITZ MODE ICON — Fast-Paced Lightning & Shield Crest
- */
-export const BlitzModeVectorIcon: React.FC<IconProps> = ({ size = 22, className = '' }) => (
-  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon ${className}`}>
-    <defs>
-      <linearGradient id="blitzGoldGrad" x1="-24" y1="-28" x2="24" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#FEF08A" />
-        <stop offset="50%" stopColor="#F59E0B" />
-        <stop offset="100%" stopColor="#B45309" />
-      </linearGradient>
-    </defs>
-    <circle cx="0" cy="0" r="32" fill="#1B1608" stroke="url(#blitzGoldGrad)" strokeWidth="3.2" />
+  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon cozy-vector-badge ${className}`}>
+    <CozyMedallionBase idPrefix="cozyPouch" innerTintTop="#FFFDF6" innerTintBottom="#F6E0B3" />
     <path
-      d="M4 -24 L-14 2 H1 L-5 24 L16 -4 H1 L4 -24 Z"
-      fill="url(#blitzGoldGrad)"
-      stroke="#FFFBEB"
-      strokeWidth="1.4"
+      d={COZY_PATHS.cozyPouch}
+      fill="url(#cozyPouch_goldArt)"
+      stroke="#6E3F08"
+      strokeWidth="2.3"
+      strokeLinejoin="round"
+      transform="scale(0.84)"
+    />
+    <path d="M-7 -11 H7" stroke="#FFFDF5" strokeWidth="2.4" strokeLinecap="round" />
+    <polygon points="0,-2 2.2,2.2 6.5,3 3,6.2 4,10.5 0,8.2 -4,10.5 -3,6.2 -6.5,3 -2.2,2.2" fill="#FFFDF7" />
+  </svg>
+);
+
+/**
+ * 11. Camera Orbit Ribbon Arrow Icon
+ */
+export const ItchRotateCameraIcon: React.FC<IconProps> = ({ size = 15, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={`game-vector-icon ${className}`}>
+    <path
+      d="M20 11A8 8 0 1 0 17.6 17.6M20 11V5M20 11H14"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
 );
 
 /**
- * 13. RAPID MODE ICON — Ornate Sanctum Hourglass Chronometer
+ * 12. BULLET MODE ICON — Cozy Hearth-Flame Comet Medallion
  */
-export const RapidModeVectorIcon: React.FC<IconProps> = ({ size = 22, className = '' }) => (
-  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon ${className}`}>
+export const BulletModeVectorIcon: React.FC<IconProps> = ({ size = 22, className = '' }) => (
+  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon cozy-vector-badge ${className}`}>
+    <CozyMedallionBase idPrefix="cozyBullet" innerTintTop="#FFF9F2" innerTintBottom="#FDE2C4" />
     <defs>
-      <linearGradient id="rapidChronoGrad" x1="-24" y1="-28" x2="24" y2="28" gradientUnits="userSpaceOnUse">
-        <stop offset="0%" stopColor="#E0F2FE" />
-        <stop offset="50%" stopColor="#38BDF8" />
-        <stop offset="100%" stopColor="#0284C7" />
+      <linearGradient id="cozyBulletFlame" x1="-16" y1="-24" x2="16" y2="24" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#FFF3B0" />
+        <stop offset="50%" stopColor="#FB923C" />
+        <stop offset="100%" stopColor="#E11D48" />
       </linearGradient>
     </defs>
-    <circle cx="0" cy="0" r="32" fill="#0B1926" stroke="url(#rapidChronoGrad)" strokeWidth="3.2" />
-    <path d={ITCH_PATHS.hourglass} fill="url(#rapidChronoGrad)" transform="scale(0.82)" />
+    <path
+      d={COZY_PATHS.cozyFlame}
+      fill="url(#cozyBulletFlame)"
+      stroke="#7C2D12"
+      strokeWidth="2.2"
+      strokeLinejoin="round"
+      transform="scale(0.84)"
+    />
+    <circle cx="0" cy="8" r="4.5" fill="#FFFBEB" />
+  </svg>
+);
+
+/**
+ * 13. BLITZ MODE ICON — Cozy Golden Sun-Bolt Medallion
+ */
+export const BlitzModeVectorIcon: React.FC<IconProps> = ({ size = 22, className = '' }) => (
+  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon cozy-vector-badge ${className}`}>
+    <CozyMedallionBase idPrefix="cozyBlitz" innerTintTop="#FFFDF2" innerTintBottom="#FCE79C" />
+    <path
+      d="M3 -21 L-13 1 H0 L-4 21 L14 -3 H1 L3 -21 Z"
+      fill="url(#cozyBlitz_goldArt)"
+      stroke="#6E3F08"
+      strokeWidth="2.2"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * 14. RAPID MODE ICON — Cozy Honey-Wood & Sky-Glass Hourglass Medallion
+ */
+export const RapidModeVectorIcon: React.FC<IconProps> = ({ size = 22, className = '' }) => (
+  <svg width={size} height={size} viewBox="-36 -36 72 72" fill="none" className={`game-vector-icon cozy-vector-badge ${className}`}>
+    <CozyMedallionBase idPrefix="cozyRapid" innerTintTop="#F5FBFF" innerTintBottom="#D8EEFC" />
+    <path
+      d={COZY_PATHS.cozyHourglass}
+      fill="#7DD3FC"
+      stroke="#6E3F08"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      transform="scale(0.82)"
+    />
+    <path d="M-13 -18 H13 M-13 18 H13" stroke="#B87818" strokeWidth="3.4" strokeLinecap="round" />
+  </svg>
+);
+
+/**
+ * 15. COZY HUD RETURN / LOBBY ICON — Replaces legacy return.png
+ */
+export const CozyReturnArrowVectorIcon: React.FC<IconProps> = ({ size = 15, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={`game-vector-icon ${className}`}>
+    <path
+      d="M9 14L4 9L9 4M4 9H15.5C18.5 9 20.5 11 20.5 14C20.5 17 18.5 19 15.5 19H11"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * 16. COZY HUD AUDIO SPEAKER ICON — Replaces legacy audioOn.png / audioOff.png
+ */
+export const CozyAudioVectorIcon: React.FC<IconProps & { muted?: boolean }> = ({
+  size = 15,
+  muted = false,
+  className = ''
+}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={`game-vector-icon ${className}`}>
+    <path
+      d="M11 5L6 9H3V15H6L11 19V5Z"
+      fill="rgba(245, 195, 68, 0.35)"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinejoin="round"
+    />
+    {muted ? (
+      <path d="M21 9L15 15M15 9L21 15" stroke="#C93434" strokeWidth="2.4" strokeLinecap="round" />
+    ) : (
+      <path
+        d="M15.5 8.5C16.8 9.8 16.8 14.2 15.5 15.5M18.5 6C21 8.5 21 15.5 18.5 18"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+    )}
+  </svg>
+);
+
+/**
+ * 17. COZY WHITE FLAG SURRENDER VECTOR ICON — Replaces plain text flag
+ */
+export const CozyFlagSurrenderVectorIcon: React.FC<IconProps> = ({ size = 15, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={`game-vector-icon ${className}`}>
+    <path d="M5 21V4" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    <path
+      d="M5 5C8 3.5 11 6.5 14 5C17 3.5 19 5 19 5V14C19 14 17 12.5 14 14C11 15.5 8 12.5 5 14V5Z"
+      fill="#FFFDF7"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/**
+ * 18. FREEGAMEUI DECORATION — Cozy Golden Scroll & Ribbon Header Ornament
+ */
+export const CozyRibbonBannerSvg: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <svg
+    viewBox="0 0 360 44"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={`cozy-ribbon-banner-svg ${className}`}
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient id="cozyRibbonGold" x1="0" y1="0" x2="360" y2="44" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#F5C95B" />
+        <stop offset="50%" stopColor="#FFF0B8" />
+        <stop offset="100%" stopColor="#DF9F2E" />
+      </linearGradient>
+      <linearGradient id="cozyRibbonFold" x1="0" y1="0" x2="0" y2="44" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#C57F1B" />
+        <stop offset="100%" stopColor="#8E540C" />
+      </linearGradient>
+    </defs>
+    {/* Left & Right Ribbon Tails */}
+    <path
+      d="M8 14 L38 10 L34 36 L8 38 L18 26 Z"
+      fill="url(#cozyRibbonFold)"
+      stroke="#7A4608"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M352 14 L322 10 L326 36 L352 38 L342 26 Z"
+      fill="url(#cozyRibbonFold)"
+      stroke="#7A4608"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    {/* Main Scroll Ribbon Body */}
+    <path
+      d="M28 6 Q180 2 332 6 L326 34 Q180 30 34 34 Z"
+      fill="url(#cozyRibbonGold)"
+      stroke="#8C5610"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    />
+    {/* Inner Stitched Cream Line */}
+    <path
+      d="M35 10 Q180 6 325 10 M38 30 Q180 26 322 30"
+      stroke="#FFFDF6"
+      strokeWidth="1.2"
+      strokeDasharray="4 3"
+      strokeOpacity="0.9"
+    />
+    {/* Left & Right Leaf + Star Flourishes */}
+    <path
+      d="M46 20 C52 13, 61 13, 66 20 C61 27, 52 27, 46 20 Z"
+      fill="#FFF8E7"
+      stroke="#8C5610"
+      strokeWidth="0.9"
+    />
+    <path
+      d="M314 20 C308 13, 299 13, 294 20 C299 27, 308 27, 314 20 Z"
+      fill="#FFF8E7"
+      stroke="#8C5610"
+      strokeWidth="0.9"
+    />
+    <polygon points="76,13 78,18 83,20 78,22 76,27 74,22 69,20 74,18" fill="#FFFDF5" />
+    <polygon points="284,13 286,18 291,20 286,22 284,27 282,22 277,20 282,18" fill="#FFFDF5" />
+  </svg>
+);
+
+/**
+ * 19. FREEGAMEUI DECORATION — Cozy Botanical & Star Filigree Divider
+ */
+export const CozyDividerFlourishSvg: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <svg
+    viewBox="0 0 420 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={`cozy-divider-flourish-svg ${className}`}
+    aria-hidden="true"
+  >
+    <line x1="16" y1="12" x2="156" y2="12" stroke="#C88D48" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.7" />
+    <line x1="264" y1="12" x2="404" y2="12" stroke="#C88D48" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.7" />
+    {/* Left Leaf Pair */}
+    <path
+      d="M166 12 C173 5, 184 5, 191 12 C184 19, 173 19, 166 12 Z"
+      fill="#E5A93B"
+      stroke="#8C5828"
+      strokeWidth="1.2"
+    />
+    <circle cx="158" cy="12" r="2.6" fill="#C88D48" />
+    {/* Center 4-Point Star & Gem */}
+    <polygon
+      points="210,1.5 213.8,8.2 220.5,12 213.8,15.8 210,22.5 206.2,15.8 199.5,12 206.2,8.2"
+      fill="#F5C84C"
+      stroke="#8C5828"
+      strokeWidth="1.3"
+    />
+    <circle cx="210" cy="12" r="2.8" fill="#FFFDF7" />
+    {/* Right Leaf Pair */}
+    <path
+      d="M254 12 C247 5, 236 5, 229 12 C236 19, 247 19, 254 12 Z"
+      fill="#E5A93B"
+      stroke="#8C5828"
+      strokeWidth="1.2"
+    />
+    <circle cx="262" cy="12" r="2.6" fill="#C88D48" />
+  </svg>
+);
+
+/**
+ * 20. FREEGAMEUI DECORATION — Animated Corner Leaf, Vine & Twinkling Star Flourish
+ */
+export const CozyCornerFlourishSvg: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <svg
+    viewBox="0 0 42 42"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={`cozy-corner-flourish-svg ${className}`}
+    aria-hidden="true"
+  >
+    {/* Outer & Inner Curved Honey-Wood Vine Frame */}
+    <g className="cozy-corner-vine">
+      <path
+        d="M3.5 34 V12 C3.5 7.2 7.2 3.5 12 3.5 H34"
+        stroke="#B57428"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8.5 26 V13 C8.5 10.5 10.5 8.5 13 8.5 H26"
+        stroke="#E8B44C"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </g>
+    {/* Botanical Corner Leaves */}
+    <g className="cozy-corner-leaf">
+      <path
+        d="M5.5 5.5 C12 4.2, 16.5 8.8, 15.2 15.2 C8.8 16.5, 4.2 12, 5.5 5.5 Z"
+        fill="#F5C64E"
+        stroke="#824E14"
+        strokeWidth="1.2"
+      />
+      <path
+        d="M17 5 C21 3.5, 24.5 6, 23.5 9.5 C19.5 10, 16.5 7.8, 17 5 Z"
+        fill="#FAD978"
+        stroke="#824E14"
+        strokeWidth="1"
+      />
+      <path
+        d="M5 17 C3.5 21, 6 24.5, 9.5 23.5 C10 19.5, 7.8 16.5, 5 17 Z"
+        fill="#FAD978"
+        stroke="#824E14"
+        strokeWidth="1"
+      />
+    </g>
+    {/* Twinkling Corner 4-Point Star & Dewdrop Gems */}
+    <g className="cozy-corner-star">
+      <polygon
+        points="20,14 21.6,17.8 25.5,19.5 21.6,21.2 20,25 18.4,21.2 14.5,19.5 18.4,17.8"
+        fill="#FFF9E2"
+        stroke="#B57428"
+        strokeWidth="1"
+      />
+      <circle cx="29.5" cy="6" r="2" fill="#E09A28" />
+      <circle cx="6" cy="29.5" r="2" fill="#E09A28" />
+    </g>
+  </svg>
+);
+
+/**
+ * 21. VICTORY STREAK FLAME — Cozy Honey-Amber & Hearth-Gold Rounded Flame Icon
+ */
+export const VictoryStreakFlameVectorIcon: React.FC<IconProps & { active?: boolean }> = ({
+  size = 20,
+  className = '',
+  active = false
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="-32 -32 64 64"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={`game-vector-icon cozy-streak-flame-icon ${active ? 'streak-active' : ''} ${className}`}
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient id="cozyStreakOuterFlame" x1="0" y1="-26" x2="0" y2="26" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor={active ? '#FFE875' : '#F7D488'} />
+        <stop offset="52%" stopColor={active ? '#FF8811' : '#D99B4E'} />
+        <stop offset="100%" stopColor={active ? '#C83E0B' : '#9C6224'} />
+      </linearGradient>
+      <linearGradient id="cozyStreakInnerFlame" x1="0" y1="-12" x2="0" y2="22" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#FFFDF5" />
+        <stop offset="65%" stopColor="#FFE169" />
+        <stop offset="100%" stopColor="#FF9E1B" />
+      </linearGradient>
+    </defs>
+    {/* Warm Medallion Backing */}
+    <circle
+      cx="0"
+      cy="1"
+      r="27"
+      fill={active ? 'rgba(255, 162, 34, 0.22)' : 'rgba(196, 148, 82, 0.16)'}
+      stroke={active ? '#D97214' : '#B88C52'}
+      strokeWidth="2"
+    />
+    {/* Outer Cozy Rounded Hearth Flame */}
+    <path
+      d={COZY_PATHS.cozyFlame}
+      fill="url(#cozyStreakOuterFlame)"
+      stroke={active ? '#6E2206' : '#6E4414'}
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    {/* Inner Golden-Cream Flame Tongue */}
+    <path
+      d="M1 -8 C6 -2 9 5 8 12 C7 17.5 3.5 21 0 21 C-4.5 21 -8 17 -8 11.5 C-8 7.5 -5.5 4 -3 1.5 C-2.5 4.5 0 5.5 1.5 3 C3 0.5 0 -4 1 -8 Z"
+      fill="url(#cozyStreakInnerFlame)"
+    />
+    {/* Cozy Ember Spark */}
+    <circle cx="-8" cy="-16" r="2.2" fill="#FFFDF5" />
+    <circle cx="11" cy="-11" r="1.8" fill="#FFE169" />
   </svg>
 );
 

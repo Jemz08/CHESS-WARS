@@ -1,13 +1,20 @@
 :root {
-  --bg: #080a0f;
-  --hud-bg: rgba(12, 15, 22, 0.78);
-  --hud-border: rgba(212, 175, 55, 0.36);
-  --gold: #d4af37;
-  --gold-bright: #f5d76e;
-  --text: #f0ece1;
-  --muted: #9aa0a6;
-  --accent-blue: #4ea8de;
-  --danger: #e63946;
+  --bg: #f5ecd9;
+  --hud-bg: rgba(255, 250, 238, 0.94);
+  --hud-border: rgba(184, 123, 62, 0.62);
+  --gold: #b87814;
+  --gold-bright: #d99018;
+  --text: #382414;
+  --muted: #7a5c43;
+  --accent-blue: #1e78b4;
+  --danger: #c93434;
+  --cozy-parchment: #fffdf7;
+  --cozy-parchment-mid: #faf0dc;
+  --cozy-parchment-deep: #f0dfbe;
+  --cozy-wood-border: #b87b3e;
+  --cozy-wood-dark: #8c5828;
+  --cozy-ink: #382414;
+  --cozy-ink-soft: #6e5239;
   /* Dynamic HUD Font Scaling & Adaptive Padding Tokens */
   --hud-font-scale: 1;
   --hud-pad-scale: 1;
@@ -6925,4 +6932,1003 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
   transform: translateY(-1px);
   background: rgba(212, 175, 55, 0.26);
 }
+
+/* ============================================================================
+   COZY & LIGHT FANTASY UI THEME — WARM PARCHMENT, HONEY WOOD & GOLD RIBBONS
+   Inspired by FreeGameUI Decorations (https://freegameui.net/?tab=decorations)
+   ============================================================================ */
+
+/* 1. FreeGameUI Decorative SVG Ornaments (Ribbons, Corner Flourishes & Dividers) */
+.cozy-ribbon-kicker-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 240px;
+  max-width: 350px;
+  padding: 5px 28px 7px;
+  margin-bottom: 2px;
+}
+
+.cozy-ribbon-banner-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 5px rgba(122, 76, 20, 0.24));
+}
+
+.cozy-ribbon-kicker-wrap .sanctum-modal-kicker,
+.cozy-ribbon-kicker-wrap .surrender-modal-kicker,
+.cozy-ribbon-kicker-wrap .checkmate-ornament {
+  position: relative;
+  z-index: 1;
+  color: #422608 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 252, 238, 0.85) !important;
+  letter-spacing: 0.14em !important;
+  margin: 0 !important;
+}
+
+.sanctum-tapered-rule,
+.checkmate-rule {
+  height: 22px !important;
+  background: none !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px 0 8px !important;
+  overflow: visible !important;
+}
+
+.sanctum-tapered-rule::after,
+.checkmate-rule::after {
+  display: none !important;
+}
+
+.cozy-divider-flourish-svg {
+  width: min(100%, 420px);
+  height: 20px;
+  display: block;
+  animation: cozyDividerReveal 480ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+}
+
+@keyframes cozyDividerReveal {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.84);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes cozyCornerBloomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.68);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes cozyLeafUnfurl {
+  0% {
+    opacity: 0;
+    transform: scale(0.55) rotate(-8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes cozyStarTwinkle {
+  0%, 100% {
+    opacity: 0.88;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 4px rgba(245, 198, 78, 0.65));
+  }
+}
+
+.sanctum-corner {
+  width: 34px !important;
+  height: 34px !important;
+  border: none !important;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  animation: cozyCornerBloomIn 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.sanctum-corner.tl {
+  transform-origin: top left;
+  animation-delay: 45ms;
+}
+.sanctum-corner.tr {
+  transform-origin: top right;
+  animation-delay: 95ms;
+}
+.sanctum-corner.bl {
+  transform-origin: bottom left;
+  animation-delay: 145ms;
+}
+.sanctum-corner.br {
+  transform-origin: bottom right;
+  animation-delay: 195ms;
+}
+
+.sanctum-corner::before,
+.sanctum-corner::after {
+  display: none !important;
+}
+
+.cozy-corner-flourish-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.cozy-corner-flourish-svg .cozy-corner-leaf {
+  transform-origin: 10px 10px;
+  animation: cozyLeafUnfurl 560ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+
+.cozy-corner-flourish-svg .cozy-corner-star {
+  transform-origin: 20px 19.5px;
+  animation: cozyStarTwinkle 3.2s ease-in-out 600ms infinite;
+}
+
+.sanctum-corner.tr .cozy-corner-flourish-svg {
+  transform: scaleX(-1);
+}
+.sanctum-corner.bl .cozy-corner-flourish-svg {
+  transform: scaleY(-1);
+}
+.sanctum-corner.br .cozy-corner-flourish-svg {
+  transform: scale(-1, -1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sanctum-corner,
+  .cozy-corner-flourish-svg .cozy-corner-leaf,
+  .cozy-corner-flourish-svg .cozy-corner-star,
+  .cozy-divider-flourish-svg {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* 2. Sunlit Cozy Parchment Loading Screen */
+#loading-overlay {
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 232, 168, 0.72) 0%, rgba(248, 236, 212, 0.4) 48%, transparent 75%),
+    linear-gradient(180deg, #fffdf7 0%, #f7ebd3 52%, #ecd8b4 100%) !important;
+  color: #382414 !important;
+}
+
+.loader-ambient-glow {
+  background: radial-gradient(circle, rgba(243, 193, 75, 0.35) 0%, rgba(217, 150, 38, 0.12) 45%, transparent 72%) !important;
+}
+
+.loader-arch-grid {
+  background-image:
+    linear-gradient(rgba(184, 123, 62, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(184, 123, 62, 0.1) 1px, transparent 1px) !important;
+}
+
+.loader-sanctum-panel {
+  background: linear-gradient(180deg, #fffefb 0%, #faf0dc 58%, #f2e2c4 100%) !important;
+  border: 2.5px solid #c58946 !important;
+  border-radius: 20px !important;
+  box-shadow:
+    0 20px 50px rgba(110, 72, 28, 0.2),
+    0 4px 0 #9e672b,
+    inset 0 0 0 2px rgba(255, 253, 248, 0.9) !important;
+  color: #382414 !important;
+}
+
+.loader-kicker {
+  color: #8c5828 !important;
+  font-weight: 700 !important;
+}
+
+.loader-title {
+  color: #382414 !important;
+  text-shadow: 0 2px 0 rgba(255, 252, 242, 0.95), 0 4px 12px rgba(184, 120, 20, 0.2) !important;
+}
+
+.loader-subtitle {
+  color: #6e5239 !important;
+}
+
+.loader-node-pip {
+  background: linear-gradient(180deg, #fffdf8 0%, #f5e6c8 100%) !important;
+  border: 1.5px solid #d4b483 !important;
+  color: #5c3d22 !important;
+  box-shadow: 0 2px 0 #c7a26b !important;
+}
+
+.loader-node-pip.loaded {
+  background: linear-gradient(180deg, #fce394 0%, #eab33e 100%) !important;
+  border-color: #9e6412 !important;
+  color: #382005 !important;
+  box-shadow: 0 2px 0 #9e6412, 0 4px 10px rgba(217, 144, 24, 0.28) !important;
+}
+
+.loader-node-name {
+  color: #5c3d22 !important;
+}
+
+.loader-progress-meta {
+  color: #6e5239 !important;
+}
+
+#loader-pct {
+  color: #a6630c !important;
+  font-weight: 800 !important;
+}
+
+.loader-bar-wrap {
+  background: #ead7b7 !important;
+  border: 1.5px solid #c59b65 !important;
+  box-shadow: inset 0 2px 4px rgba(110, 72, 28, 0.18) !important;
+}
+
+.loader-bar {
+  background: linear-gradient(90deg, #d98818 0%, #f5c344 55%, #ffdf78 100%) !important;
+  box-shadow: 0 0 12px rgba(235, 168, 36, 0.5) !important;
+}
+
+#loader-text {
+  color: #4f351d !important;
+  font-weight: 600 !important;
+}
+
+.loader-lore-box {
+  background: rgba(255, 252, 244, 0.86) !important;
+  border: 1.5px solid #dcc094 !important;
+  border-radius: 12px !important;
+}
+
+.loader-lore-tag {
+  color: #9e5f10 !important;
+  background: rgba(243, 193, 75, 0.25) !important;
+  border-color: rgba(184, 120, 20, 0.4) !important;
+}
+
+.loader-lore-copy {
+  color: #5a3e24 !important;
+}
+
+/* 3. Cozy Parchment & Honey-Wood Modals (Gateway, Play, Armory, Leaderboards, Settings) */
+.sanctum-modal-backdrop,
+.surrender-modal-backdrop,
+.pass-device-curtain {
+  background:
+    radial-gradient(circle at 50% 25%, rgba(255, 242, 204, 0.42) 0%, rgba(74, 48, 22, 0.42) 100%) !important;
+  backdrop-filter: blur(7px) !important;
+  -webkit-backdrop-filter: blur(7px) !important;
+}
+
+.sanctum-modal-card,
+.gateway-modal-card,
+.surrender-modal-card,
+.pass-device-card,
+#checkmate-overlay .checkmate-banner {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 238, 186, 0.55) 0%, transparent 62%),
+    linear-gradient(180deg, #fffefb 0%, #fbf2df 55%, #f3e3c6 100%) !important;
+  border: 2.5px solid #b87b3e !important;
+  border-radius: 20px !important;
+  box-shadow:
+    0 22px 54px rgba(72, 44, 16, 0.26),
+    0 5px 0 #8c5828,
+    inset 0 0 0 2px rgba(255, 253, 248, 0.92) !important;
+  color: #382414 !important;
+}
+
+.sanctum-modal-header {
+  background: linear-gradient(180deg, rgba(255, 248, 230, 0.92) 0%, rgba(248, 235, 206, 0.65) 100%) !important;
+  border-bottom: none !important;
+  border-radius: 18px 18px 0 0;
+}
+
+.sanctum-modal-title,
+.surrender-modal-title,
+.pass-device-title,
+.checkmate-title {
+  color: #382414 !important;
+  text-shadow: 0 1px 0 rgba(255, 253, 246, 0.95), 0 3px 8px rgba(184, 123, 62, 0.16) !important;
+}
+
+.sanctum-record-line {
+  color: #6e5239 !important;
+}
+
+.sanctum-record-line strong {
+  color: #382414 !important;
+}
+
+/* 4. Commander Rank Banner & Portrait in Cozy Light Style */
+.sanctum-rank-banner {
+  background:
+    radial-gradient(circle at 15% 50%, rgba(245, 198, 82, 0.22) 0%, transparent 60%),
+    linear-gradient(180deg, #fffdf8 0%, #f7ebd3 100%) !important;
+  border: 2px solid #d4b07b !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 4px 12px rgba(110, 72, 28, 0.1),
+    0 3px 0 #c59b62,
+    inset 0 1px 0 #ffffff !important;
+}
+
+.rank-tier-main-title {
+  color: #382414 !important;
+  text-shadow: 0 1px 0 #ffffff !important;
+}
+
+.rank-border-tag {
+  background: linear-gradient(180deg, #fff6d6 0%, #f5dc96 100%) !important;
+  border: 1px solid #c9922c !important;
+  color: #5c3806 !important;
+  font-weight: 700 !important;
+}
+
+.rank-metrics-cluster {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rank-win-counter {
+  background: linear-gradient(180deg, #fffaf0 0%, #f2e0be 100%) !important;
+  border: 1.5px solid #cda56e !important;
+  border-radius: 12px !important;
+  box-shadow: inset 0 1px 0 #ffffff, 0 2px 0 #b88c52 !important;
+  padding: 5px 11px !important;
+  justify-content: center;
+}
+
+.rank-win-num {
+  color: #9e5e0b !important;
+  text-shadow: 0 1px 0 #fffdf7 !important;
+}
+
+.rank-win-label {
+  color: #6e5239 !important;
+}
+
+.rank-streak-counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 11px;
+  background: linear-gradient(180deg, #fffaf0 0%, #f2e0be 100%);
+  border: 1.5px solid #cda56e;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 #ffffff, 0 2px 0 #b88c52;
+  font-variant-numeric: tabular-nums;
+  min-width: 82px;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.rank-streak-counter.is-active-streak {
+  background: linear-gradient(180deg, #fff8e6 0%, #f7dfa6 100%);
+  border-color: #d48b28;
+}
+
+.rank-streak-counter.is-hot-streak {
+  background: linear-gradient(180deg, #fff4d6 0%, #f7cf78 100%);
+  border-color: #d96b14;
+  box-shadow: inset 0 1px 0 #fffdf7, 0 2px 0 #a8520c, 0 3px 10px rgba(217, 107, 20, 0.18);
+}
+
+.rank-streak-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+}
+
+.rank-streak-num {
+  font-family: 'Cinzel', 'Georgia', serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #8c520a;
+  text-shadow: 0 1px 0 #fffdf7;
+}
+
+.rank-streak-counter.is-hot-streak .rank-streak-num {
+  color: #b83b06;
+}
+
+.rank-streak-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #6e5239;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.rank-border-desc {
+  color: #5c4028 !important;
+}
+
+.rank-next-target {
+  color: #8c520a !important;
+  font-weight: 700 !important;
+}
+
+.rank-progress-track {
+  background: #e6d2b0 !important;
+  border: 1px solid #c4a06c !important;
+  box-shadow: inset 0 1px 3px rgba(84, 52, 18, 0.18) !important;
+}
+
+.rank-portrait-inner {
+  background: radial-gradient(circle at 50% 35%, #fff8e6 0%, #ebd5b0 100%) !important;
+}
+
+/* 5. Gateway Main Lobby Action Cards (Tactile Illustrated Cozy Cards) */
+.gateway-action-card {
+  background: linear-gradient(180deg, #fffefb 0%, #f9eed8 100%) !important;
+  border: 2px solid #cfa872 !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 5px 14px rgba(102, 66, 24, 0.1),
+    0 3px 0 #b88a4f,
+    inset 0 1px 0 #ffffff !important;
+  color: #382414 !important;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease !important;
+}
+
+.gateway-action-card:hover {
+  transform: translateY(-2px) !important;
+  background: linear-gradient(180deg, #ffffff 0%, #fcf2dc 100%) !important;
+  border-color: #b8781e !important;
+  box-shadow:
+    0 9px 20px rgba(110, 70, 20, 0.16),
+    0 4px 0 #9e6620,
+    inset 0 1px 0 #ffffff !important;
+}
+
+.gateway-action-card:active {
+  transform: translateY(1px) !important;
+  box-shadow:
+    0 2px 6px rgba(110, 70, 20, 0.14),
+    0 1px 0 #9e6620 !important;
+}
+
+.gateway-action-card.play-card {
+  background: linear-gradient(180deg, #fffdf4 0%, #fce8b2 55%, #f3d078 100%) !important;
+  border: 2px solid #b87818 !important;
+  box-shadow:
+    0 8px 20px rgba(184, 120, 20, 0.2),
+    0 4px 0 #8f580c,
+    inset 0 1px 0 #fffdf7 !important;
+}
+
+.gateway-action-card.play-card:hover {
+  background: linear-gradient(180deg, #fffef8 0%, #fdedbe 55%, #f6d884 100%) !important;
+  border-color: #965c08 !important;
+}
+
+.gateway-card-icon {
+  background: radial-gradient(circle at 35% 30%, #fffdf6 0%, #f2dfc0 100%) !important;
+  border: 1.5px solid #c99d62 !important;
+  border-radius: 14px !important;
+  box-shadow: inset 0 1px 0 #ffffff, 0 2px 5px rgba(92, 58, 20, 0.12) !important;
+}
+
+.gateway-card-title {
+  color: #382414 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+}
+
+.gateway-card-sub {
+  color: #684b31 !important;
+}
+
+.gateway-card-save-meta {
+  color: #8c540c !important;
+  background: rgba(243, 193, 75, 0.22) !important;
+  border-color: rgba(184, 120, 20, 0.35) !important;
+}
+
+.gateway-card-chevron {
+  color: #a86c1d !important;
+}
+
+.gateway-load-save-btn,
+.gateway-sync-save-btn {
+  background: linear-gradient(180deg, #fffdf7 0%, #f2e0be 100%) !important;
+  border: 1.5px solid #be9258 !important;
+  border-radius: 10px !important;
+  color: #42280e !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 0 #a3763c, inset 0 1px 0 #ffffff !important;
+}
+
+.gateway-load-save-btn:hover,
+.gateway-sync-save-btn:hover {
+  background: linear-gradient(180deg, #fce59c 0%, #efc050 100%) !important;
+  border-color: #9c6414 !important;
+  color: #331c04 !important;
+}
+
+/* 6. Tactile Beveled Wood & Cream Pill Buttons */
+.sanctum-modal-close,
+.hud-btn,
+.live-preview-btn,
+.skin-action-btn,
+.arena-secondary-btn,
+.time-preset-pill-btn,
+.matchmaking-pref-btn,
+.lb-filter-chip,
+.rank-tier-chip,
+.volume-mute-btn,
+.sanctum-action-btn {
+  background: linear-gradient(180deg, #fffefb 0%, #f3e2c3 100%) !important;
+  border: 1.5px solid #c2955a !important;
+  border-radius: 10px !important;
+  color: #3d2610 !important;
+  font-weight: 700 !important;
+  box-shadow:
+    0 2.5px 0 #a3753a,
+    0 4px 8px rgba(84, 52, 18, 0.12),
+    inset 0 1px 0 #ffffff !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+.sanctum-modal-close:hover,
+.hud-btn:hover,
+.live-preview-btn:hover,
+.skin-action-btn:hover:not(:disabled),
+.arena-secondary-btn:hover,
+.time-preset-pill-btn:hover,
+.matchmaking-pref-btn:hover,
+.lb-filter-chip:hover,
+.rank-tier-chip:hover,
+.volume-mute-btn:hover,
+.sanctum-action-btn:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #f9e8c2 100%) !important;
+  border-color: #a86c1f !important;
+  color: #291807 !important;
+  transform: translateY(-1px);
+}
+
+.sanctum-modal-close.gold-trim,
+.hud-btn.primary,
+.hud-btn.active,
+.time-preset-pill-btn.active,
+.matchmaking-pref-btn.selected,
+.lb-filter-chip.active,
+.rank-tier-chip.selected,
+.live-preview-btn.active,
+.skin-action-btn.owned,
+.skin-action-btn.buyable,
+.showcase-quick-equip-btn {
+  background: linear-gradient(180deg, #ffe89e 0%, #f2be49 58%, #df9d26 100%) !important;
+  border: 1.5px solid #8f580c !important;
+  color: #331c04 !important;
+  box-shadow:
+    0 3px 0 #824f08,
+    0 5px 12px rgba(184, 120, 20, 0.25),
+    inset 0 1px 0 rgba(255, 252, 235, 0.9) !important;
+  text-shadow: 0 1px 0 rgba(255, 248, 220, 0.75) !important;
+}
+
+.skin-action-btn.equipped,
+.showcase-quick-equip-btn.equipped {
+  background: linear-gradient(180deg, #b8f2d0 0%, #48b878 65%, #2d965a 100%) !important;
+  border-color: #1c6b3d !important;
+  color: #092e18 !important;
+  box-shadow:
+    0 3px 0 #185c34,
+    inset 0 1px 0 rgba(240, 255, 246, 0.85) !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+}
+
+.arena-primary-btn,
+.checkmate-btn:not(.secondary) {
+  background: linear-gradient(180deg, #ffea9f 0%, #f4be42 52%, #d9911a 100%) !important;
+  border: 2px solid #854f06 !important;
+  border-radius: 14px !important;
+  color: #2e1902 !important;
+  font-weight: 800 !important;
+  box-shadow:
+    0 4px 0 #754404,
+    0 8px 20px rgba(184, 120, 20, 0.3),
+    inset 0 1px 0 rgba(255, 253, 240, 0.92) !important;
+  text-shadow: 0 1px 0 rgba(255, 248, 220, 0.85) !important;
+}
+
+.arena-primary-btn:hover,
+.checkmate-btn:not(.secondary):hover {
+  background: linear-gradient(180deg, #fff2ba 0%, #f7c954 52%, #e39c22 100%) !important;
+  transform: translateY(-1.5px) !important;
+}
+
+.checkmate-btn.secondary,
+.surrender-cancel-btn {
+  background: linear-gradient(180deg, #fffdf8 0%, #f2e0be 100%) !important;
+  border: 1.5px solid #b88c52 !important;
+  border-radius: 12px !important;
+  color: #3d2610 !important;
+  box-shadow: 0 3px 0 #966b34, inset 0 1px 0 #ffffff !important;
+}
+
+/* 7. Segmented Tabs, Loadout Ledger & Cozy Illustrated Cards (Play & Armory) */
+.sanctum-loadout-ledger {
+  background: linear-gradient(180deg, #faf0dc 0%, #f0dfbe 100%) !important;
+  border: 1.5px solid #cfa872 !important;
+  border-radius: 14px !important;
+}
+
+.loadout-ledger-slot {
+  background: linear-gradient(180deg, #fffefb 0%, #f8ecd4 100%) !important;
+  border: 1.5px solid #d9b98b !important;
+  border-radius: 11px !important;
+  color: #382414 !important;
+  box-shadow: 0 2px 0 #c29c68, inset 0 1px 0 #ffffff !important;
+}
+
+.loadout-ledger-slot:hover {
+  border-color: #b57822 !important;
+  background: #ffffff !important;
+}
+
+.ledger-slot-label {
+  color: #7a5c43 !important;
+}
+
+.ledger-slot-value {
+  color: #382414 !important;
+  font-weight: 700 !important;
+}
+
+.ledger-slot-action {
+  color: #a6640e !important;
+  font-weight: 700 !important;
+}
+
+.sanctum-tab-bar.segmented-tabs {
+  background: #ead8b8 !important;
+  border: 1.5px solid #c79f68 !important;
+  border-radius: 13px !important;
+  padding: 4px !important;
+  box-shadow: inset 0 2px 4px rgba(92, 58, 20, 0.14) !important;
+}
+
+.sanctum-tab-btn {
+  color: #5c3e23 !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+}
+
+.sanctum-tab-btn.active {
+  background: linear-gradient(180deg, #ffe99e 0%, #f0b83e 100%) !important;
+  border: 1.5px solid #8f580c !important;
+  color: #2e1802 !important;
+  box-shadow: 0 2px 0 #7a4906, inset 0 1px 0 #fff9e6 !important;
+}
+
+.tab-numeral {
+  color: #8c520a !important;
+}
+
+.tab-count-badge {
+  background: rgba(255, 252, 242, 0.78) !important;
+  color: #4a2e12 !important;
+  border: 1px solid rgba(140, 88, 40, 0.35) !important;
+}
+
+.difficulty-card,
+.time-mode-card,
+.side-picker-btn,
+.skin-card,
+.online-section-box,
+.online-room-col,
+.pass-mode-explainer,
+.pass-toggle-row,
+.settings-section,
+.cloud-save-card,
+.armory-preview-pane,
+.armory-catalog-pane {
+  background: linear-gradient(180deg, #fffefb 0%, #f9eed9 100%) !important;
+  border: 2px solid #d4b282 !important;
+  border-radius: 15px !important;
+  color: #382414 !important;
+  box-shadow:
+    0 4px 12px rgba(96, 62, 24, 0.08),
+    0 3px 0 #c29b64,
+    inset 0 1px 0 #ffffff !important;
+}
+
+.difficulty-card.selected,
+.time-mode-card.selected,
+.side-picker-btn.selected,
+.skin-card.inspecting,
+.skin-card.equipped {
+  background: linear-gradient(180deg, #fffdf4 0%, #fcefca 100%) !important;
+  border: 2px solid #b87818 !important;
+  box-shadow:
+    0 6px 16px rgba(184, 120, 20, 0.18),
+    0 3px 0 #945d0e,
+    inset 0 1px 0 #ffffff !important;
+}
+
+.difficulty-name,
+.skin-card-title,
+.side-title,
+.pass-explainer-title,
+.pass-toggle-title,
+.settings-section-title,
+.cloud-card-title,
+.showcase-title,
+.catalog-pane-title {
+  color: #382414 !important;
+  font-weight: 800 !important;
+}
+
+.difficulty-desc,
+.skin-card-sub,
+.side-sub,
+.pass-explainer-desc,
+.pass-toggle-sub,
+.settings-section-sub,
+.cloud-card-desc,
+.online-section-sub,
+.online-loadout-desc,
+.catalog-pane-hint,
+.showcase-summary-sub,
+.sanctum-field-note {
+  color: #684b31 !important;
+}
+
+.sanctum-field-label,
+.difficulty-card-kicker,
+.showcase-kicker,
+.online-loadout-kicker {
+  color: #995c0d !important;
+  font-weight: 800 !important;
+}
+
+.skin-meta-line {
+  color: #5c3f24 !important;
+}
+
+.skin-meta-line strong {
+  color: #382414 !important;
+}
+
+.skin-price-tag {
+  background: #f5e5c6 !important;
+  border: 1px solid #c9a169 !important;
+  color: #4f3214 !important;
+  font-weight: 700 !important;
+}
+
+.skin-inspecting-pill {
+  background: #fde293 !important;
+  border: 1px solid #b87818 !important;
+  color: #382004 !important;
+  font-weight: 800 !important;
+}
+
+.showcase-header-bar,
+.showcase-active-summary,
+.catalog-pane-header,
+.online-loadout-plaque,
+.settings-profile-upload-card,
+.volume-slider-group,
+.settings-toggle-row,
+.cloud-last-save-summary {
+  background: rgba(247, 234, 208, 0.78) !important;
+  border-color: #d4b282 !important;
+  color: #382414 !important;
+}
+
+.armory-treasury-readout {
+  background: linear-gradient(180deg, #fff6d6 0%, #f5da8a 100%) !important;
+  border: 1.5px solid #b87b1e !important;
+  border-radius: 11px !important;
+  box-shadow: 0 2px 0 #945f10, inset 0 1px 0 #ffffff !important;
+}
+
+.treasury-label {
+  color: #6e4508 !important;
+}
+
+.treasury-amount {
+  color: #382004 !important;
+  font-weight: 800 !important;
+}
+
+/* 8. Leaderboards Table & Settings Inputs in Cozy Light Style */
+.player-self-plaque {
+  background: linear-gradient(180deg, #fffdf5 0%, #f8e6bd 100%) !important;
+  border: 2px solid #c48a32 !important;
+  border-radius: 14px !important;
+  color: #382414 !important;
+}
+
+.self-plaque-name,
+.self-plaque-stats strong,
+.lb-user-name,
+.lb-col-rating strong {
+  color: #382414 !important;
+}
+
+.self-plaque-stats,
+.lb-col-wins,
+.lb-col-caps {
+  color: #5c4028 !important;
+}
+
+.leaderboard-table-wrap {
+  background: #fffdf8 !important;
+  border: 2px solid #d4b282 !important;
+  border-radius: 14px !important;
+}
+
+.leaderboard-table th {
+  background: #f3e2c3 !important;
+  color: #5c3d20 !important;
+  border-bottom: 1.5px solid #cfa872 !important;
+}
+
+.leaderboard-table td {
+  border-bottom: 1px solid #eadbc0 !important;
+  color: #382414 !important;
+}
+
+.lb-row:hover {
+  background: rgba(245, 204, 102, 0.18) !important;
+}
+
+.lb-set-tag {
+  background: #f5e7cc !important;
+  border: 1px solid #cfa872 !important;
+  color: #4f3317 !important;
+}
+
+.settings-name-input,
+.room-code-input {
+  background: #fffefb !important;
+  border: 1.5px solid #c2955a !important;
+  border-radius: 10px !important;
+  color: #382414 !important;
+  box-shadow: inset 0 2px 4px rgba(92, 58, 20, 0.1) !important;
+}
+
+.volume-label,
+.settings-toggle-title {
+  color: #382414 !important;
+  font-weight: 700 !important;
+}
+
+.volume-sub,
+.settings-toggle-sub {
+  color: #6e5239 !important;
+}
+
+.volume-val {
+  color: #9e5e0b !important;
+  font-weight: 800 !important;
+}
+
+/* 9. Match HUD (Top Status Pill, Dual Chess Clocks, Gold Wallet & Bottom Hint Bar) */
+.status-pill,
+.hud-chess-clock-bar,
+.hint-pill,
+.captured-pill {
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0.95) 0%, rgba(246, 232, 205, 0.95) 100%) !important;
+  border: 1.5px solid #c29254 !important;
+  border-radius: 999px !important;
+  color: #382414 !important;
+  box-shadow:
+    0 3px 0 #9e6d30,
+    0 6px 16px rgba(72, 44, 16, 0.18),
+    inset 0 1px 0 #ffffff !important;
+}
+
+#turn-text {
+  color: #382414 !important;
+  font-weight: 800 !important;
+}
+
+.mode-badge,
+.clock-mode-tag-btn {
+  background: linear-gradient(180deg, #ffeaa6 0%, #efc04c 100%) !important;
+  border: 1px solid #9e6412 !important;
+  color: #331c04 !important;
+  font-weight: 800 !important;
+}
+
+.clock-side-readout {
+  background: rgba(242, 226, 196, 0.85) !important;
+  border: 1px solid #cda46c !important;
+  color: #4f341a !important;
+}
+
+.clock-side-readout.is-active-turn {
+  background: linear-gradient(180deg, #fff7d6 0%, #fce088 100%) !important;
+  border-color: #a86810 !important;
+  color: #2e1802 !important;
+  box-shadow: 0 0 10px rgba(235, 168, 36, 0.35) !important;
+}
+
+.clock-side-digits {
+  color: inherit !important;
+  font-weight: 800 !important;
+}
+
+.gold-wallet-btn {
+  background: linear-gradient(180deg, #fff6d6 0%, #f5cf69 100%) !important;
+  border: 1.5px solid #9e6412 !important;
+  color: #331c04 !important;
+  box-shadow: 0 3px 0 #824f08, 0 5px 12px rgba(140, 88, 20, 0.22) !important;
+}
+
+.gold-wallet-amount {
+  color: #331c04 !important;
+  font-weight: 800 !important;
+}
+
+.check-indicator-badge.standby {
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0.94) 0%, rgba(242, 228, 200, 0.94) 100%) !important;
+  border: 1.5px solid #c2955a !important;
+  color: #5c3e22 !important;
+  box-shadow: 0 2.5px 0 #9e6f34 !important;
+}
+
+.check-indicator-badge.active {
+  background: linear-gradient(180deg, #ff7575 0%, #d92b2b 100%) !important;
+  border: 1.5px solid #7d1010 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 0 #6b0d0d, 0 0 16px rgba(220, 38, 38, 0.45) !important;
+}
+
+#hud-right.mobile-sheet-open {
+  background: linear-gradient(180deg, #fffefb 0%, #f6e7c8 100%) !important;
+  border: 2px solid #b87b3e !important;
+  color: #382414 !important;
+  box-shadow: 0 18px 44px rgba(72, 44, 16, 0.28), 0 4px 0 #8c5828 !important;
+}
+
+.mobile-sheet-title,
+.mobile-sheet-section-label {
+  color: #5c3b1c !important;
+}
+
+.surrender-modal-desc,
+.checkmate-subtitle {
+  color: #5c3e23 !important;
+}
+
+.checkmate-impact-pill {
+  background: rgba(245, 204, 102, 0.25) !important;
+  border: 1.5px solid #c58932 !important;
+  color: #4a2c0a !important;
+}
+
 

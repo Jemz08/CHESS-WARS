@@ -52,7 +52,14 @@ import {
   ItchRotateCameraIcon,
   BulletModeVectorIcon,
   BlitzModeVectorIcon,
-  RapidModeVectorIcon
+  RapidModeVectorIcon,
+  CozyReturnArrowVectorIcon,
+  CozyAudioVectorIcon,
+  CozyFlagSurrenderVectorIcon,
+  CozyRibbonBannerSvg,
+  CozyDividerFlourishSvg,
+  CozyCornerFlourishSvg,
+  VictoryStreakFlameVectorIcon
 } from './GameVectorIcons';
 
 export type TimeControlCategory = 'bullet' | 'blitz' | 'rapid';
@@ -775,6 +782,13 @@ export default function App() {
           ? cloudData.wins
           : prev.stats.wins
         : Math.max(prev.stats.wins, cloudData.wins || 0);
+      const nextWinStreak = strictRestore
+        ? typeof cloudData.winStreak === 'number'
+          ? Math.max(0, cloudData.winStreak)
+          : prev.stats.winStreak
+        : typeof cloudData.winStreak === 'number'
+          ? Math.max(prev.stats.winStreak, cloudData.winStreak)
+          : prev.stats.winStreak;
       const nextCaptures = strictRestore
         ? typeof cloudData.captures === 'number'
           ? cloudData.captures
@@ -806,6 +820,7 @@ export default function App() {
         activeScenery: cloudData.activeScenery || prev.activeScenery,
         stats: {
           wins: nextWins,
+          winStreak: nextWinStreak,
           captures: nextCaptures,
           totalGoldEarned: nextTotalGold
         }
@@ -1303,7 +1318,23 @@ export default function App() {
 
     const handleMatchWon = (ev: Event) => {
       const detail = (ev as CustomEvent).detail;
-      if (!detail || !detail.isHumanWin) return;
+      if (!detail) return;
+      if (!detail.isHumanWin) {
+        // Human player lost in Solo vs Bot or Online PvP -> reset Victory Streak to 0
+        setEconomy((prev) => {
+          if (prev.stats.winStreak === 0) return prev;
+          const next: EconomyState = {
+            ...prev,
+            stats: {
+              ...prev.stats,
+              winStreak: 0
+            }
+          };
+          saveEconomyState(next);
+          return next;
+        });
+        return;
+      }
       const mode = detail.gameMode;
       const diff = detail.botDifficulty || 'medium';
       let winGold = 200;
@@ -1311,7 +1342,9 @@ export default function App() {
 
       if (mode === 'single') {
         winGold = MATCH_WIN_BOUNTY[`bot_${diff}`] || 225;
-        winLabel = `Defeated ${diff.toUpperCase()} Bot!`;
+        winLabel = detail.isBotSurrender
+          ? `${diff.toUpperCase()} Bot Out of Choices & Surrendered!`
+          : `Defeated ${diff.toUpperCase()} Bot!`;
       } else if (mode === 'pass') {
         winGold = MATCH_WIN_BOUNTY.pass;
         const winnerName = detail.winnerColor === 'w' ? 'P1 (White)' : 'P2 (Black)';
@@ -1328,6 +1361,7 @@ export default function App() {
           stats: {
             ...prev.stats,
             wins: prev.stats.wins + 1,
+            winStreak: (prev.stats.winStreak || 0) + 1,
             totalGoldEarned: prev.stats.totalGoldEarned + winGold
           }
         };
@@ -1910,128 +1944,156 @@ export default function App() {
             <svg className="loader-rose-svg" viewBox="0 0 220 220" fill="none">
               <defs>
                 <linearGradient id="sanctumGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#fff3c4" />
-                  <stop offset="50%" stopColor="#d4af37" />
-                  <stop offset="100%" stopColor="#8a6412" />
+                  <stop offset="0%" stopColor="#FCE394" />
+                  <stop offset="48%" stopColor="#E5A832" />
+                  <stop offset="100%" stopColor="#94580E" />
                 </linearGradient>
                 <radialGradient id="sanctumCoreGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="rgba(245, 215, 110, 0.36)" />
-                  <stop offset="65%" stopColor="rgba(212, 175, 55, 0.1)" />
-                  <stop offset="100%" stopColor="rgba(8, 10, 15, 0)" />
+                  <stop offset="0%" stopColor="rgba(255, 232, 158, 0.58)" />
+                  <stop offset="65%" stopColor="rgba(229, 168, 50, 0.18)" />
+                  <stop offset="100%" stopColor="rgba(255, 249, 235, 0)" />
+                </radialGradient>
+                <radialGradient id="cozyLoaderMedallion" cx="40%" cy="32%" r="68%">
+                  <stop offset="0%" stopColor="#FFFDF8" />
+                  <stop offset="72%" stopColor="#F7E4BE" />
+                  <stop offset="100%" stopColor="#E5C68E" />
                 </radialGradient>
               </defs>
 
-              <circle cx="110" cy="110" r="98" fill="url(#sanctumCoreGlow)" />
+              <circle cx="110" cy="110" r="102" fill="url(#sanctumCoreGlow)" />
 
-              {/* Outer Rotating Runic Astrolabe Ring */}
+              {/* Outer Rotating Cozy Sun-Astrolabe & Leaf Ring */}
               <g className="loader-ring-outer">
                 <circle
                   cx="110"
                   cy="110"
-                  r="96"
+                  r="95"
                   stroke="url(#sanctumGoldGrad)"
-                  strokeWidth="1.2"
-                  strokeOpacity="0.55"
+                  strokeWidth="2.2"
+                  strokeOpacity="0.82"
                 />
                 <circle
                   cx="110"
                   cy="110"
-                  r="89"
-                  stroke="url(#sanctumGoldGrad)"
-                  strokeWidth="1.5"
-                  strokeDasharray="6 8 2 8"
-                  strokeOpacity="0.75"
+                  r="87"
+                  stroke="#B8781E"
+                  strokeWidth="1.6"
+                  strokeDasharray="6 6"
+                  strokeOpacity="0.68"
+                />
+                {/* 4 Cardinal Star & Leaf Points */}
+                <polygon
+                  points="110,6 115,21 110,18 105,21"
+                  fill="url(#sanctumGoldGrad)"
+                  stroke="#7A4608"
+                  strokeWidth="1"
                 />
                 <polygon
-                  points="110,10 114,22 110,19 106,22"
+                  points="110,214 115,199 110,202 105,199"
                   fill="url(#sanctumGoldGrad)"
+                  stroke="#7A4608"
+                  strokeWidth="1"
                 />
                 <polygon
-                  points="110,210 114,198 110,201 106,198"
+                  points="6,110 21,115 18,110 21,105"
                   fill="url(#sanctumGoldGrad)"
+                  stroke="#7A4608"
+                  strokeWidth="1"
                 />
                 <polygon
-                  points="10,110 22,114 19,110 22,106"
+                  points="214,110 199,115 202,110 199,105"
                   fill="url(#sanctumGoldGrad)"
+                  stroke="#7A4608"
+                  strokeWidth="1"
                 />
-                <polygon
-                  points="210,110 198,114 201,110 198,106"
-                  fill="url(#sanctumGoldGrad)"
-                />
+                {/* Diagonal Cozy Leaf Gems */}
+                <circle cx="42" cy="42" r="4" fill="#F5C344" stroke="#7A4608" strokeWidth="1.2" />
+                <circle cx="178" cy="42" r="4" fill="#F5C344" stroke="#7A4608" strokeWidth="1.2" />
+                <circle cx="42" cy="178" r="4" fill="#F5C344" stroke="#7A4608" strokeWidth="1.2" />
+                <circle cx="178" cy="178" r="4" fill="#F5C344" stroke="#7A4608" strokeWidth="1.2" />
               </g>
 
-              {/* Counter-Rotating Gothic Rose Tracery */}
+              {/* Counter-Rotating Honey-Gold Filigree Star */}
               <g className="loader-ring-inner">
                 <rect
-                  x="52"
-                  y="52"
-                  width="116"
-                  height="116"
+                  x="54"
+                  y="54"
+                  width="112"
+                  height="112"
+                  rx="16"
                   stroke="url(#sanctumGoldGrad)"
-                  strokeWidth="1.1"
-                  strokeOpacity="0.48"
+                  strokeWidth="1.8"
+                  strokeOpacity="0.65"
                 />
                 <rect
-                  x="52"
-                  y="52"
-                  width="116"
-                  height="116"
+                  x="54"
+                  y="54"
+                  width="112"
+                  height="112"
+                  rx="16"
                   transform="rotate(45 110 110)"
                   stroke="url(#sanctumGoldGrad)"
-                  strokeWidth="1.1"
-                  strokeOpacity="0.48"
+                  strokeWidth="1.8"
+                  strokeOpacity="0.65"
                 />
                 <circle
                   cx="110"
                   cy="110"
                   r="64"
-                  stroke="url(#sanctumGoldGrad)"
-                  strokeWidth="1.2"
-                  strokeDasharray="14 6"
-                  strokeOpacity="0.7"
+                  stroke="#B8781E"
+                  strokeWidth="1.5"
+                  strokeDasharray="10 6"
+                  strokeOpacity="0.72"
                 />
               </g>
 
-              {/* Central Medallion & Sculpted King Crown Silhouette */}
+              {/* Central Warm Parchment & Honey-Gold Medallion */}
+              <circle
+                cx="110"
+                cy="112.5"
+                r="47"
+                fill="rgba(110, 68, 18, 0.22)"
+              />
               <circle
                 cx="110"
                 cy="110"
-                r="44"
-                fill="rgba(11, 14, 21, 0.92)"
+                r="47"
+                fill="url(#cozyLoaderMedallion)"
                 stroke="url(#sanctumGoldGrad)"
-                strokeWidth="1.8"
+                strokeWidth="3.2"
               />
               <circle
                 cx="110"
                 cy="110"
-                r="38"
-                stroke="rgba(245, 215, 110, 0.35)"
-                strokeWidth="0.9"
-                strokeDasharray="3 3"
+                r="41"
+                stroke="#C68B34"
+                strokeWidth="1.2"
+                strokeDasharray="4 3"
               />
-              {/* Sovereign Cross & Crown */}
+              {/* Rounded Cozy Royal Crown Emblem */}
               <path
-                d="M110 77 V89 M104 83 H116"
-                stroke="url(#sanctumGoldGrad)"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-              />
-              <path
-                d="M90 124 L86 98 L99 107 L110 92 L121 107 L134 98 L130 124 Z"
-                fill="rgba(212, 175, 55, 0.2)"
-                stroke="url(#sanctumGoldGrad)"
-                strokeWidth="2"
+                d="M89 124 L85 99 C84.5 96 88 94.5 90 96.5 L99 105 L108 90 C109 88 111 88 112 90 L121 105 L130 96.5 C132 94.5 135.5 96 135 99 L131 124 Z"
+                fill="url(#sanctumGoldGrad)"
+                stroke="#6E3F08"
+                strokeWidth="2.2"
                 strokeLinejoin="round"
               />
-              <path
-                d="M86 130 H134 M82 136 H138"
-                stroke="url(#sanctumGoldGrad)"
-                strokeWidth="2.2"
-                strokeLinecap="round"
+              <rect
+                x="87"
+                y="126"
+                width="46"
+                height="6"
+                rx="3"
+                fill="#E85D4A"
+                stroke="#6E3F08"
+                strokeWidth="1.6"
               />
-              <circle cx="110" cy="112" r="3" fill="#fff3c4" />
-              <circle cx="98" cy="115" r="2.2" fill="#f5d76e" />
-              <circle cx="122" cy="115" r="2.2" fill="#f5d76e" />
+              <circle cx="110" cy="83" r="3.6" fill="#38BDF8" stroke="#FFFDF7" strokeWidth="1.2" />
+              <circle cx="86" cy="91" r="3" fill="#F43F5E" stroke="#FFFDF7" strokeWidth="1.1" />
+              <circle cx="134" cy="91" r="3" fill="#10B981" stroke="#FFFDF7" strokeWidth="1.1" />
+              <circle cx="110" cy="112" r="3.2" fill="#FFFDF7" />
+              <circle cx="98" cy="115" r="2.4" fill="#FFF9E2" />
+              <circle cx="122" cy="115" r="2.4" fill="#FFF9E2" />
             </svg>
           </div>
 
@@ -2167,12 +2229,7 @@ export default function App() {
               }}
               title="Quit Match & Return to Sanctum Lobby"
             >
-              <img
-                src="/assets/ui/icons/return.png"
-                alt=""
-                className="itch-hud-inline-icon"
-                aria-hidden="true"
-              />
+              <CozyReturnArrowVectorIcon size={14} />
               <span>Lobby</span>
             </button>
 
@@ -2199,12 +2256,7 @@ export default function App() {
               onClick={handleToggleSfx}
               title="Toggle Sound Effects"
             >
-              <img
-                src={sfxEnabled ? '/assets/ui/icons/audioOn.png' : '/assets/ui/icons/audioOff.png'}
-                alt=""
-                className="itch-hud-inline-icon"
-                aria-hidden="true"
-              />
+              <CozyAudioVectorIcon size={14} muted={!sfxEnabled} />
               <span>{sfxEnabled ? 'SFX' : 'Mute'}</span>
             </button>
             <button
@@ -2215,7 +2267,9 @@ export default function App() {
               onClick={handleOpenSurrenderConfirm}
               title="Surrender Current Match"
             >
-              <span className="surrender-flag-icon" aria-hidden="true">🏳</span>
+              <span className="surrender-flag-icon" aria-hidden="true">
+                <CozyFlagSurrenderVectorIcon size={13} />
+              </span>
               <span>Surrender</span>
             </button>
             <button
@@ -2430,7 +2484,7 @@ export default function App() {
             title="Surrender and Concede the Current Match"
             onClick={handleOpenSurrenderConfirm}
           >
-            🏳 Surrender
+            <CozyFlagSurrenderVectorIcon size={13} /> Surrender
           </button>
 
           <div className="mobile-sheet-section-label">
@@ -2559,14 +2613,17 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="gateway-modal-title"
           >
-            <div className="sanctum-corner tl" aria-hidden="true"></div>
-            <div className="sanctum-corner tr" aria-hidden="true"></div>
-            <div className="sanctum-corner bl" aria-hidden="true"></div>
-            <div className="sanctum-corner br" aria-hidden="true"></div>
+            <div className="sanctum-corner tl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner tr" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
             <div className="sanctum-modal-header gateway-header">
               <div className="sanctum-header-titles">
-                <div className="sanctum-modal-kicker">✦ THE OBSIDIAN ALTAR ✦</div>
+                <div className="cozy-ribbon-kicker-wrap">
+                  <CozyRibbonBannerSvg />
+                  <div className="sanctum-modal-kicker">✦ THE SUNLIT SANCTUM ✦</div>
+                </div>
                 <h2 className="sanctum-modal-title" id="gateway-modal-title">
                   Wizard Chess
                 </h2>
@@ -2596,7 +2653,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+            <div className="sanctum-tapered-rule" aria-hidden="true">
+              <CozyDividerFlourishSvg />
+            </div>
 
             <div className="sanctum-modal-body gateway-scroll-body">
             {/* Commander Portrait & Rank Tier Progression Banner */}
@@ -2662,11 +2721,34 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="rank-win-counter">
-                    <span className="rank-win-num">{economy.stats.wins}</span>
-                    <span className="rank-win-label">
-                      {economy.stats.wins === 1 ? 'Victory' : 'Victories'} · {playerRating} ELO
-                    </span>
+                  <div className="rank-metrics-cluster">
+                    <div className="rank-win-counter">
+                      <span className="rank-win-num">{economy.stats.wins}</span>
+                      <span className="rank-win-label">
+                        {economy.stats.wins === 1 ? 'Victory' : 'Victories'} · {playerRating} ELO
+                      </span>
+                    </div>
+
+                    <div
+                      className={`rank-streak-counter ${
+                        (economy.stats.winStreak || 0) >= 2
+                          ? 'is-hot-streak'
+                          : (economy.stats.winStreak || 0) === 1
+                            ? 'is-active-streak'
+                            : ''
+                      }`}
+                      id="rank-victory-streak-tracker"
+                      title="Current consecutive Victory Streak (resets on a loss)"
+                    >
+                      <div className="rank-streak-top">
+                        <VictoryStreakFlameVectorIcon
+                          size={19}
+                          active={(economy.stats.winStreak || 0) > 0}
+                        />
+                        <span className="rank-streak-num">{economy.stats.winStreak || 0}</span>
+                      </div>
+                      <span className="rank-streak-label">Victory Streak</span>
+                    </div>
                   </div>
                 </div>
 
@@ -2881,15 +2963,18 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="arena-modal-title"
           >
-            <div className="sanctum-corner tl" aria-hidden="true"></div>
-            <div className="sanctum-corner tr" aria-hidden="true"></div>
-            <div className="sanctum-corner bl" aria-hidden="true"></div>
-            <div className="sanctum-corner br" aria-hidden="true"></div>
+            <div className="sanctum-corner tl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner tr" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
             <div className="sanctum-modal-header">
               <div className="sanctum-header-titles">
-                <div className="sanctum-modal-kicker">
-                  {hasStartedGame ? 'Sanctum Battlegrounds' : 'The Obsidian Altar Awaits'}
+                <div className="cozy-ribbon-kicker-wrap">
+                  <CozyRibbonBannerSvg />
+                  <div className="sanctum-modal-kicker">
+                    {hasStartedGame ? 'Sanctum Battlegrounds' : 'Royal Tabletop Arena'}
+                  </div>
                 </div>
                 <h2 className="sanctum-modal-title" id="arena-modal-title">
                   {hasStartedGame ? 'Match Setup' : 'Wizard Chess'}
@@ -2923,7 +3008,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+            <div className="sanctum-tapered-rule" aria-hidden="true">
+              <CozyDividerFlourishSvg />
+            </div>
 
             <div className="sanctum-modal-body arena-modal-scroll-body">
             {/* Engraved 4-Slot Sanctum Loadout Ledger */}
@@ -3547,14 +3634,17 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="armory-modal-title"
           >
-            <div className="sanctum-corner tl" aria-hidden="true"></div>
-            <div className="sanctum-corner tr" aria-hidden="true"></div>
-            <div className="sanctum-corner bl" aria-hidden="true"></div>
-            <div className="sanctum-corner br" aria-hidden="true"></div>
+            <div className="sanctum-corner tl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner tr" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
             <div className="sanctum-modal-header">
               <div className="sanctum-header-titles">
-                <div className="sanctum-modal-kicker">Sanctum Vault &amp; Reliquary</div>
+                <div className="cozy-ribbon-kicker-wrap">
+                  <CozyRibbonBannerSvg />
+                  <div className="sanctum-modal-kicker">Sanctum Vault &amp; Reliquary</div>
+                </div>
                 <h2 className="sanctum-modal-title" id="armory-modal-title">Armory of the Altar</h2>
                 <div className="sanctum-record-line">
                   <span>Equipped Set: <strong>{equippedArchetypeObj.name}</strong></span>
@@ -3591,7 +3681,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+            <div className="sanctum-tapered-rule" aria-hidden="true">
+              <CozyDividerFlourishSvg />
+            </div>
 
             {/* Segmented Category Tab Bar with Proper Keyboard & Mouse Tabbing */}
             <div
@@ -4197,14 +4289,17 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="leaderboard-modal-title"
           >
-            <div className="sanctum-corner tl" aria-hidden="true"></div>
-            <div className="sanctum-corner tr" aria-hidden="true"></div>
-            <div className="sanctum-corner bl" aria-hidden="true"></div>
-            <div className="sanctum-corner br" aria-hidden="true"></div>
+            <div className="sanctum-corner tl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner tr" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
             <div className="sanctum-modal-header">
               <div className="sanctum-header-titles">
-                <div className="sanctum-modal-kicker">✦ SANCTUM GRANDMASTERS ✦</div>
+                <div className="cozy-ribbon-kicker-wrap">
+                  <CozyRibbonBannerSvg />
+                  <div className="sanctum-modal-kicker">✦ SANCTUM GRANDMASTERS ✦</div>
+                </div>
                 <h2 className="sanctum-modal-title" id="leaderboard-modal-title">
                   Live Leaderboards
                 </h2>
@@ -4232,7 +4327,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+            <div className="sanctum-tapered-rule" aria-hidden="true">
+              <CozyDividerFlourishSvg />
+            </div>
 
             {/* Filter Tabs: ALL, OBSIDIAN, ASTRAL, GOLD, SILVER, BRONZE */}
             <div className="leaderboard-filter-bar" role="group" aria-label="Filter by Rank Tier">
@@ -4413,14 +4510,17 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="settings-modal-title"
           >
-            <div className="sanctum-corner tl" aria-hidden="true"></div>
-            <div className="sanctum-corner tr" aria-hidden="true"></div>
-            <div className="sanctum-corner bl" aria-hidden="true"></div>
-            <div className="sanctum-corner br" aria-hidden="true"></div>
+            <div className="sanctum-corner tl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner tr" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
             <div className="sanctum-modal-header">
               <div className="sanctum-header-titles">
-                <div className="sanctum-modal-kicker">Sanctum Preferences</div>
+                <div className="cozy-ribbon-kicker-wrap">
+                  <CozyRibbonBannerSvg />
+                  <div className="sanctum-modal-kicker">Sanctum Preferences</div>
+                </div>
                 <h2 className="sanctum-modal-title" id="settings-modal-title">
                   Settings &amp; Profile
                 </h2>
@@ -4442,7 +4542,9 @@ export default function App() {
               </button>
             </div>
 
-            <div className="sanctum-tapered-rule" aria-hidden="true"></div>
+            <div className="sanctum-tapered-rule" aria-hidden="true">
+              <CozyDividerFlourishSvg />
+            </div>
 
             <div className="sanctum-modal-body">
               {/* SECTION 1: CHANGE PROFILE — PHOTO UPLOAD, COMMANDER NAME & RANK CREST */}
@@ -4818,13 +4920,18 @@ export default function App() {
           onClick={() => setSurrenderConfirmOpen(false)}
         >
           <div className="surrender-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="sanctum-corner tl" aria-hidden="true"></div>
-            <div className="sanctum-corner tr" aria-hidden="true"></div>
-            <div className="sanctum-corner bl" aria-hidden="true"></div>
-            <div className="sanctum-corner br" aria-hidden="true"></div>
+            <div className="sanctum-corner tl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner tr" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+            <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
-            <div className="surrender-modal-kicker">✦ SANCTUM CONCESSION ✦</div>
-            <div className="surrender-modal-icon" aria-hidden="true">🏳</div>
+            <div className="cozy-ribbon-kicker-wrap" style={{ margin: '0 auto 6px' }}>
+              <CozyRibbonBannerSvg />
+              <div className="surrender-modal-kicker">✦ SANCTUM CONCESSION ✦</div>
+            </div>
+            <div className="surrender-modal-icon" aria-hidden="true">
+              <PlaySwordsVectorIcon size={40} />
+            </div>
             <h3 className="surrender-modal-title" id="surrender-modal-title">
               Surrender Match?
             </h3>
@@ -4860,10 +4967,17 @@ export default function App() {
 
       <div id="checkmate-overlay" role="status" aria-live="polite">
         <div className="checkmate-banner">
-          <div className="checkmate-ornament">✦ &nbsp; Sanctum Judgment &nbsp; ✦</div>
+          <div className="sanctum-corner tl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+          <div className="sanctum-corner tr" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+          <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+          <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
+          <div className="cozy-ribbon-kicker-wrap" style={{ margin: '0 auto 6px' }}>
+            <CozyRibbonBannerSvg />
+            <div className="checkmate-ornament">✦ &nbsp; Sanctum Judgment &nbsp; ✦</div>
+          </div>
           <div className="checkmate-crown" id="checkmate-crown">♔</div>
           <div className="checkmate-title" id="checkmate-title">Checkmate</div>
-          <div className="checkmate-rule"></div>
+          <div className="checkmate-rule"><CozyDividerFlourishSvg /></div>
           <div className="checkmate-subtitle" id="checkmate-subtitle">
             White Triumphs • Triumphant Sovereign Knocked the Black King Off the Board
           </div>

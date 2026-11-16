@@ -146,15 +146,15 @@ export function initWizardChess() {
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x070a12);
-    scene.fog = new THREE.FogExp2(0x080b14, 0.015);
+    scene.background = new THREE.Color(0xe6d8be);
+    scene.fog = new THREE.FogExp2(0xe6d8be, 0.0085);
 
-    // Self-contained Cathedral PMREM Environment (inspired by three-gpu-pathtracer & realism-effects)
+    // Self-contained Sunlit Cathedral PMREM Environment
     function createCathedralPMREMEnvironment(glRenderer) {
       const pmremGen = new THREE.PMREMGenerator(glRenderer);
       pmremGen.compileEquirectangularShader();
       const envScene = new THREE.Scene();
-      envScene.background = new THREE.Color(0x161412);
+      envScene.background = new THREE.Color(0x4a3b2a);
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
       const addPanel = (colorHex, intensity, pos, scl) => {
         const mat = new THREE.MeshBasicMaterial({
@@ -165,15 +165,15 @@ export function initWizardChess() {
         m.scale.fromArray(scl);
         envScene.add(m);
       };
-      // Upper Gothic clerestory & Rose Window light panels
-      addPanel(0xdce6f7, 2.4, [0, 9.5, -12.0], [10.0, 2.0, 1.5]);
-      addPanel(0xffe0b5, 2.2, [0, 9.5, 12.0], [10.0, 2.0, 1.5]);
-      addPanel(0xd4deee, 1.8, [-9.0, 6.5, 0.0], [1.2, 4.5, 16.0]);
-      addPanel(0xd4deee, 1.8, [9.0, 6.5, 0.0], [1.2, 4.5, 16.0]);
-      // Warm twin fire cauldron & limestone floor bounce panels
-      addPanel(0xff9438, 3.2, [-4.5, 1.6, 0.0], [2.2, 2.2, 4.0]);
-      addPanel(0xff9438, 3.2, [4.5, 1.6, 0.0], [2.2, 2.2, 4.0]);
-      addPanel(0x6e5c49, 0.9, [0, -4.0, 0.0], [16.0, 1.0, 24.0]);
+      // Upper Sunlit Gothic clerestory & Rose Window light panels
+      addPanel(0xfff5d6, 2.8, [0, 9.5, -12.0], [10.0, 2.0, 1.5]);
+      addPanel(0xffebc2, 2.6, [0, 9.5, 12.0], [10.0, 2.0, 1.5]);
+      addPanel(0xfff0d4, 2.2, [-9.0, 6.5, 0.0], [1.2, 4.5, 16.0]);
+      addPanel(0xfff0d4, 2.2, [9.0, 6.5, 0.0], [1.2, 4.5, 16.0]);
+      // Warm twin fire cauldron & sunlit limestone floor bounce panels
+      addPanel(0xffa94d, 3.4, [-4.5, 1.6, 0.0], [2.2, 2.2, 4.0]);
+      addPanel(0xffa94d, 3.4, [4.5, 1.6, 0.0], [2.2, 2.2, 4.0]);
+      addPanel(0xc2a882, 1.35, [0, -4.0, 0.0], [16.0, 1.0, 24.0]);
       const envTex = pmremGen.fromScene(envScene, 0.04).texture;
       boxGeo.dispose();
       pmremGen.dispose();
@@ -182,7 +182,7 @@ export function initWizardChess() {
 
     scene.environment = createCathedralPMREMEnvironment(renderer);
     if ('environmentIntensity' in scene) {
-      scene.environmentIntensity = 0.24;
+      scene.environmentIntensity = 0.34;
     }
 
     const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.22, 180);
@@ -297,11 +297,11 @@ export function initWizardChess() {
       return origHandleMouseMovePan(event);
     };
 
-    // Dramatic Chiaroscuro Cathedral & Board Lighting (restoring original-example 3D stone relief & warm firelight contrast)
-    const hemiLight = new THREE.HemisphereLight(0xd8ccb8, 0x261d14, 0.62);
+    // Warm Sunlit Fantasy Cathedral & Board Lighting
+    const hemiLight = new THREE.HemisphereLight(0xfff8eb, 0x8c6f4e, 1.08);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff0d6, 2.55);
+    const keyLight = new THREE.DirectionalLight(0xfff6e0, 2.95);
     keyLight.position.set(3.8, 8.5, 4.2);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 1024;
@@ -316,12 +316,12 @@ export function initWizardChess() {
     keyLight.shadow.bias = -0.0005;
     scene.add(keyLight);
 
-    // Subtle directional rim/fill (kept low so opposing directional lights never cancel normal-map mortar shadows)
-    const rimLight = new THREE.DirectionalLight(0xd8cbb8, 0.72);
+    // Warm sunlit directional rim/fill
+    const rimLight = new THREE.DirectionalLight(0xffe4b5, 1.05);
     rimLight.position.set(-4.5, 6.0, -6.5);
     scene.add(rimLight);
 
-    const southFillLight = new THREE.DirectionalLight(0xffe4c0, 0.52);
+    const southFillLight = new THREE.DirectionalLight(0xfff0d4, 0.85);
     southFillLight.position.set(4.2, 5.8, 7.5);
     scene.add(southFillLight);
 
@@ -436,9 +436,13 @@ export function initWizardChess() {
     const worldSceneryManager = createWorldSceneryManager(scene);
     const sfxVfxManager = createSoundAndVfxManager(scene, BOARD_SURFACE_Y);
 
+    function isEnclosedRoomScenery(sceneryId = currentWorldSceneryId) {
+      return sceneryId === 'gothic_cathedral' || sceneryId === 'toon_sky_kingdom';
+    }
+
     function clampPointToCathedralRoom(pt, isTarget = false) {
       const margin = isTarget ? 0.15 : 0.0;
-      if (currentWorldSceneryId !== 'gothic_cathedral') {
+      if (!isEnclosedRoomScenery(currentWorldSceneryId)) {
         pt.x = Math.max(-28.0 - margin, Math.min(28.0 + margin, pt.x));
         pt.z = Math.max(-28.0 - margin, Math.min(28.0 + margin, pt.z));
         const localMinY = isTarget ? 0.20 : 0.34;
@@ -476,7 +480,7 @@ export function initWizardChess() {
       const isContinuousStep = Boolean(prevPos) && moveLen > 1e-5 && moveLen < 8.0;
 
       for (const p of CATHEDRAL_SOLID_PILLARS) {
-        if (p.isColumn && currentWorldSceneryId !== 'gothic_cathedral') continue;
+        if (p.isColumn && !isEnclosedRoomScenery(currentWorldSceneryId)) continue;
         if (curPos.y > p.maxY) continue;
 
         let tClosest = 1.0;
@@ -1349,17 +1353,17 @@ export function initWizardChess() {
       sfxVfxManager.setActiveWorldScenery?.(sceneryId);
 
       if (isIndoorCathedral) {
-        hemiLight.color.setHex(0xd8ccb8);
-        hemiLight.groundColor.setHex(0x261d14);
-        hemiLight.intensity = 0.62;
-        keyLight.color.setHex(0xfff0d6);
-        keyLight.intensity = 2.55;
-        rimLight.color.setHex(0xd8cbb8);
-        rimLight.intensity = 0.72;
-        const fogHex = currentBoardSkinObj?.fogHex || '#080b14';
+        hemiLight.color.setHex(0xfff8eb);
+        hemiLight.groundColor.setHex(0x8c6f4e);
+        hemiLight.intensity = 1.08;
+        keyLight.color.setHex(0xfff6e0);
+        keyLight.intensity = 2.95;
+        rimLight.color.setHex(0xffe4b5);
+        rimLight.intensity = 1.05;
+        const fogHex = currentBoardSkinObj?.fogHex || '#e6d8be';
         if (scene.fog) {
           scene.fog.color.set(fogHex);
-          scene.fog.density = 0.015;
+          scene.fog.density = 0.0085;
         }
         scene.background = new THREE.Color(fogHex);
       } else if (currentWorldSceneryObj) {
@@ -1380,7 +1384,7 @@ export function initWizardChess() {
 
       if (options && options.flyToVista && typeof smoothCameraTo === 'function') {
         const zSign = playerColor === 'b' ? -1 : 1;
-        if (isIndoorCathedral) {
+        if (isEnclosedRoomScenery(sceneryId)) {
           smoothCameraTo(new THREE.Vector3(0, 2.55, zSign * 6.65), new THREE.Vector3(0, 1.95, -zSign * 2.50), 0.9);
         } else {
           smoothCameraTo(new THREE.Vector3(zSign * 3.8, 3.35, zSign * 7.85), new THREE.Vector3(0, 1.85, -zSign * 4.5), 0.95);
@@ -2608,6 +2612,9 @@ export function initWizardChess() {
         clearTimeout(aiTimer);
         aiTimer = null;
       }
+      aiWorkerPending = false;
+      aiTurnWatchdogSec = 0;
+      botLoneKingTurns = 0;
       preMoveHighlightTask = null;
       activeMoveTweens.length = 0;
       clearCheckmateSequence();
@@ -2674,6 +2681,9 @@ export function initWizardChess() {
         clearTimeout(aiTimer);
         aiTimer = null;
       }
+      aiWorkerPending = false;
+      aiTurnWatchdogSec = 0;
+      botLoneKingTurns = 0;
       preMoveHighlightTask = null;
       activeMoveTweens.length = 0;
       clearCheckmateSequence();
@@ -3889,6 +3899,84 @@ export function initWizardChess() {
       return total;
     }
 
+    let botLoneKingTurns = 0;
+    let aiTurnWatchdogSec = 0;
+
+    function shouldBotAutoSurrender(aiColor, precomputedLegalMoves = null) {
+      const legalMoves = precomputedLegalMoves || getAllLegalMoves(aiColor);
+      // 1. Bot has zero legal moves left (completely out of choices)
+      if (!legalMoves || legalMoves.length === 0) {
+        return true;
+      }
+
+      const humanColor = aiColor === 'w' ? 'b' : 'w';
+      let botNonKingCount = 0;
+      let botNonKingMaterial = 0;
+      let humanNonKingMaterial = 0;
+
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = boardState[r][c];
+          if (!p || p.type === 'king') continue;
+          const val = PIECE_VALUES[p.type] || 100;
+          if (p.color === aiColor) {
+            botNonKingCount++;
+            botNonKingMaterial += val;
+          } else {
+            humanNonKingMaterial += val;
+          }
+        }
+      }
+
+      // 2. Bot is reduced to a lone King while Player has overwhelming force
+      if (botNonKingCount === 0 && humanNonKingMaterial >= 500) {
+        // If lone King is cornered with <= 1 legal move or has been hunted for >= 4 turns, Bot concedes
+        if (legalMoves.length <= 1 || botLoneKingTurns >= 4) {
+          return true;
+        }
+      }
+
+      // 3. If Bot has very few moves (<= 3) and is heavily behind in material, check if ALL choices lead to immediate Checkmate-in-1
+      if (legalMoves.length <= 3 && humanNonKingMaterial - botNonKingMaterial >= 400) {
+        let allMovesLeadToImmediateMate = true;
+        for (const m of legalMoves) {
+          const piece = boardState[m.fromR][m.fromC];
+          const savedTarget = boardState[m.toR][m.toC];
+          boardState[m.toR][m.toC] = piece;
+          boardState[m.fromR][m.fromC] = null;
+
+          // Check if human has a reply that leaves Bot with 0 legal moves & in check
+          const humanMoves = getAllLegalMoves(humanColor);
+          let mateReplyFound = false;
+          for (const hm of humanMoves) {
+            const hp = boardState[hm.fromR][hm.fromC];
+            const hSaved = boardState[hm.toR][hm.toC];
+            boardState[hm.toR][hm.toC] = hp;
+            boardState[hm.fromR][hm.fromC] = null;
+            if (isKingInCheck(aiColor, boardState) && getAllLegalMoves(aiColor).length === 0) {
+              mateReplyFound = true;
+            }
+            boardState[hm.fromR][hm.fromC] = hp;
+            boardState[hm.toR][hm.toC] = hSaved;
+            if (mateReplyFound) break;
+          }
+
+          boardState[m.fromR][m.fromC] = piece;
+          boardState[m.toR][m.toC] = savedTarget;
+
+          if (!mateReplyFound) {
+            allMovesLeadToImmediateMate = false;
+            break;
+          }
+        }
+        if (allMovesLeadToImmediateMate) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
     function chooseSmartAIMove(color) {
       const legalMoves = getAllLegalMoves(color);
       if (legalMoves.length === 0) return null;
@@ -3911,9 +3999,40 @@ export function initWizardChess() {
 
     function triggerAIMoveNow() {
       if (isAnimatingMove || gameOver) return false;
-      const chosen = chooseSmartAIMove(currentTurn);
-      if (!chosen) return false;
-      return executeChessMove(chosen.fromR, chosen.fromC, chosen.toR, chosen.toC);
+      const aiColor = currentTurn;
+      const legalMoves = getAllLegalMoves(aiColor);
+      const isBotSide = gameMode === 'single' && aiColor !== playerColor;
+
+      if (legalMoves.length === 0 || (isBotSide && shouldBotAutoSurrender(aiColor, legalMoves))) {
+        return surrenderMatch(aiColor, { isBotSurrender: isBotSide });
+      }
+
+      if (isBotSide) {
+        let botNonKing = 0;
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            const p = boardState[r][c];
+            if (p && p.color === aiColor && p.type !== 'king') botNonKing++;
+          }
+        }
+        if (botNonKing === 0) botLoneKingTurns++;
+        else botLoneKingTurns = 0;
+      }
+
+      const chosen = chooseSmartAIMove(aiColor);
+      if (chosen && executeChessMove(chosen.fromR, chosen.fromC, chosen.toR, chosen.toC)) {
+        return true;
+      }
+
+      // Fallback: try any legal move if the primary choice failed to execute
+      for (const m of legalMoves) {
+        if (executeChessMove(m.fromR, m.fromC, m.toR, m.toC)) {
+          return true;
+        }
+      }
+
+      // If no move can be executed at all, Bot surrenders so the game never gets stuck
+      return surrenderMatch(aiColor, { isBotSurrender: isBotSide });
     }
 
     function maybeScheduleAIMove() {
@@ -3928,6 +4047,7 @@ export function initWizardChess() {
 
       const aiColor = playerColor === 'w' ? 'b' : 'w';
       if (currentTurn === aiColor) {
+        aiTurnWatchdogSec = 0;
         const aiThinkDelayMs =
           timeControlCategory === 'bullet' ? 140 : timeControlCategory === 'blitz' ? 240 : 340;
         aiTimer = setTimeout(async () => {
@@ -3943,6 +4063,13 @@ export function initWizardChess() {
           ) {
             return;
           }
+
+          const initialLegal = getAllLegalMoves(aiColor);
+          if (shouldBotAutoSurrender(aiColor, initialLegal)) {
+            surrenderMatch(aiColor, { isBotSurrender: true });
+            return;
+          }
+
           aiWorkerPending = true;
           try {
             const res = await rustWasmEngine.computeBestMoveAsync(boardState, aiColor, botDifficulty);
@@ -3958,6 +4085,20 @@ export function initWizardChess() {
               !gameOver
             ) {
               const legalMoves = getAllLegalMoves(aiColor);
+              if (shouldBotAutoSurrender(aiColor, legalMoves)) {
+                surrenderMatch(aiColor, { isBotSurrender: true });
+                return;
+              }
+              let botNonKing = 0;
+              for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                  const p = boardState[r][c];
+                  if (p && p.color === aiColor && p.type !== 'king') botNonKing++;
+                }
+              }
+              if (botNonKing === 0) botLoneKingTurns++;
+              else botLoneKingTurns = 0;
+
               const candidate = res?.move;
               if (
                 candidate &&
@@ -3969,7 +4110,9 @@ export function initWizardChess() {
                     m.toC === candidate.toC
                 )
               ) {
-                executeChessMove(candidate.fromR, candidate.fromC, candidate.toR, candidate.toC);
+                if (!executeChessMove(candidate.fromR, candidate.fromC, candidate.toR, candidate.toC)) {
+                  triggerAIMoveNow();
+                }
               } else {
                 triggerAIMoveNow();
               }
@@ -5212,7 +5355,7 @@ export function initWizardChess() {
     }
 
     function surrenderMatch(surrenderingColor = null, options = {}) {
-      if (gameOver) return false;
+      if (gameOver && checkmateState.active) return false;
       let defeatedColor = currentTurn;
       if (surrenderingColor === 'w' || surrenderingColor === 'b') {
         defeatedColor = surrenderingColor;
@@ -5220,7 +5363,13 @@ export function initWizardChess() {
         defeatedColor = playerColor === 'b' ? 'b' : 'w';
       }
 
+      const isBotSurrender = Boolean(
+        options?.isBotSurrender || (gameMode === 'single' && defeatedColor !== playerColor)
+      );
+
       gameOver = true;
+      aiWorkerPending = false;
+      aiTurnWatchdogSec = 0;
       if (aiTimer) {
         clearTimeout(aiTimer);
         aiTimer = null;
@@ -5261,7 +5410,9 @@ export function initWizardChess() {
       const defeated = defeatedColor === 'w' ? 'White' : 'Black';
       const turnText = document.getElementById('turn-text');
       if (turnText) {
-        turnText.textContent = `${defeated} Surrendered — ${winner} Wins!`;
+        turnText.textContent = isBotSurrender
+          ? `Bot Out of Choices & Surrendered — ${winner} Wins!`
+          : `${defeated} Surrendered — ${winner} Wins!`;
       }
 
       if (!checkmateState.active) {
@@ -5296,7 +5447,8 @@ export function initWizardChess() {
             isHumanWin,
             isCheckWin: false,
             isTimeOutWin: false,
-            isSurrenderWin: true
+            isSurrenderWin: true,
+            isBotSurrender
           }
         })
       );
@@ -5426,12 +5578,60 @@ export function initWizardChess() {
             );
           }
         } else {
-          turnText.textContent = 'Stalemate — Draw';
+          // Side to move has 0 legal moves and is not in check (trapped / out of choices):
+          // Automatically trigger surrender sequence & victory banner so the match never freezes!
+          const defeatedColor = currentTurn;
+          const winnerColor = defeatedColor === 'w' ? 'b' : 'w';
+          const winner = winnerColor === 'w' ? 'White' : 'Black';
+          const defeated = defeatedColor === 'w' ? 'White' : 'Black';
+          const isBotSurrender = gameMode === 'single' && defeatedColor !== playerColor;
+          turnText.textContent = isBotSurrender
+            ? `Bot Out of Choices & Surrendered — ${winner} Wins!`
+            : `${defeated} Out of Choices & Surrendered — ${winner} Wins!`;
+          if (!checkmateState.active) {
+            triggerCheckmateSequence(defeatedColor, winnerColor, {
+              isCheckWin: false,
+              isTimeOutWin: false,
+              isSurrenderWin: true
+            });
+          }
+          if (!wasAlreadyOver) {
+            announceSanctumEvent('check_win', {
+              winner,
+              defeated,
+              isCheckmate: false,
+              isSurrenderWin: true
+            });
+            const isHumanWin =
+              gameMode === 'pass' ||
+              (gameMode === 'single' && winnerColor === playerColor) ||
+              (gameMode === 'multi' && winnerColor === playerColor);
+            window.dispatchEvent(
+              new CustomEvent('wizardchess:matchwon', {
+                detail: {
+                  winnerColor,
+                  defeatedColor,
+                  gameMode,
+                  botDifficulty,
+                  timeControlCategory,
+                  timeControlPresetId,
+                  isHumanWin,
+                  isCheckWin: false,
+                  isTimeOutWin: false,
+                  isSurrenderWin: true,
+                  isBotSurrender
+                }
+              })
+            );
+          }
         }
       } else if (gameOver && checkmateState.isSurrenderWin) {
         const winner = checkmateState.winnerColor === 'b' ? 'Black' : 'White';
         const defeated = checkmateState.defeatedColor === 'b' ? 'Black' : 'White';
-        turnText.textContent = `${defeated} Surrendered — ${winner} Wins!`;
+        const isBotDefeated = gameMode === 'single' && checkmateState.defeatedColor !== playerColor;
+        turnText.textContent = isBotDefeated
+          ? `Bot Out of Choices & Surrendered — ${winner} Wins!`
+          : `${defeated} Surrendered — ${winner} Wins!`;
       } else if (gameOver && checkmateState.isTimeOutWin) {
         const winner = checkmateState.winnerColor === 'b' ? 'Black' : 'White';
         const preset = TIME_CONTROL_PRESETS[timeControlPresetId] || TIME_CONTROL_PRESETS.blitz_5;
@@ -6930,14 +7130,14 @@ export function initWizardChess() {
           cathedralWideSide = playerColor === 'b' ? 'south' : 'north';
         }
         setActiveCamButton('btn-cam-wide');
-        if (currentWorldSceneryId !== 'gothic_cathedral') {
+        if (!isEnclosedRoomScenery(currentWorldSceneryId)) {
           const zSign = cathedralWideSide === 'south' ? -1 : 1;
           smoothCameraTo(new THREE.Vector3(zSign * 3.6, 3.25, zSign * 7.8), new THREE.Vector3(0, 1.85, -zSign * 4.2), 0.85);
         } else if (cathedralWideSide === 'south') {
-          // Black's wide Cathedral perspective looking South toward the Narthex Triptych (chessboard centered in frame)
+          // Black's wide Cathedral / Parlor perspective looking South toward the Narthex / Doors (chessboard centered in frame)
           smoothCameraTo(new THREE.Vector3(0, 2.55, -6.65), new THREE.Vector3(0, 1.95, 2.50), 0.85);
         } else {
-          // White's wide Cathedral perspective looking North toward the Rose Window (chessboard centered in frame)
+          // White's wide Cathedral / Parlor perspective looking North toward the Rose Window / Hearth (chessboard centered in frame)
           smoothCameraTo(new THREE.Vector3(0, 2.55, 6.65), new THREE.Vector3(0, 1.95, -2.50), 0.85);
         }
       } else if (preset === 'white_backdrop') {
@@ -7711,6 +7911,32 @@ export function initWizardChess() {
         if (activeClock <= 0) {
           handleTimeOutDefeat(currentTurn);
         }
+      }
+
+      // AI Turn Watchdog: Ensure the Bot never gets stuck on its turn in Single-Player mode
+      if (
+        matchStarted &&
+        !lobbyPaused &&
+        !gameOver &&
+        !scriptedGameActive &&
+        !isAnimatingMove &&
+        !preMoveHighlightTask &&
+        gameMode === 'single' &&
+        aiAutoPlay &&
+        currentTurn !== playerColor
+      ) {
+        aiTurnWatchdogSec += dt;
+        if (aiTurnWatchdogSec > 1.65) {
+          aiTurnWatchdogSec = 0;
+          aiWorkerPending = false;
+          if (aiTimer) {
+            clearTimeout(aiTimer);
+            aiTimer = null;
+          }
+          triggerAIMoveNow();
+        }
+      } else {
+        aiTurnWatchdogSec = 0;
       }
 
       for (const mixer of activeMixers) {

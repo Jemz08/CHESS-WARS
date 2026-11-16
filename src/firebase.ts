@@ -134,6 +134,7 @@ export interface CloudUserProfile {
   ownedSceneries: string[];
   activeScenery: string;
   wins: number;
+  winStreak?: number;
   captures: number;
   totalGoldEarned: number;
   rating: number;
@@ -334,6 +335,7 @@ export async function saveUserDataToCloud(
     ownedSceneries: economy.ownedSceneries,
     activeScenery: economy.activeScenery,
     wins: economy.stats.wins,
+    winStreak: Math.max(0, Number(economy.stats.winStreak || 0)),
     captures: economy.stats.captures,
     totalGoldEarned: economy.stats.totalGoldEarned,
     rating: playerRating,

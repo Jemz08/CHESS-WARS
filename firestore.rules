@@ -27,7 +27,8 @@ service cloud.firestore {
              data.userId == request.auth.uid &&
              data.gold is number && data.gold >= 0 &&
              data.activePieceType is string && data.activePieceType.size() <= 64 &&
-             data.wins is number && data.wins >= 0;
+             data.wins is number && data.wins >= 0 &&
+             (!('winStreak' in data) || (data.winStreak is number && data.winStreak >= 0));
     }
 
     function isValidLeaderboardEntry(data) {

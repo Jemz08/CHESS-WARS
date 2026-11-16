@@ -69,6 +69,10 @@
           "type": "number",
           "description": "Total chess match victories"
         },
+        "winStreak": {
+          "type": "number",
+          "description": "Current consecutive victory streak count"
+        },
         "captures": {
           "type": "number",
           "description": "Total enemy pieces destroyed"

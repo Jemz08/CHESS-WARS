@@ -147,7 +147,7 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
     subtitle: 'Sculpted Jack-o\'-Lantern monarchs, Headless Horseman knights, scythe-wielding wraiths & haunted crypt rooks',
     badge: 'Halloween Event',
     price: 280,
-    strikeStyle: 'Scythe Soul-Harvest Sweep & Headless Jack-o\'-Lantern Surge',
+    strikeStyle: 'Horizontal & Overhead Scythe-Slash Cleave + Spectral Soul-Harvest Surge',
     shatterStyle: 'Carved Pumpkin Detonation, Ectoplasm Soul-Flames & Swirling Bats',
     flashColorHex: '#ff6d00'
   }
@@ -582,14 +582,14 @@ export const BOARD_SKINS: BoardSkin[] = [
     accentHex: '#ff9f1c',
     wallLookIndex: 0,
     floorLookIndex: 0,
-    fogHex: '#10141f',
-    sideWindowHex: '#90beff',
-    northWindowHex: '#9bc4ff',
-    southWindowHex: '#ffb85c',
-    brazierBaseRGB: [1.0, 0.72, 0.24],
-    brazierMidRGB: [1.0, 0.36, 0.05],
-    brazierTipRGB: [0.85, 0.12, 0.02],
-    brazierLightHex: '#ff8c24'
+    fogHex: '#e6d8be',
+    sideWindowHex: '#fff0c2',
+    northWindowHex: '#fff5d6',
+    southWindowHex: '#ffd180',
+    brazierBaseRGB: [1.0, 0.78, 0.28],
+    brazierMidRGB: [1.0, 0.44, 0.08],
+    brazierTipRGB: [0.90, 0.20, 0.04],
+    brazierLightHex: '#ff9e38'
   },
   {
     id: 'royal_wood_table',
@@ -757,40 +757,40 @@ export const WORLD_SCENERIES: WorldScenery[] = [
     subtitle: 'Enclosed moonlit medieval abbey nave with stained glass rose windows, carved ashlar pillars & hearth braziers',
     badge: 'Indoor Sanctum',
     price: 0,
-    skyPreviewGradient: 'radial-gradient(circle at 50% 25%, #3a5a8c 0%, #161d2b 58%, #090b12 100%)',
-    accentHex: '#d4af37',
-    landmarksLabel: 'Vaulted Nave Pillars, Rose Tracery & Twin Hearth Braziers',
-    weatherLabel: 'Warm Cathedral Torchlight & Drifting Dust Motes',
-    fogHex: '#080b14',
-    fogDensity: 0.015,
-    hemiSkyHex: '#d8ccb8',
-    hemiGroundHex: '#261d14',
-    hemiIntensity: 0.62,
-    keyLightHex: '#fff0d6',
-    keyLightIntensity: 2.55,
-    rimLightHex: '#d8cbb8',
-    rimLightIntensity: 0.72
+    skyPreviewGradient: 'radial-gradient(circle at 50% 25%, #fff5d6 0%, #e6cfb2 58%, #b89872 100%)',
+    accentHex: '#c98a22',
+    landmarksLabel: 'Sunlit Vaulted Nave Pillars, Golden Rose Tracery & Twin Hearth Braziers',
+    weatherLabel: 'Warm Sunlit Clerestory Rays & Golden Dust Motes',
+    fogHex: '#e6d8be',
+    fogDensity: 0.0085,
+    hemiSkyHex: '#fff8eb',
+    hemiGroundHex: '#8c6f4e',
+    hemiIntensity: 1.08,
+    keyLightHex: '#fff6e0',
+    keyLightIntensity: 2.95,
+    rimLightHex: '#ffe4b5',
+    rimLightIntensity: 1.05
   },
   {
     id: 'toon_sky_kingdom',
-    name: 'Floating Toon Kingdom',
-    subtitle: 'Vibrant cel-shaded sky realm with floating emerald islands, splayed fairytale castles, storybook windmills & puffy black-outlined clouds',
-    badge: '✦ Cartoon Realm',
+    name: 'Cozy Cartoon Parlor Box',
+    subtitle: 'Enclosed cel-shaded game parlor room with bold pitch-black ink outlines, timber wainscoting, sunlit comic windows, bookcases & storybook chandelier',
+    badge: '✦ Cartoon Room',
     isCartoon: true,
     price: 0,
-    skyPreviewGradient: 'linear-gradient(180deg, #1d70b8 0%, #48cae4 48%, #90e0ef 76%, #ffd166 100%)',
+    skyPreviewGradient: 'radial-gradient(circle at 50% 28%, #fff6cc 0%, #f7dcb4 56%, #d9a066 100%)',
     accentHex: '#ffbe0b',
-    landmarksLabel: 'Outlined Floating Islands, Fairytale Castle Turrets, Storybook Windmills & Puffy Toon Clouds',
-    weatherLabel: 'Drifting Puffy Outlined Clouds & Twinkling Comic Star-Motes',
-    fogHex: '#2b5876',
-    fogDensity: 0.0028,
-    hemiSkyHex: '#fff8d6',
-    hemiGroundHex: '#3a506b',
-    hemiIntensity: 1.05,
-    keyLightHex: '#fff6cc',
+    landmarksLabel: 'Black-Inked Timber Beams, Sunlit Comic Windows, Cozy Bookcases & Storybook Hearth',
+    weatherLabel: 'Sunlit Parlor Rays & Floating Golden Comic Star-Motes',
+    fogHex: '#f5e4c8',
+    fogDensity: 0.0065,
+    hemiSkyHex: '#fff9e2',
+    hemiGroundHex: '#8c5a32',
+    hemiIntensity: 1.12,
+    keyLightHex: '#fff7d6',
     keyLightIntensity: 3.05,
-    rimLightHex: '#48cae4',
-    rimLightIntensity: 1.25
+    rimLightHex: '#ffbe0b',
+    rimLightIntensity: 1.18
   },
   {
     id: 'celestial_observatory',
@@ -903,6 +903,7 @@ export interface EconomyState {
   activeScenery: string;
   stats: {
     wins: number;
+    winStreak: number;
     captures: number;
     totalGoldEarned: number;
   };
@@ -923,6 +924,7 @@ export function loadEconomyState(): EconomyState {
     activeScenery: 'gothic_cathedral',
     stats: {
       wins: 0,
+      winStreak: 0,
       captures: 0,
       totalGoldEarned: 150
     }
@@ -972,6 +974,7 @@ export function loadEconomyState(): EconomyState {
           : defaultState.activeScenery,
       stats: {
         wins: Number(parsed?.stats?.wins || 0),
+        winStreak: Math.max(0, Number(parsed?.stats?.winStreak || 0)),
         captures: Number(parsed?.stats?.captures || 0),
         totalGoldEarned: Number(parsed?.stats?.totalGoldEarned || 150)
       }
@@ -1024,9 +1027,9 @@ export const RANK_TIERS: RankTier[] = [
     maxWins: 6,
     borderEffectName: 'Moonlit Runic Steel',
     borderDescription: 'Polished astral silver bevels with sweeping cold-steel specular sheen and warded corner sigils.',
-    primaryHex: '#e2e8f0',
+    primaryHex: '#4b6584',
     secondaryHex: '#94a3b8',
-    glowHex: 'rgba(226, 232, 240, 0.65)',
+    glowHex: 'rgba(100, 116, 139, 0.45)',
     crestGlyph: '♘'
   },
   {
@@ -1038,9 +1041,9 @@ export const RANK_TIERS: RankTier[] = [
     maxWins: 12,
     borderEffectName: 'Imperial Auric Filigree',
     borderDescription: 'Radiant sunforged gold double-border with rotating solar halo and crowned cathedral spires.',
-    primaryHex: '#f5d76e',
-    secondaryHex: '#b8891e',
-    glowHex: 'rgba(245, 215, 110, 0.78)',
+    primaryHex: '#b87814',
+    secondaryHex: '#e09f24',
+    glowHex: 'rgba(217, 144, 24, 0.55)',
     crestGlyph: '♖'
   },
   {
@@ -1052,9 +1055,9 @@ export const RANK_TIERS: RankTier[] = [
     maxWins: 20,
     borderEffectName: 'Crystalline Starlight Corona',
     borderDescription: 'Prismatic aether-cyan crystal frame with pulsing arcane conduits and floating starlight motes.',
-    primaryHex: '#67e8f9',
-    secondaryHex: '#0284c7',
-    glowHex: 'rgba(103, 232, 249, 0.82)',
+    primaryHex: '#0284c7',
+    secondaryHex: '#38bdf8',
+    glowHex: 'rgba(14, 165, 233, 0.55)',
     crestGlyph: '♕'
   },
   {

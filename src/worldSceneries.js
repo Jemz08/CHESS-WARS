@@ -1512,9 +1512,10 @@ function buildHauntedBloodGraveyardGroup() {
 }
 
 // ============================================================================
-// Realm 5 Builder: Floating Toon Kingdom ('toon_sky_kingdom')
-// Cel-shaded floating emerald islands, splayed fairytale cartoon castles,
-// rotating storybook windmills, bubbly cel-shaded trees & puffy outlined clouds!
+// Realm 5 Builder: Cozy Cartoon Parlor Box ('toon_sky_kingdom')
+// Isolated enclosed box room matching the default Cathedral Sanctum dimensions
+// (X: ±7.0m, Z: ±18.5m, Y: 0..9.45m) with bold pitch-black comic ink outlines,
+// cel-shaded timber wainscoting, sunlit cartoon windows, bookcases & chandeliers!
 // ============================================================================
 function buildToonSkyKingdomGroup() {
   const group = new THREE.Group();
@@ -1528,7 +1529,11 @@ function buildToonSkyKingdomGroup() {
     polygonOffsetUnits: 2
   });
 
-  const makeToonMat = (hex, emissiveHex = hex, emissiveIntensity = 0.12, roughness = 0.45) =>
+  const inkLineMat = new THREE.MeshBasicMaterial({
+    color: 0x09080c
+  });
+
+  const makeToonMat = (hex, emissiveHex = hex, emissiveIntensity = 0.14, roughness = 0.44) =>
     new THREE.MeshStandardMaterial({
       color: hex,
       emissive: emissiveHex,
@@ -1537,40 +1542,30 @@ function buildToonSkyKingdomGroup() {
       metalness: 0.04
     });
 
-  const grassMat = makeToonMat(0x52b788, 0x2d6a4f, 0.15, 0.48);
-  const brightGrassMat = makeToonMat(0x74c69d, 0x40916c, 0.18, 0.45);
-  const rockTerracottaMat = makeToonMat(0xc98a5b, 0x7f4f24, 0.12, 0.55);
-  const castleCreamMat = makeToonMat(0xfff3d1, 0xffd166, 0.14, 0.42);
-  const roofRoyalBlueMat = makeToonMat(0x3a86ff, 0x1d4ed8, 0.18, 0.36);
-  const roofBerryRedMat = makeToonMat(0xff4d6d, 0xc9184a, 0.18, 0.36);
+  const wallPlasterMat = makeToonMat(0xfff5d6, 0xffd166, 0.16, 0.46);
+  const wainscotWoodMat = makeToonMat(0x8c5228, 0x582f0e, 0.12, 0.50);
+  const wainscotPanelMat = makeToonMat(0xb06d3b, 0x7f4f24, 0.14, 0.46);
+  const floorWoodMat = makeToonMat(0xc98a4b, 0x7f4f24, 0.14, 0.44);
+  const floorPlankAltMat = makeToonMat(0xb87638, 0x6b3e1a, 0.12, 0.46);
+  const ceilingCreamMat = makeToonMat(0xf7e3b5, 0xd9a05b, 0.15, 0.50);
+  const darkTimberMat = makeToonMat(0x5e3417, 0x3b1f0c, 0.10, 0.52);
   const toonGoldMat = makeToonMat(0xffbe0b, 0xfb8500, 0.28, 0.30);
-  const toonTimberMat = makeToonMat(0x7f4f24, 0x582f0e, 0.10, 0.52);
-  const cloudWhiteMat = makeToonMat(0xffffff, 0xe0fbfc, 0.25, 0.35);
-  const windowGlowMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
-  const waterfallCyanMat = new THREE.MeshBasicMaterial({
-    color: 0x48cae4,
-    transparent: true,
-    opacity: 0.85,
-    side: THREE.DoubleSide
-  });
+  const rugBerryMat = makeToonMat(0xd6405b, 0x9e1932, 0.18, 0.48);
+  const rugCreamMat = makeToonMat(0xfff0c2, 0xffbe0b, 0.18, 0.44);
+  const curtainBlueMat = makeToonMat(0x3a86ff, 0x1d4ed8, 0.18, 0.38);
+  const curtainRedMat = makeToonMat(0xff4d6d, 0xc9184a, 0.18, 0.38);
+  const foliageGreenMat = makeToonMat(0x52b788, 0x2d6a4f, 0.18, 0.44);
+  const foliageBrightMat = makeToonMat(0x74c69d, 0x40916c, 0.20, 0.42);
+  const potTerracottaMat = makeToonMat(0xd97742, 0x8c421e, 0.14, 0.48);
+  const stoneHearthMat = makeToonMat(0xd8cbb8, 0x8c7a65, 0.14, 0.48);
 
-  // Shared unit geometries to eliminate redundant BufferGeometry allocations across islands, clouds, and trees
-  const sharedCloudPuffGeo = new THREE.SphereGeometry(1.0, 10, 8);
-  const sharedFoliageGeo = new THREE.DodecahedronGeometry(1.0, 0);
-  const sharedTrunkGeo = new THREE.CylinderGeometry(0.16, 0.28, 1.15, 8);
-  const sharedKeepGeo = new THREE.CylinderGeometry(1.15, 0.92, 2.6, 10);
-  const sharedCollarGeo = new THREE.CylinderGeometry(1.32, 1.18, 0.42, 10);
-  const sharedMainRoofGeo = new THREE.ConeGeometry(1.52, 1.95, 10);
-  const sharedPoleGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.85, 6);
-  const sharedFlagGeo = new THREE.ConeGeometry(0.24, 0.68, 4);
-  sharedFlagGeo.rotateZ(-Math.PI / 2);
-  const sharedTurretBodyGeo = new THREE.CylinderGeometry(0.48, 0.38, 2.1, 8);
-  const sharedTurretRoofGeo = new THREE.ConeGeometry(0.66, 1.15, 8);
-  const sharedWindowGeo = new THREE.BoxGeometry(0.22, 0.38, 0.12);
+  const windowSkyMat = new THREE.MeshBasicMaterial({ color: 0x72efdd });
+  const windowSunMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+  const cloudWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const candleFlameMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+  const hearthFireOuterMat = new THREE.MeshBasicMaterial({ color: 0xff6d00 });
 
-  // Optimized toon mesh builder: relies on the screen-space post-processing outline shader
-  // + lightweight BackSide silhouette hull (zero expensive per-mesh EdgesGeometry/LineSegments)
-  const addToonMesh = (parent, geo, mat, hullScale = 1.045, _edgeAngle = 22, castShadow = false) => {
+  const addToonMesh = (parent, geo, mat, hullScale = 1.045, castShadow = false) => {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = castShadow;
     mesh.receiveShadow = castShadow;
@@ -1589,258 +1584,432 @@ function buildToonSkyKingdomGroup() {
     return mesh;
   };
 
-  const buildPuffyToonCloud = (scale = 1.0) => {
-    const cloudGroup = new THREE.Group();
-    const puffs = [
-      { pos: [0, 0, 0], r: 1.05 },
-      { pos: [-0.95, -0.12, 0.12], r: 0.78 },
-      { pos: [0.95, -0.10, -0.08], r: 0.82 },
-      { pos: [-0.42, 0.42, -0.18], r: 0.72 },
-      { pos: [0.46, 0.38, 0.18], r: 0.68 }
-    ];
-    for (const p of puffs) {
-      const puff = addToonMesh(cloudGroup, sharedCloudPuffGeo, cloudWhiteMat, 1.055, 40, false);
-      puff.scale.setScalar(p.r * scale);
-      puff.position.set(p.pos[0] * scale, p.pos[1] * scale, p.pos[2] * scale);
+  // Room interior dimensions matching CATHEDRAL_BOUNDS (X: ±6.65, Z: ±18.10, Y: 0..8.85)
+  const ROOM_HALF_W = 7.05;
+  const ROOM_HALF_L = 18.55;
+  const ROOM_H = 9.45;
+
+  // --------------------------------------------------------------------------
+  // 1. Enclosed Parlor Floor, Comic Plank Grooves & Cozy Center Parlor Rug
+  // --------------------------------------------------------------------------
+  const floorSlabGeo = new THREE.BoxGeometry(ROOM_HALF_W * 2 + 0.8, 0.36, ROOM_HALF_L * 2 + 0.8);
+  const floorSlab = addToonMesh(group, floorSlabGeo, floorWoodMat, 1.015, false);
+  floorSlab.position.set(0, -0.18, 0);
+  floorSlab.receiveShadow = true;
+
+  // Alternating cel-shaded floorboards & bold black comic ink seam lines
+  const plankStripeGeo = new THREE.BoxGeometry(0.95, 0.012, ROOM_HALF_L * 2);
+  const inkSeamZGeo = new THREE.BoxGeometry(0.055, 0.016, ROOM_HALF_L * 2);
+  for (let ix = -6; ix <= 6; ix++) {
+    const px = ix * 1.08;
+    if (Math.abs(ix) % 2 === 1) {
+      const plank = new THREE.Mesh(plankStripeGeo, floorPlankAltMat);
+      plank.position.set(px, 0.002, 0);
+      plank.receiveShadow = true;
+      plank.raycast = () => {};
+      group.add(plank);
     }
-    return cloudGroup;
-  };
-
-  const buildToonTree = (scale = 1.0) => {
-    const treeGroup = new THREE.Group();
-    const trunk = addToonMesh(treeGroup, sharedTrunkGeo, toonTimberMat, 1.05, 24, false);
-    trunk.position.y = 0.55;
-
-    const foliageSpheres = [
-      { pos: [0, 1.35, 0], r: 0.72, mat: grassMat },
-      { pos: [-0.38, 1.12, 0.24], r: 0.52, mat: brightGrassMat },
-      { pos: [0.40, 1.16, -0.20], r: 0.54, mat: brightGrassMat },
-      { pos: [0, 1.82, 0], r: 0.48, mat: brightGrassMat }
-    ];
-    for (const f of foliageSpheres) {
-      const fMesh = addToonMesh(treeGroup, sharedFoliageGeo, f.mat, 1.05, 28, false);
-      fMesh.scale.setScalar(f.r);
-      fMesh.position.set(f.pos[0], f.pos[1], f.pos[2]);
-    }
-    treeGroup.scale.setScalar(scale);
-    return treeGroup;
-  };
-
-  const buildToonCastleKeep = (scale = 1.0, isRedRoof = false) => {
-    const castleGroup = new THREE.Group();
-    const roofMat = isRedRoof ? roofBerryRedMat : roofRoyalBlueMat;
-
-    // Main Splayed Cartoon Keep Tower
-    const keep = addToonMesh(castleGroup, sharedKeepGeo, castleCreamMat, 1.045, 20, false);
-    keep.position.y = 1.3;
-
-    // Crenellated Battlement Collar
-    const collar = addToonMesh(castleGroup, sharedCollarGeo, castleCreamMat, 1.048, 20, false);
-    collar.position.y = 2.65;
-
-    // Conical Fairytale Spire Roof
-    const mainRoof = addToonMesh(castleGroup, sharedMainRoofGeo, roofMat, 1.048, 22, false);
-    mainRoof.position.y = 3.82;
-
-    // Golden Roof Finial & Pennant Flag
-    const pole = addToonMesh(castleGroup, sharedPoleGeo, toonGoldMat, 1.0, 24, false);
-    pole.position.y = 5.0;
-
-    const flag = addToonMesh(castleGroup, sharedFlagGeo, toonGoldMat, 1.05, 18, false);
-    flag.position.set(0.32, 5.22, 0);
-
-    // 3 Flanking Cartoon Turrets
-    for (let t = 0; t < 3; t++) {
-      const ang = (t / 3) * Math.PI * 2 + 0.4;
-      const tx = Math.cos(ang) * 1.18;
-      const tz = Math.sin(ang) * 1.18;
-
-      const tBody = addToonMesh(castleGroup, sharedTurretBodyGeo, castleCreamMat, 1.048, 20, false);
-      tBody.position.set(tx, 1.15, tz);
-
-      const tRoof = addToonMesh(castleGroup, sharedTurretRoofGeo, roofMat, 1.05, 22, false);
-      tRoof.position.set(tx, 2.75, tz);
-
-      // Glowing Arched Cartoon Window
-      const win = addToonMesh(castleGroup, sharedWindowGeo, windowGlowMat, 1.0, 18, false);
-      win.position.set(tx * 1.32, 1.55, tz * 1.32);
-      win.lookAt(tx * 2.5, 1.55, tz * 2.5);
-    }
-
-    castleGroup.scale.setScalar(scale);
-    return castleGroup;
-  };
-
-  // 1. Central Floating Toon Sanctuary Island (flush at y = 0.0 for the Chessboard & Braziers)
-  const mainGrassDiscGeo = new THREE.CylinderGeometry(10.6, 11.2, 0.56, 24);
-  const mainGrassDisc = addToonMesh(group, mainGrassDiscGeo, grassMat, 1.028, 18);
-  mainGrassDisc.position.set(0, -0.28, 0);
-
-  const mainRockConeGeo = new THREE.ConeGeometry(10.4, 7.5, 10);
-  mainRockConeGeo.rotateX(Math.PI);
-  const mainRockCone = addToonMesh(group, mainRockConeGeo, rockTerracottaMat, 1.032, 15);
-  mainRockCone.position.set(0, -4.25, 0);
-
-  // Inner Golden-Rimmed Comic Cobblestone Plaza Ring
-  const innerPlazaGeo = new THREE.CylinderGeometry(8.4, 8.6, 0.08, 24);
-  const innerPlaza = addToonMesh(group, innerPlazaGeo, castleCreamMat, 1.025, 18);
-  innerPlaza.position.set(0, -0.02, 0);
-
-  for (const rad of [5.1, 8.45, 10.45]) {
-    const ringGeo = new THREE.TorusGeometry(rad, 0.09, 10, 48);
-    const ring = addToonMesh(group, ringGeo, toonGoldMat, 1.055, 24);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.02;
+    const seam = new THREE.Mesh(inkSeamZGeo, inkLineMat);
+    seam.position.set(px + 0.54, 0.005, 0);
+    seam.raycast = () => {};
+    group.add(seam);
   }
 
-  // Perimeter Storybook Guard Turrets & Bubbly Toon Trees around the Central Island (r = 9.4m)
-  for (let i = 0; i < 8; i++) {
-    const ang = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    const r = 9.45;
-    const px = Math.cos(ang) * r;
-    const pz = Math.sin(ang) * r;
-
-    if (i % 2 === 0) {
-      const turretGroup = new THREE.Group();
-      turretGroup.position.set(px, 0, pz);
-      turretGroup.lookAt(0, 0, 0);
-
-      const towerGeo = new THREE.CylinderGeometry(0.62, 0.52, 2.2, 10);
-      const tower = addToonMesh(turretGroup, towerGeo, castleCreamMat, 1.055, 20);
-      tower.position.y = 1.1;
-
-      const coneGeo = new THREE.ConeGeometry(0.84, 1.25, 10);
-      const cone = addToonMesh(
-        turretGroup,
-        coneGeo,
-        i % 4 === 0 ? roofRoyalBlueMat : roofBerryRedMat,
-        1.06,
-        20
-      );
-      cone.position.y = 2.82;
-
-      const finialGeo = new THREE.OctahedronGeometry(0.18, 0);
-      const finial = addToonMesh(turretGroup, finialGeo, toonGoldMat, 1.08, 15);
-      finial.position.y = 3.62;
-
-      group.add(turretGroup);
-    } else {
-      const tree = buildToonTree(0.95);
-      tree.position.set(px, -0.02, pz);
-      tree.rotation.y = i * 1.1;
-      group.add(tree);
-    }
+  // Cross-plank comic joint lines along Z
+  const inkSeamXGeo = new THREE.BoxGeometry(ROOM_HALF_W * 2, 0.015, 0.05);
+  for (let iz = -8; iz <= 8; iz++) {
+    if (iz === 0) continue;
+    const crossSeam = new THREE.Mesh(inkSeamXGeo, inkLineMat);
+    crossSeam.position.set(0, 0.005, iz * 2.15);
+    crossSeam.raycast = () => {};
+    group.add(crossSeam);
   }
 
-  // 2. Eight Orbiting Floating Toon Islands with Castles, Rotating Windmills & Waterfalls
-  const floatingToonIslands = [];
-  const spinningWindmills = [];
+  // Central Cozy Woven Parlor Rug under the Chessboard Altar (r = 5.15m)
+  const outerRugGeo = new THREE.CylinderGeometry(5.15, 5.22, 0.028, 36);
+  const outerRug = addToonMesh(group, outerRugGeo, rugBerryMat, 1.025, false);
+  outerRug.position.set(0, 0.012, 0);
 
-  for (let i = 0; i < 8; i++) {
-    const ang = (i / 8) * Math.PI * 2;
-    const dist = 17.5 + (i % 2) * 3.8;
-    const baseY = -0.25 + (i % 3) * 1.35;
+  const innerRugGeo = new THREE.CylinderGeometry(4.35, 4.40, 0.032, 36);
+  const innerRug = addToonMesh(group, innerRugGeo, rugCreamMat, 1.022, false);
+  innerRug.position.set(0, 0.016, 0);
 
-    const islGroup = new THREE.Group();
-    islGroup.position.set(Math.cos(ang) * dist, baseY, Math.sin(ang) * dist);
-    islGroup.lookAt(0, baseY, 0);
+  const rugGoldRingGeo = new THREE.TorusGeometry(5.16, 0.075, 10, 48);
+  const rugGoldRing = addToonMesh(group, rugGoldRingGeo, toonGoldMat, 1.05, false);
+  rugGoldRing.rotation.x = Math.PI / 2;
+  rugGoldRing.position.set(0, 0.028, 0);
 
-    const islScale = 1.0 + (i % 2) * 0.22;
-    const capGeo = new THREE.CylinderGeometry(2.6 * islScale, 2.85 * islScale, 0.65 * islScale, 10);
-    const cap = addToonMesh(islGroup, capGeo, grassMat, 1.045, 18);
-    cap.position.y = -0.32 * islScale;
+  // --------------------------------------------------------------------------
+  // 2. Four Enclosed Box Walls (West, East, North, South) & Timber Ceiling Box
+  // --------------------------------------------------------------------------
+  const sideWallGeo = new THREE.BoxGeometry(0.45, ROOM_H, ROOM_HALF_L * 2 + 0.8);
+  for (const sx of [-1, 1]) {
+    const sideWall = addToonMesh(group, sideWallGeo, wallPlasterMat, 1.015, false);
+    sideWall.position.set(sx * (ROOM_HALF_W + 0.22), ROOM_H * 0.5, 0);
 
-    const cragGeo = new THREE.ConeGeometry(2.65 * islScale, 4.2 * islScale, 8);
-    cragGeo.rotateX(Math.PI);
-    const crag = addToonMesh(islGroup, cragGeo, rockTerracottaMat, 1.048, 15);
-    crag.position.y = -2.72 * islScale;
+    // Lower Honey-Timber Wainscoting along East & West walls
+    const wainscotGeo = new THREE.BoxGeometry(0.18, 2.35, ROOM_HALF_L * 2 + 0.2);
+    const wainscot = addToonMesh(group, wainscotGeo, wainscotWoodMat, 1.025, false);
+    wainscot.position.set(sx * (ROOM_HALF_W - 0.05), 1.175, 0);
 
-    // Cartoon Waterfall Ribbon & Puffy Foam Cloud at Top
-    if (i % 2 === 0) {
-      const fallGeo = new THREE.BoxGeometry(0.85 * islScale, 4.8 * islScale, 0.12);
-      const fall = addToonMesh(islGroup, fallGeo, waterfallCyanMat, 1.04, 18);
-      fall.position.set(0, -2.5 * islScale, 2.55 * islScale);
+    // Golden Chair-Rail Molding & Baseboard Skirting with Black Ink Outlines
+    const railGeo = new THREE.BoxGeometry(0.26, 0.18, ROOM_HALF_L * 2 + 0.2);
+    const chairRail = addToonMesh(group, railGeo, toonGoldMat, 1.04, false);
+    chairRail.position.set(sx * (ROOM_HALF_W - 0.08), 2.38, 0);
 
-      const foam = buildPuffyToonCloud(0.42 * islScale);
-      foam.position.set(0, -0.1 * islScale, 2.58 * islScale);
-      islGroup.add(foam);
-    }
+    const baseboard = addToonMesh(group, railGeo, darkTimberMat, 1.04, false);
+    baseboard.position.set(sx * (ROOM_HALF_W - 0.08), 0.12, 0);
 
-    if (i % 2 === 0) {
-      // Splayed Fairytale Cartoon Castle Keep + Companion Tree
-      const castle = buildToonCastleKeep(0.92 * islScale, i % 4 === 2);
-      castle.position.set(0, 0, -0.25 * islScale);
-      islGroup.add(castle);
+    // Upper Crown Cornice Beam
+    const corniceGeo = new THREE.BoxGeometry(0.38, 0.34, ROOM_HALF_L * 2 + 0.2);
+    const cornice = addToonMesh(group, corniceGeo, darkTimberMat, 1.035, false);
+    cornice.position.set(sx * (ROOM_HALF_W - 0.12), ROOM_H - 0.22, 0);
+  }
 
-      const sideTree = buildToonTree(0.78 * islScale);
-      sideTree.position.set(1.55 * islScale, 0, 0.65 * islScale);
-      islGroup.add(sideTree);
-    } else {
-      // Storybook Toon Windmill with Spinning Rotor Blades + Twin Trees
-      const millGroup = new THREE.Group();
-      const millTowerGeo = new THREE.CylinderGeometry(0.72 * islScale, 1.05 * islScale, 2.6 * islScale, 10);
-      const millTower = addToonMesh(millGroup, millTowerGeo, castleCreamMat, 1.05, 20);
-      millTower.position.y = 1.3 * islScale;
+  const endWallGeo = new THREE.BoxGeometry(ROOM_HALF_W * 2 + 0.8, ROOM_H, 0.45);
+  for (const sz of [-1, 1]) {
+    const endWall = addToonMesh(group, endWallGeo, wallPlasterMat, 1.015, false);
+    endWall.position.set(0, ROOM_H * 0.5, sz * (ROOM_HALF_L + 0.22));
 
-      const millRoofGeo = new THREE.ConeGeometry(0.98 * islScale, 1.15 * islScale, 10);
-      const millRoof = addToonMesh(millGroup, millRoofGeo, roofBerryRedMat, 1.055, 20);
-      millRoof.position.y = 3.15 * islScale;
+    const endWainscotGeo = new THREE.BoxGeometry(ROOM_HALF_W * 2 + 0.2, 2.35, 0.18);
+    const endWainscot = addToonMesh(group, endWainscotGeo, wainscotWoodMat, 1.025, false);
+    endWainscot.position.set(0, 1.175, sz * (ROOM_HALF_L - 0.05));
 
-      const rotorHub = new THREE.Group();
-      rotorHub.position.set(0, 2.05 * islScale, 0.88 * islScale);
-      const hubKnobGeo = new THREE.CylinderGeometry(0.22 * islScale, 0.22 * islScale, 0.32 * islScale, 10);
-      hubKnobGeo.rotateX(Math.PI / 2);
-      addToonMesh(rotorHub, hubKnobGeo, toonGoldMat, 1.07, 20);
+    const endRailGeo = new THREE.BoxGeometry(ROOM_HALF_W * 2 + 0.2, 0.18, 0.26);
+    const endRail = addToonMesh(group, endRailGeo, toonGoldMat, 1.04, false);
+    endRail.position.set(0, 2.38, sz * (ROOM_HALF_L - 0.08));
+  }
 
-      const bladeGeo = new THREE.BoxGeometry(0.32 * islScale, 2.85 * islScale, 0.08 * islScale);
-      const b1 = addToonMesh(rotorHub, bladeGeo, toonTimberMat, 1.06, 18);
-      const b2 = addToonMesh(rotorHub, bladeGeo, toonTimberMat, 1.06, 18);
-      b2.rotation.z = Math.PI / 2;
+  // Enclosed Cartoon Ceiling Lid & Central Timber Ridge Beam
+  const ceilingSlabGeo = new THREE.BoxGeometry(ROOM_HALF_W * 2 + 0.9, 0.42, ROOM_HALF_L * 2 + 0.9);
+  const ceilingSlab = addToonMesh(group, ceilingSlabGeo, ceilingCreamMat, 1.015, false);
+  ceilingSlab.position.set(0, ROOM_H + 0.18, 0);
 
-      millGroup.add(rotorHub);
-      islGroup.add(millGroup);
-      spinningWindmills.push({ mesh: rotorHub, speed: 1.35 + (i % 3) * 0.2 });
+  const ridgeBeamGeo = new THREE.BoxGeometry(0.48, 0.44, ROOM_HALF_L * 2 + 0.2);
+  const ridgeBeam = addToonMesh(group, ridgeBeamGeo, darkTimberMat, 1.04, false);
+  ridgeBeam.position.set(0, ROOM_H - 0.18, 0);
 
-      for (const sx of [-1, 1]) {
-        const t = buildToonTree(0.72 * islScale);
-        t.position.set(sx * 1.48 * islScale, 0, 0.55 * islScale);
-        islGroup.add(t);
+  // Cross-Nave Timber Ceiling Rafters & Sloped Eave Braces
+  const rafterZPositions = [-16.65, -11.85, -6.85, 0.0, 6.85, 11.85, 16.65];
+  const crossRafterGeo = new THREE.BoxGeometry(ROOM_HALF_W * 2, 0.36, 0.38);
+  const bossMedallionGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.16, 12);
+  for (const rz of rafterZPositions) {
+    const rafter = addToonMesh(group, crossRafterGeo, darkTimberMat, 1.04, false);
+    rafter.position.set(0, ROOM_H - 0.20, rz);
+
+    const boss = addToonMesh(group, bossMedallionGeo, toonGoldMat, 1.06, false);
+    boss.position.set(0, ROOM_H - 0.36, rz);
+  }
+
+  // --------------------------------------------------------------------------
+  // 3. Twelve Cartoon Timber & Stone Parlor Columns (Matching CATHEDRAL_COLUMN_ROWS)
+  // --------------------------------------------------------------------------
+  const columnRows = [
+    { z: -16.65, xAbs: 4.25 },
+    { z: -11.85, xAbs: 4.25 },
+    { z: -6.85, xAbs: 4.65 },
+    { z: 6.85, xAbs: 4.65 },
+    { z: 11.85, xAbs: 4.25 },
+    { z: 16.65, xAbs: 4.25 }
+  ];
+
+  const colPlinthGeo = new THREE.CylinderGeometry(0.58, 0.66, 0.72, 8);
+  const colShaftGeo = new THREE.CylinderGeometry(0.42, 0.46, 7.65, 8);
+  const colCapitalGeo = new THREE.CylinderGeometry(0.66, 0.44, 0.56, 8);
+  const colGoldBandGeo = new THREE.TorusGeometry(0.46, 0.065, 8, 20);
+  const sconceBracketGeo = new THREE.BoxGeometry(0.12, 0.12, 0.38);
+  const sconceLanternGeo = new THREE.OctahedronGeometry(0.20, 0);
+
+  for (const row of columnRows) {
+    for (const sx of [-1, 1]) {
+      const colGroup = new THREE.Group();
+      colGroup.position.set(sx * row.xAbs, 0, row.z);
+
+      const plinth = addToonMesh(colGroup, colPlinthGeo, stoneHearthMat, 1.05, false);
+      plinth.position.y = 0.36;
+
+      const shaft = addToonMesh(colGroup, colShaftGeo, wainscotWoodMat, 1.045, false);
+      shaft.position.y = 4.52;
+
+      const capital = addToonMesh(colGroup, colCapitalGeo, stoneHearthMat, 1.05, false);
+      capital.position.y = 8.62;
+
+      for (const by of [0.74, 2.65, 6.45, 8.32]) {
+        const band = addToonMesh(colGroup, colGoldBandGeo, toonGoldMat, 1.06, false);
+        band.rotation.x = Math.PI / 2;
+        band.position.y = by;
       }
+
+      // Cozy Glowing Lantern Sconce facing the center aisle
+      const bracket = addToonMesh(colGroup, sconceBracketGeo, darkTimberMat, 1.06, false);
+      bracket.position.set(-sx * 0.52, 3.15, 0);
+      bracket.rotation.y = Math.PI / 2;
+
+      const lantern = addToonMesh(colGroup, sconceLanternGeo, candleFlameMat, 1.08, false);
+      lantern.position.set(-sx * 0.66, 3.32, 0);
+
+      group.add(colGroup);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // 4. Sunlit Cartoon Arched Windows with Puffy Clouds & Cozy Curtains (East/West)
+  // --------------------------------------------------------------------------
+  const winFrameGeo = new THREE.BoxGeometry(0.22, 3.4, 2.25);
+  const winPaneGeo = new THREE.BoxGeometry(0.08, 3.0, 1.85);
+  const winMullionVGeo = new THREE.BoxGeometry(0.14, 3.05, 0.09);
+  const winMullionHGeo = new THREE.BoxGeometry(0.14, 0.09, 1.88);
+  const curtainDrapeGeo = new THREE.CylinderGeometry(0.18, 0.28, 3.55, 8);
+  const cloudPuffGeo = new THREE.SphereGeometry(0.28, 10, 8);
+
+  const windowZList = [-14.25, -9.35, 0.0, 9.35, 14.25];
+  for (const sx of [-1, 1]) {
+    for (let wi = 0; wi < windowZList.length; wi++) {
+      const wz = windowZList[wi];
+      const winGroup = new THREE.Group();
+      winGroup.position.set(sx * (ROOM_HALF_W - 0.06), 5.15, wz);
+
+      addToonMesh(winGroup, winFrameGeo, darkTimberMat, 1.045, false);
+      const paneMat = wi === 2 ? windowSunMat : windowSkyMat;
+      addToonMesh(winGroup, winPaneGeo, paneMat, 1.0, false);
+
+      // Comic window mullions
+      addToonMesh(winGroup, winMullionVGeo, darkTimberMat, 1.04, false);
+      const hBar = addToonMesh(winGroup, winMullionHGeo, darkTimberMat, 1.04, false);
+      hBar.position.y = 0.45;
+
+      // Miniature Puffy Outlined Cartoon Cloud silhouetted inside the window
+      const puff1 = addToonMesh(winGroup, cloudPuffGeo, cloudWhiteMat, 1.07, false);
+      puff1.position.set(-sx * 0.05, -0.35, -0.22);
+      const puff2 = addToonMesh(winGroup, cloudPuffGeo, cloudWhiteMat, 1.07, false);
+      puff2.scale.setScalar(0.78);
+      puff2.position.set(-sx * 0.05, -0.42, 0.18);
+
+      // Flanking Storybook Curtains
+      const cMat = (wi + (sx > 0 ? 1 : 0)) % 2 === 0 ? curtainBlueMat : curtainRedMat;
+      for (const cz of [-1.18, 1.18]) {
+        const drape = addToonMesh(winGroup, curtainDrapeGeo, cMat, 1.05, false);
+        drape.position.set(-sx * 0.12, -0.05, cz);
+      }
+
+      group.add(winGroup);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // 5. North & South Feature Walls: Storybook Hearth Fireplace + Rose Window & Grand Doors
+  // --------------------------------------------------------------------------
+  // North Wall (Z = -18.30): Cozy Cartoon Fireplace Hearth & Glowing Rose Window
+  const hearthGroup = new THREE.Group();
+  hearthGroup.position.set(0, 0, -ROOM_HALF_L + 0.25);
+
+  const chimney = addToonMesh(
+    hearthGroup,
+    new THREE.BoxGeometry(4.4, 8.8, 0.75),
+    stoneHearthMat,
+    1.03,
+    false
+  );
+  chimney.position.set(0, 4.4, 0);
+
+  const mantelBeam = addToonMesh(
+    hearthGroup,
+    new THREE.BoxGeometry(5.1, 0.42, 1.05),
+    darkTimberMat,
+    1.045,
+    false
+  );
+  mantelBeam.position.set(0, 3.25, 0.15);
+
+  const fireboxVoid = new THREE.Mesh(
+    new THREE.BoxGeometry(2.65, 2.45, 0.65),
+    inkLineMat
+  );
+  fireboxVoid.position.set(0, 1.25, 0.16);
+  hearthGroup.add(fireboxVoid);
+
+  // Stylized Cel-Shaded Cartoon Hearth Flames
+  for (let fi = -1; fi <= 1; fi++) {
+    const fCone = addToonMesh(
+      hearthGroup,
+      new THREE.ConeGeometry(0.42 - Math.abs(fi) * 0.08, 1.25 - Math.abs(fi) * 0.22, 8),
+      fi === 0 ? windowSunMat : hearthFireOuterMat,
+      1.06,
+      false
+    );
+    fCone.position.set(fi * 0.55, 0.72, 0.35);
+  }
+
+  // North Cartoon Rose Window above the Mantel
+  const roseRing = addToonMesh(
+    hearthGroup,
+    new THREE.TorusGeometry(1.75, 0.18, 10, 32),
+    toonGoldMat,
+    1.05,
+    false
+  );
+  roseRing.position.set(0, 6.25, 0.42);
+
+  const roseDisc = addToonMesh(
+    hearthGroup,
+    new THREE.CylinderGeometry(1.65, 1.65, 0.10, 24),
+    windowSunMat,
+    1.0,
+    false
+  );
+  roseDisc.rotation.x = Math.PI / 2;
+  roseDisc.position.set(0, 6.25, 0.38);
+  group.add(hearthGroup);
+
+  // South Wall (Z = +18.30): Grand Cartoon Double Parlor Doors & Sunlit Fanlight
+  const southDoorGroup = new THREE.Group();
+  southDoorGroup.position.set(0, 0, ROOM_HALF_L - 0.25);
+
+  const doorFrame = addToonMesh(
+    southDoorGroup,
+    new THREE.BoxGeometry(3.8, 5.2, 0.48),
+    darkTimberMat,
+    1.04,
+    false
+  );
+  doorFrame.position.set(0, 2.6, 0);
+
+  const doorLeafGeo = new THREE.BoxGeometry(1.55, 4.65, 0.26);
+  const knockerGeo = new THREE.TorusGeometry(0.18, 0.045, 8, 18);
+  for (const sx of [-1, 1]) {
+    const leaf = addToonMesh(southDoorGroup, doorLeafGeo, wainscotPanelMat, 1.04, false);
+    leaf.position.set(sx * 0.82, 2.38, -0.14);
+
+    const knocker = addToonMesh(southDoorGroup, knockerGeo, toonGoldMat, 1.06, false);
+    knocker.position.set(sx * 0.36, 2.15, -0.30);
+  }
+
+  const southRose = addToonMesh(
+    southDoorGroup,
+    new THREE.CylinderGeometry(1.55, 1.55, 0.12, 24),
+    windowSkyMat,
+    1.05,
+    false
+  );
+  southRose.rotation.x = Math.PI / 2;
+  southRose.position.set(0, 6.65, -0.18);
+  group.add(southDoorGroup);
+
+  // --------------------------------------------------------------------------
+  // 6. Cozy Cartoon Parlor Bookcases, Potted Toon Shrubs & Swaying Chandeliers
+  // --------------------------------------------------------------------------
+  const bookcaseGeo = new THREE.BoxGeometry(0.68, 3.85, 2.35);
+  const bookGeo = new THREE.BoxGeometry(0.38, 0.52, 0.18);
+  const bookMats = [curtainRedMat, curtainBlueMat, foliageGreenMat, toonGoldMat];
+
+  for (const sx of [-1, 1]) {
+    for (const bz of [-4.25, 4.25]) {
+      const bcGroup = new THREE.Group();
+      bcGroup.position.set(sx * (ROOM_HALF_W - 0.42), 0, bz);
+
+      const caseMesh = addToonMesh(bcGroup, bookcaseGeo, darkTimberMat, 1.045, false);
+      caseMesh.position.y = 1.925;
+
+      // Colorful chunky cartoon spellbooks along 3 shelf tiers
+      for (let tier = 0; tier < 3; tier++) {
+        const sy = 0.95 + tier * 1.05;
+        for (let bi = -3; bi <= 3; bi++) {
+          const bMat = bookMats[Math.abs(bi + tier) % bookMats.length];
+          const book = addToonMesh(bcGroup, bookGeo, bMat, 1.06, false);
+          book.position.set(-sx * 0.22, sy, bi * 0.26);
+          if (bi === 2) book.rotation.x = 0.22;
+        }
+      }
+
+      // Potted Cartoon Shrub beside each bookcase
+      const pot = addToonMesh(
+        bcGroup,
+        new THREE.CylinderGeometry(0.34, 0.24, 0.52, 10),
+        potTerracottaMat,
+        1.06,
+        false
+      );
+      pot.position.set(-sx * 0.15, 0.26, 1.58);
+
+      const bush1 = addToonMesh(
+        bcGroup,
+        new THREE.DodecahedronGeometry(0.42, 0),
+        foliageGreenMat,
+        1.06,
+        false
+      );
+      bush1.position.set(-sx * 0.15, 0.72, 1.58);
+
+      const bush2 = addToonMesh(
+        bcGroup,
+        new THREE.DodecahedronGeometry(0.30, 0),
+        foliageBrightMat,
+        1.06,
+        false
+      );
+      bush2.position.set(-sx * 0.15, 1.08, 1.58);
+
+      group.add(bcGroup);
+    }
+  }
+
+  // Two Overhead Storybook Wheel Chandeliers with gentle pendulum sway
+  const swayingChandeliers = [];
+  const chanWheelGeo = new THREE.TorusGeometry(1.65, 0.12, 10, 28);
+  const chanChainGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.1, 8);
+  const chanCandleGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.34, 8);
+  const chanFlameGeo = new THREE.ConeGeometry(0.09, 0.24, 7);
+
+  for (const [idx, cz] of [-5.25, 5.25].entries()) {
+    const chanPivot = new THREE.Group();
+    chanPivot.position.set(0, ROOM_H - 0.25, cz);
+
+    const chain = addToonMesh(chanPivot, chanChainGeo, darkTimberMat, 1.05, false);
+    chain.position.y = -1.05;
+
+    const wheel = addToonMesh(chanPivot, chanWheelGeo, toonGoldMat, 1.05, false);
+    wheel.rotation.x = Math.PI / 2;
+    wheel.position.y = -2.1;
+
+    for (let ci = 0; ci < 8; ci++) {
+      const ang = (ci / 8) * Math.PI * 2;
+      const cx = Math.cos(ang) * 1.65;
+      const czz = Math.sin(ang) * 1.65;
+      const candle = addToonMesh(chanPivot, chanCandleGeo, cloudWhiteMat, 1.06, false);
+      candle.position.set(cx, -1.90, czz);
+
+      const flame = addToonMesh(chanPivot, chanFlameGeo, candleFlameMat, 1.06, false);
+      flame.position.set(cx, -1.62, czz);
     }
 
-    group.add(islGroup);
-    floatingToonIslands.push({
-      mesh: islGroup,
-      baseY,
-      speed: 1.15 + (i % 3) * 0.22,
-      phase: i * 0.85
+    group.add(chanPivot);
+    swayingChandeliers.push({
+      mesh: chanPivot,
+      phase: idx * 1.5,
+      speed: 1.15
     });
   }
 
-  // 3. Twelve Drifting Puffy Outlined Cartoon Clouds & Floating Golden Comic Stars
-  const driftingToonClouds = [];
-  for (let i = 0; i < 12; i++) {
-    const cloud = buildPuffyToonCloud(0.95 + (i % 3) * 0.32);
-    const orbitR = 14.5 + (i % 4) * 4.2;
-    const baseY = 4.2 + (i % 4) * 1.85;
-    const ang = (i / 12) * Math.PI * 2;
-    cloud.position.set(Math.cos(ang) * orbitR, baseY, Math.sin(ang) * orbitR);
-    cloud.lookAt(0, baseY, 0);
-    group.add(cloud);
-
-    driftingToonClouds.push({
-      mesh: cloud,
-      orbitR,
+  // Floating Golden Comic Star-Gems inside the Parlor Atrium
+  const floatingParlorStars = [];
+  const starGemGeo = new THREE.OctahedronGeometry(0.16, 0);
+  for (let i = 0; i < 10; i++) {
+    const ang = (i / 10) * Math.PI * 2;
+    const rad = 4.8 + (i % 2) * 0.9;
+    const baseY = 3.2 + (i % 3) * 1.15;
+    const star = addToonMesh(group, starGemGeo, toonGoldMat, 1.08, false);
+    star.position.set(Math.cos(ang) * rad, baseY, Math.sin(ang) * (rad * 1.8));
+    floatingParlorStars.push({
+      mesh: star,
       baseY,
-      speed: (i % 2 === 0 ? 1 : -1) * (0.045 + (i % 3) * 0.015),
-      phase: i * 0.95
+      speed: 1.6 + (i % 3) * 0.25,
+      phase: i * 0.75
     });
   }
 
   group.userData = {
-    floatingToonIslands,
-    spinningWindmills,
-    driftingToonClouds
+    swayingChandeliers,
+    floatingParlorStars
   };
 
   return group;
@@ -1931,6 +2100,11 @@ export function createWorldSceneryManager(scene) {
     }
 
     rootGroup.visible = true;
+    // Hide open-world sky dome & horizon sea when inside the enclosed Cozy Cartoon Parlor Box
+    const isEnclosedCartoonBox = id === 'toon_sky_kingdom';
+    skyDomeMesh.visible = !isEnclosedCartoonBox;
+    horizonSeaMesh.visible = !isEnclosedCartoonBox;
+
     celestialGroup.visible = id === 'celestial_observatory';
     dragonCitadelGroup.visible = id === 'dragon_sky_citadel';
     titanForgeGroup.visible = id === 'volcanic_titan_forge';
@@ -1961,7 +2135,7 @@ export function createWorldSceneryManager(scene) {
       skyDomeMat.uniforms.uMode.value = 4;
       horizonSeaMat.uniforms.uMode.value = 4;
       weather.mat.color.setHex(0xffbe0b);
-      weather.mat.size = 0.20;
+      weather.mat.size = 0.14;
     }
   }
 
@@ -1971,27 +2145,19 @@ export function createWorldSceneryManager(scene) {
     skyDomeMat.uniforms.uTime.value = elapsedTotal;
     horizonSeaMat.uniforms.uTime.value = elapsedTotal;
 
-    // 0. Animate Floating Toon Kingdom (Bobbing Toon Islands, Spinning Windmills & Drifting Outlined Clouds)
+    // 0. Animate Cozy Cartoon Parlor Box (Swaying Storybook Chandeliers & Bobbing Golden Star-Gems)
     if (toonKingdomGroup.visible) {
-      const { floatingToonIslands, spinningWindmills, driftingToonClouds } = toonKingdomGroup.userData;
-      if (floatingToonIslands) {
-        for (const fi of floatingToonIslands) {
-          fi.mesh.position.y = fi.baseY + Math.sin(elapsedTotal * fi.speed + fi.phase) * 0.42;
+      const { swayingChandeliers, floatingParlorStars } = toonKingdomGroup.userData;
+      if (swayingChandeliers) {
+        for (const ch of swayingChandeliers) {
+          ch.mesh.rotation.z = Math.sin(elapsedTotal * ch.speed + ch.phase) * 0.032;
+          ch.mesh.rotation.x = Math.cos(elapsedTotal * (ch.speed * 0.8) + ch.phase) * 0.022;
         }
       }
-      if (spinningWindmills) {
-        for (const wm of spinningWindmills) {
-          wm.mesh.rotation.z += dt * wm.speed;
-        }
-      }
-      if (driftingToonClouds) {
-        for (const cl of driftingToonClouds) {
-          const theta = elapsedTotal * cl.speed + cl.phase;
-          const x = Math.cos(theta) * cl.orbitR;
-          const z = Math.sin(theta) * cl.orbitR;
-          const y = cl.baseY + Math.sin(elapsedTotal * 1.1 + cl.phase) * 0.35;
-          cl.mesh.position.set(x, y, z);
-          cl.mesh.lookAt(0, y, 0);
+      if (floatingParlorStars) {
+        for (const st of floatingParlorStars) {
+          st.mesh.position.y = st.baseY + Math.sin(elapsedTotal * st.speed + st.phase) * 0.18;
+          st.mesh.rotation.y += dt * 1.1;
         }
       }
     }

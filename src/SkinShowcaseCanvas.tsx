@@ -88,14 +88,10 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
       grad.addColorStop(0.92, '#d9480f');
       grad.addColorStop(1.0, '#1a0402');
     } else if (scenery.id === 'toon_sky_kingdom') {
-      grad.addColorStop(0.0, '#1d70b8');
-      grad.addColorStop(0.32, '#1d70b8');
-      grad.addColorStop(0.33, '#48cae4');
-      grad.addColorStop(0.62, '#48cae4');
-      grad.addColorStop(0.63, '#90e0ef');
-      grad.addColorStop(0.84, '#90e0ef');
-      grad.addColorStop(0.85, '#ffd166');
-      grad.addColorStop(1.0, '#ffbe0b');
+      grad.addColorStop(0.0, '#fff4d6');
+      grad.addColorStop(0.45, '#fde2ae');
+      grad.addColorStop(0.78, '#e9b872');
+      grad.addColorStop(1.0, '#b57c43');
     } else if (scenery.id === 'haunted_blood_graveyard') {
       grad.addColorStop(0.0, '#06020c');
       grad.addColorStop(0.38, '#1d082b');
@@ -103,34 +99,24 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
       grad.addColorStop(0.90, '#c2410c');
       grad.addColorStop(1.0, '#0f0517');
     } else {
-      grad.addColorStop(0.0, '#04060c');
-      grad.addColorStop(0.45, '#10182b');
-      grad.addColorStop(0.78, '#261d17');
-      grad.addColorStop(1.0, '#06080f');
+      grad.addColorStop(0.0, '#fff7e6');
+      grad.addColorStop(0.45, '#f2dfc2');
+      grad.addColorStop(0.78, '#dfc49c');
+      grad.addColorStop(1.0, '#c8a679');
     }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (scenery.id === 'toon_sky_kingdom') {
-      // Crisp comic ink step lines across the cel-shaded sky dome
-      ctx.strokeStyle = 'rgba(5, 5, 8, 0.35)';
+      // Warm comic ink wainscoting lines across the parlor backdrop
+      ctx.strokeStyle = 'rgba(20, 12, 6, 0.25)';
       ctx.lineWidth = 2;
-      for (const yRatio of [0.325, 0.625, 0.845]) {
+      for (const yRatio of [0.35, 0.68]) {
         ctx.beginPath();
         ctx.moveTo(0, canvas.height * yRatio);
         ctx.lineTo(canvas.width, canvas.height * yRatio);
         ctx.stroke();
       }
-      // Cartoon Sun with Bold Black Comic Ring
-      const sunX = canvas.width * 0.72;
-      const sunY = canvas.height * 0.26;
-      ctx.fillStyle = '#fff36b';
-      ctx.strokeStyle = '#050508';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(sunX, sunY, 26, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
     } else {
       const starCount = scenery.id === 'celestial_observatory' ? 240 : 120;
       for (let i = 0; i < starCount; i++) {
@@ -272,7 +258,7 @@ export default function SkinShowcaseCanvas({
     const height = container.clientHeight || 250;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x07090f);
+    scene.background = new THREE.Color(0xf2e4cc);
 
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
     const lookTarget = new THREE.Vector3(0, 0.65, 0);
@@ -291,22 +277,22 @@ export default function SkinShowcaseCanvas({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.shadowMap.enabled = false;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
+    renderer.toneMappingExposure = 1.28;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.HemisphereLight(0xf6efe2, 0x161925, 1.05);
+    const ambientLight = new THREE.HemisphereLight(0xfff9ed, 0x8c6f4e, 1.25);
     scene.add(ambientLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfff4d8, 2.5);
+    const keyLight = new THREE.DirectionalLight(0xfff6e0, 2.75);
     keyLight.position.set(2.8, 4.8, 3.2);
     scene.add(keyLight);
 
-    const rimLight = new THREE.PointLight(0xd4af37, 2.2, 12);
+    const rimLight = new THREE.PointLight(0xe5a93c, 2.35, 12);
     rimLight.position.set(-2.4, 2.2, -2.2);
     scene.add(rimLight);
 
-    const fillLight = new THREE.PointLight(0x68a8ff, 1.15, 10);
+    const fillLight = new THREE.PointLight(0xffe8c2, 1.35, 10);
     fillLight.position.set(2.2, 0.9, -2.0);
     scene.add(fillLight);
 
@@ -315,7 +301,7 @@ export default function SkinShowcaseCanvas({
       const pmremGen = new THREE.PMREMGenerator(renderer);
       pmremGen.compileEquirectangularShader();
       const envScene = new THREE.Scene();
-      envScene.background = new THREE.Color(0x14161f);
+      envScene.background = new THREE.Color(0x5c4832);
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
       const addLightPanel = (hex: number, intensity: number, pos: [number, number, number], scl: [number, number, number]) => {
         const m = new THREE.Mesh(
@@ -326,9 +312,9 @@ export default function SkinShowcaseCanvas({
         m.scale.set(scl[0], scl[1], scl[2]);
         envScene.add(m);
       };
-      addLightPanel(0xfff0d4, 2.6, [3, 6, 4], [5, 2, 2]);
-      addLightPanel(0xd4e4ff, 2.0, [-4, 5, -3], [4, 3, 4]);
-      addLightPanel(0xff9f38, 2.8, [-3, 1.5, 2], [2, 2, 3]);
+      addLightPanel(0xfff5de, 2.9, [3, 6, 4], [5, 2, 2]);
+      addLightPanel(0xffebc7, 2.4, [-4, 5, -3], [4, 3, 4]);
+      addLightPanel(0xffa94d, 3.0, [-3, 1.5, 2], [2, 2, 3]);
       scene.environment = pmremGen.fromScene(envScene, 0.04).texture;
       boxGeo.dispose();
       pmremGen.dispose();
@@ -1090,7 +1076,7 @@ export default function SkinShowcaseCanvas({
       const altarPlinth = new THREE.Mesh(
         new THREE.CylinderGeometry(plinthRadius, plinthRadius + 0.05, 0.08, 32),
         new THREE.MeshStandardMaterial({
-          color: scenery.id === 'toon_sky_kingdom' ? 0x52b788 : 0x10131c,
+          color: scenery.id === 'toon_sky_kingdom' ? 0xb57c43 : 0x10131c,
           roughness: scenery.id === 'toon_sky_kingdom' ? 0.45 : 0.32,
           metalness: scenery.id === 'toon_sky_kingdom' ? 0.05 : 0.65
         })
@@ -1178,105 +1164,123 @@ export default function SkinShowcaseCanvas({
           return m;
         };
 
-        const creamMat = new THREE.MeshStandardMaterial({ color: 0xfff3d1, roughness: 0.42 });
-        const blueRoofMat = new THREE.MeshStandardMaterial({ color: 0x3a86ff, roughness: 0.36 });
-        const redRoofMat = new THREE.MeshStandardMaterial({ color: 0xff4d6d, roughness: 0.36 });
+        const creamPlasterMat = new THREE.MeshStandardMaterial({ color: 0xfff4d6, roughness: 0.42 });
+        const timberMat = new THREE.MeshStandardMaterial({ color: 0x7a4924, roughness: 0.48 });
+        const skyGlassMat = new THREE.MeshStandardMaterial({
+          color: 0x72efdd,
+          emissive: 0x48cae4,
+          emissiveIntensity: 0.38,
+          roughness: 0.28
+        });
+        const redDraperyMat = new THREE.MeshStandardMaterial({ color: 0xe63946, roughness: 0.42 });
         const goldToonMat = new THREE.MeshStandardMaterial({
           color: 0xffbe0b,
           emissive: 0xfb8500,
-          emissiveIntensity: 0.3,
+          emissiveIntensity: 0.32,
           roughness: 0.3
         });
         const treeGreenMat = new THREE.MeshStandardMaterial({ color: 0x52b788, roughness: 0.45 });
-        const trunkBrownMat = new THREE.MeshStandardMaterial({ color: 0x7f4f24, roughness: 0.5 });
-        const cloudWhiteMat = new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          emissive: 0xe0fbfc,
-          emissiveIntensity: 0.22,
-          roughness: 0.35
-        });
 
-        // Rear Fairytale Cartoon Castle Keep + Twin Turrets on the Island Rim
-        const keepTower = addToonPreviewMesh(
+        // Enclosed Cutaway Parlor Back Wall & Wainscoting with Bold Black Ink Outlines
+        const backWall = addToonPreviewMesh(
           islandGroup,
-          new THREE.CylinderGeometry(0.24, 0.20, 0.62, 10),
-          creamMat,
-          1.065
+          new THREE.BoxGeometry(1.48, 0.88, 0.09),
+          creamPlasterMat,
+          1.05
         );
-        keepTower.position.set(0, 0.31, -0.78);
-        const keepRoof = addToonPreviewMesh(
-          islandGroup,
-          new THREE.ConeGeometry(0.32, 0.44, 10),
-          blueRoofMat,
-          1.065
-        );
-        keepRoof.position.set(0, 0.84, -0.78);
+        backWall.position.set(0, 0.44, -0.78);
 
+        const backWainscot = addToonPreviewMesh(
+          islandGroup,
+          new THREE.BoxGeometry(1.52, 0.28, 0.11),
+          timberMat,
+          1.05
+        );
+        backWainscot.position.set(0, 0.14, -0.77);
+
+        // Sunlit Cartoon Arched Window on the Parlor Back Wall
+        const winFrame = addToonPreviewMesh(
+          islandGroup,
+          new THREE.BoxGeometry(0.52, 0.46, 0.12),
+          timberMat,
+          1.06
+        );
+        winFrame.position.set(0, 0.56, -0.75);
+
+        const winPane = addToonPreviewMesh(
+          islandGroup,
+          new THREE.BoxGeometry(0.42, 0.36, 0.13),
+          skyGlassMat,
+          1.02
+        );
+        winPane.position.set(0, 0.56, -0.75);
+
+        // Twin Parlor Columns, Curtains, Bookcases & Potted Toon Shrubs on Left & Right Flanks
         for (const sx of [-1, 1]) {
-          const sideTurret = addToonPreviewMesh(
+          const drape = addToonPreviewMesh(
             islandGroup,
-            new THREE.CylinderGeometry(0.14, 0.12, 0.46, 10),
-            creamMat,
+            new THREE.CylinderGeometry(0.04, 0.055, 0.44, 8),
+            redDraperyMat,
             1.07
           );
-          sideTurret.position.set(sx * 0.48, 0.23, -0.68);
-          const sideRoof = addToonPreviewMesh(
-            islandGroup,
-            new THREE.ConeGeometry(0.19, 0.30, 10),
-            sx > 0 ? redRoofMat : blueRoofMat,
-            1.07
-          );
-          sideRoof.position.set(sx * 0.48, 0.61, -0.68);
+          drape.position.set(sx * 0.28, 0.56, -0.71);
 
-          // Bubbly Cel-Shaded Toon Trees on Left & Right Flanks
-          const trunk = addToonPreviewMesh(
+          const parlorCol = addToonPreviewMesh(
             islandGroup,
-            new THREE.CylinderGeometry(0.045, 0.07, 0.26, 8),
-            trunkBrownMat,
+            new THREE.CylinderGeometry(0.075, 0.085, 0.88, 12),
+            creamPlasterMat,
+            1.065
+          );
+          parlorCol.position.set(sx * 0.72, 0.44, -0.72);
+
+          const colCap = addToonPreviewMesh(
+            islandGroup,
+            new THREE.BoxGeometry(0.20, 0.08, 0.20),
+            goldToonMat,
+            1.07
+          );
+          colCap.position.set(sx * 0.72, 0.88, -0.72);
+
+          // Front Corner Parlor Columns & Potted Toon Shrubs framing the cutaway box
+          const frontCol = addToonPreviewMesh(
+            islandGroup,
+            new THREE.CylinderGeometry(0.06, 0.07, 0.62, 10),
+            timberMat,
+            1.07
+          );
+          frontCol.position.set(sx * 0.76, 0.31, 0.46);
+
+          const frontCap = addToonPreviewMesh(
+            islandGroup,
+            new THREE.SphereGeometry(0.08, 12, 10),
+            goldToonMat,
             1.08
           );
-          trunk.position.set(sx * 0.82, 0.13, 0.18);
-          const crown = addToonPreviewMesh(
+          frontCap.position.set(sx * 0.76, 0.65, 0.46);
+
+          const shrubCrown = addToonPreviewMesh(
             islandGroup,
-            new THREE.DodecahedronGeometry(0.18, 1),
+            new THREE.DodecahedronGeometry(0.14, 1),
             treeGreenMat,
             1.075
           );
-          crown.position.set(sx * 0.82, 0.34, 0.18);
+          shrubCrown.position.set(sx * 0.78, 0.16, -0.15);
         }
 
-        // 5 Orbiting Puffy Outlined Cartoon Clouds & Golden Comic Star Gems
-        for (let i = 0; i < 5; i++) {
-          const ang = (i / 5) * Math.PI * 2 + 0.3;
-          const cloudNode = new THREE.Group();
-          const puffPositions: Array<[number, number, number, number]> = [
-            [0, 0, 0, 0.18],
-            [-0.14, -0.02, 0.02, 0.13],
-            [0.14, -0.02, -0.02, 0.14],
-            [0, 0.08, 0.02, 0.12]
-          ];
-          for (const [px, py, pz, pr] of puffPositions) {
-            const pMesh = addToonPreviewMesh(
-              cloudNode,
-              new THREE.SphereGeometry(pr, 14, 12),
-              cloudWhiteMat,
-              1.085
-            );
-            pMesh.position.set(px, py, pz);
-          }
-          const starGem = addToonPreviewMesh(
-            cloudNode,
-            new THREE.OctahedronGeometry(0.075, 0),
+        // 4 Floating Golden Parlor Star-Gems inside the Parlor Room
+        for (let i = 0; i < 4; i++) {
+          const ang = (i / 4) * Math.PI * 2 + 0.45;
+          const starNode = new THREE.Group();
+          addToonPreviewMesh(
+            starNode,
+            new THREE.OctahedronGeometry(0.085, 0),
             goldToonMat,
             1.09
           );
-          starGem.position.set(0, 0.24, 0);
-
-          const baseY = 0.28 + (i % 2) * 0.24;
-          cloudNode.position.set(Math.cos(ang) * 1.48, baseY, Math.sin(ang) * 1.48);
-          cloudNode.lookAt(0, baseY, 0);
-          subjectGroup.add(cloudNode);
-          st.floatingNodes.push({ mesh: cloudNode, baseY, phase: i * 1.15 });
+          const baseY = 0.45 + (i % 2) * 0.18;
+          starNode.position.set(Math.cos(ang) * 1.18, baseY, Math.sin(ang) * 1.18);
+          subjectGroup.add(starNode);
+          st.floatingNodes.push({ mesh: starNode, baseY, phase: i * 1.25 });
         }
       } else if (scenery.id === 'celestial_observatory') {
         for (let i = 0; i < 3; i++) {
