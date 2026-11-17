@@ -778,3 +778,37 @@ export const VictoryStreakFlameVectorIcon: React.FC<IconProps & { active?: boole
   </svg>
 );
 
+/**
+ * 22. COZY SPARKLES ICON — Warm Gold & Cream Star-Burst Medallion for Live Updates
+ */
+export const SparklesVectorIcon: React.FC<IconProps> = ({ size = 20, className = '' }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="-32 -32 64 64"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={`game-vector-icon cozy-sparkles-icon ${className}`}
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient id="cozySparkleGold" x1="0" y1="-24" x2="0" y2="24" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#FFF6B3" />
+        <stop offset="55%" stopColor="#F0B429" />
+        <stop offset="100%" stopColor="#B86B11" />
+      </linearGradient>
+    </defs>
+    <path
+      d="M0 -24 C3.5 -8 8 -3.5 24 0 C8 3.5 3.5 8 0 24 C-3.5 8 -8 3.5 -24 0 C-8 -3.5 -3.5 -8 0 -24 Z"
+      fill="url(#cozySparkleGold)"
+      stroke="#5C3A16"
+      strokeWidth="2.4"
+      strokeLinejoin="round"
+    />
+    <circle cx="0" cy="0" r="4.5" fill="#FFFDF7" />
+    <circle cx="-15" cy="-14" r="3.2" fill="#FFE57F" stroke="#5C3A16" strokeWidth="1.5" />
+    <circle cx="15" cy="13" r="2.8" fill="#FFE57F" stroke="#5C3A16" strokeWidth="1.5" />
+  </svg>
+);
+
+

@@ -59,8 +59,14 @@ import {
   CozyRibbonBannerSvg,
   CozyDividerFlourishSvg,
   CozyCornerFlourishSvg,
-  VictoryStreakFlameVectorIcon
+  VictoryStreakFlameVectorIcon,
+  SparklesVectorIcon
 } from './GameVectorIcons';
+import {
+  registerGameServiceWorkerAndVersionWatcher,
+  usePWAInstall,
+  useOnlineStatus
+} from './pwaRegistration';
 
 export type TimeControlCategory = 'bullet' | 'blitz' | 'rapid';
 export type TimeControlPresetId =
@@ -584,6 +590,18 @@ export default function App() {
 
   // Bounties Toast
   const [bountyToast, setBountyToast] = useState<{ id: number; amount: number; label: string } | null>(null);
+
+  // Service Worker & 'New Version Available' Toast State
+  const [newVersionToast, setNewVersionToast] = useState<{
+    available: boolean;
+    buildId: string;
+  } | null>(null);
+  const [isRefreshingVersion, setIsRefreshingVersion] = useState(false);
+  const [versionCheckNotice, setVersionCheckNotice] = useState<string | null>(null);
+  const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
+  const swControllerRef = useRef<ReturnType<typeof registerGameServiceWorkerAndVersionWatcher> | null>(null);
+  const { isInstallable, isInstalled, isIOS, install: installPWAApp } = usePWAInstall();
+  const isOnline = useOnlineStatus();
 
   // HUD Entrance Animation Epoch (triggers fade-in + slide-down whenever match starts / board becomes active)
   const [hudEntranceEpoch, setHudEntranceEpoch] = useState(0);
@@ -1279,50 +1297,80 @@ export default function App() {
     return () => document.removeEventListener('click', handleGlobalUiClick, true);
   }, []);
 
-  // Automatic Live Update Watcher for APK & Web Clients (polls /api/version & checks on foreground resume)
+  // Service Worker Registration + Live Version Watcher on Load & Foreground Resume
+  // Triggers the 'New Version Available' toast so the user can refresh game state without a manual APK update
   useEffect(() => {
-    let initialBuildId: string | null = null;
-    let isDisposed = false;
+    const controller = registerGameServiceWorkerAndVersionWatcher((newBuildId) => {
+      setNewVersionToast({
+        available: true,
+        buildId: newBuildId
+      });
+    });
+    swControllerRef.current = controller;
 
-    const checkLiveVersion = async () => {
-      try {
-        const res = await fetch(`/api/version?t=${Date.now()}`, { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const remoteBuildId = data?.buildId ? String(data.buildId) : null;
-        if (!remoteBuildId || isDisposed) return;
-
-        if (!initialBuildId) {
-          initialBuildId = remoteBuildId;
-          return;
-        }
-
-        if (remoteBuildId !== initialBuildId) {
-          // A new update has been published on the server -> auto-refresh when on menu or between matches
-          window.location.reload();
-        }
-      } catch {
-        // Ignore transient offline network errors
-      }
+    // Expose a helper on window.wizardChess so the toast can also be triggered/tested on demand
+    (window as any).wizardChessTriggerVersionUpdateToast = (customBuildId?: string) => {
+      setNewVersionToast({
+        available: true,
+        buildId: customBuildId || String(Date.now())
+      });
     };
-
-    checkLiveVersion();
-    const intervalId = window.setInterval(checkLiveVersion, 25000);
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        checkLiveVersion();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('focus', checkLiveVersion);
 
     return () => {
-      isDisposed = true;
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('focus', checkLiveVersion);
+      controller.dispose();
+      swControllerRef.current = null;
     };
   }, []);
+
+  const handleRefreshToNewVersion = async () => {
+    if (isRefreshingVersion) return;
+    setIsRefreshingVersion(true);
+    getEngine()?.playLobbyClickSfx?.('unlock');
+    const targetBuildId = newVersionToast?.buildId || String(Date.now());
+
+    const persistStateBeforeReload = () => {
+      try {
+        saveEconomyState(economy);
+        if (currentUser) {
+          saveUserDataToCloud(
+            currentUser,
+            economy,
+            playerRating,
+            rankProgress.currentTier.id,
+            rankProgress.currentTier.numeral,
+            customProfilePhoto
+          ).catch(() => undefined);
+        }
+      } catch {
+        // Ignore storage write errors
+      }
+    };
+
+    if (swControllerRef.current) {
+      await swControllerRef.current.applyUpdateAndRefreshState(
+        targetBuildId,
+        persistStateBeforeReload
+      );
+    } else {
+      persistStateBeforeReload();
+      window.location.reload();
+    }
+  };
+
+  const handleManualCheckForUpdates = async () => {
+    getEngine()?.playLobbyClickSfx?.('card');
+    setVersionCheckNotice('Checking server & Service Worker cache for new version...');
+    const foundNew = await swControllerRef.current?.checkForUpdatesNow();
+    if (foundNew) {
+      setVersionCheckNotice('New version detected! Ready to refresh.');
+    } else {
+      setVersionCheckNotice('You are on the latest cached build — or tap below to preview the update toast.');
+      setNewVersionToast({
+        available: true,
+        buildId: String(Date.now())
+      });
+    }
+  };
 
   // Listen to engine events for Gold bounties, Matchmaking, and 1-Phone Turn Switching
   useEffect(() => {
@@ -4926,6 +4974,58 @@ export default function App() {
                     )}
                   </div>
                 </div>
+
+                {/* Live App Updates, Service Worker Asset Cache & Install Section */}
+                <div className="sanctum-settings-section" style={{ marginTop: 14 }}>
+                  <div className="sanctum-section-label">
+                    <SparklesVectorIcon size={16} />
+                    <span>Live Over-The-Air Updates &amp; Asset Cache</span>
+                  </div>
+                  <p className="sanctum-cloud-desc" style={{ marginBottom: 10 }}>
+                    3D models, audio SFX, and textures are cached locally via Service Worker. New updates stream automatically without needing a manual APK reinstall.
+                  </p>
+                  {versionCheckNotice && (
+                    <div className="sanctum-sync-feedback synced" style={{ marginBottom: 10 }}>
+                      <CloudCheckVectorIcon size={14} />
+                      <span>{versionCheckNotice}</span>
+                    </div>
+                  )}
+                  <div className="sanctum-cloud-btn-row">
+                    <button
+                      type="button"
+                      className="sanctum-action-btn save-now-btn"
+                      id="btn-check-for-updates"
+                      onClick={handleManualCheckForUpdates}
+                    >
+                      Check for Updates
+                    </button>
+                    {!isInstalled && isInstallable && (
+                      <button
+                        type="button"
+                        className="sanctum-action-btn load-save-btn"
+                        id="btn-install-pwa-app"
+                        onClick={() => installPWAApp()}
+                      >
+                        Install App to Device
+                      </button>
+                    )}
+                    {!isInstalled && !isInstallable && isIOS && (
+                      <button
+                        type="button"
+                        className="sanctum-action-btn load-save-btn"
+                        id="btn-install-ios-guide"
+                        onClick={() => setShowIOSInstallGuide((v) => !v)}
+                      >
+                        Install on iPhone / iPad
+                      </button>
+                    )}
+                  </div>
+                  {showIOSInstallGuide && (
+                    <p className="sanctum-cloud-desc" style={{ marginTop: 8 }}>
+                      Tap <strong>Share</strong> in Safari and choose <strong>Add to Home Screen</strong> to install Wizard Chess as a standalone app.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -5061,6 +5161,57 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Offline Mode Connectivity Indicator */}
+      {!isOnline && (
+        <div className="cozy-offline-indicator-banner" role="status" aria-live="polite">
+          <span className="cozy-offline-dot" aria-hidden="true" />
+          <span>Offline Mode — Playing from Service Worker Cached Assets</span>
+        </div>
+      )}
+
+      {/* 'New Version Available' Toast (Service Worker / Over-The-Air State Refresh without manual APK update) */}
+      {newVersionToast?.available && (
+        <div
+          className="cozy-version-update-toast"
+          id="new-version-available-toast"
+          role="alert"
+          aria-live="polite"
+        >
+          <div className="cozy-version-toast-icon" aria-hidden="true">
+            <SparklesVectorIcon size={24} />
+          </div>
+          <div className="cozy-version-toast-body">
+            <div className="cozy-version-toast-title">New Version Available</div>
+            <div className="cozy-version-toast-desc">
+              Updated game assets &amp; features are ready. Refresh to update your game state without a manual APK update.
+            </div>
+          </div>
+          <div className="cozy-version-toast-actions">
+            <button
+              type="button"
+              className="cozy-version-refresh-btn"
+              id="btn-refresh-new-version"
+              disabled={isRefreshingVersion}
+              onClick={handleRefreshToNewVersion}
+            >
+              {isRefreshingVersion ? 'Refreshing...' : 'Refresh Game'}
+            </button>
+            <button
+              type="button"
+              className="cozy-version-dismiss-btn"
+              id="btn-dismiss-new-version"
+              disabled={isRefreshingVersion}
+              onClick={() => {
+                getEngine()?.playLobbyClickSfx?.('close');
+                setNewVersionToast(null);
+              }}
+            >
+              Later
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid is string && request.auth.uid.size() > 0;
     }
 
     function isOwner(userId) {
@@ -22,22 +22,85 @@ service cloud.firestore {
       return resource.data;
     }
 
-    function isValidUserProfile(data) {
-      return data.userId is string && data.userId.size() <= 128 &&
-             data.userId == request.auth.uid &&
-             data.gold is number && data.gold >= 0 &&
-             data.activePieceType is string && data.activePieceType.size() <= 64 &&
-             data.wins is number && data.wins >= 0 &&
-             (!('winStreak' in data) || (data.winStreak is number && data.winStreak >= 0));
+    function isValidStringArray(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || (arr[0] is string && arr[0].size() <= 64));
     }
 
-    function isValidLeaderboardEntry(data) {
-      return data.userId is string && data.userId.size() <= 128 &&
+    // Strict validation for authenticated user game progress data
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['userId', 'gold', 'activePieceType', 'wins']) &&
+             data.keys().hasOnly([
+               'userId',
+               'displayName',
+               'email',
+               'photoURL',
+               'gold',
+               'ownedPieceTypes',
+               'activePieceType',
+               'ownedPieceSkins',
+               'activePieceSkin',
+               'ownedBoardSkins',
+               'activeBoardSkin',
+               'ownedSceneries',
+               'activeScenery',
+               'wins',
+               'winStreak',
+               'captures',
+               'totalGoldEarned',
+               'rating',
+               'rankTier',
+               'updatedAt'
+             ]) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
              data.userId == request.auth.uid &&
-             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 64 &&
+             data.userId == userId &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 256)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 250000)) &&
+             data.gold is number && data.gold >= 0 &&
+             (!('ownedPieceTypes' in data) || isValidStringArray(data.ownedPieceTypes, 50)) &&
+             data.activePieceType is string && data.activePieceType.size() > 0 && data.activePieceType.size() <= 64 &&
+             (!('ownedPieceSkins' in data) || isValidStringArray(data.ownedPieceSkins, 50)) &&
+             (!('activePieceSkin' in data) || (data.activePieceSkin is string && data.activePieceSkin.size() <= 64)) &&
+             (!('ownedBoardSkins' in data) || isValidStringArray(data.ownedBoardSkins, 50)) &&
+             (!('activeBoardSkin' in data) || (data.activeBoardSkin is string && data.activeBoardSkin.size() <= 64)) &&
+             (!('ownedSceneries' in data) || isValidStringArray(data.ownedSceneries, 50)) &&
+             (!('activeScenery' in data) || (data.activeScenery is string && data.activeScenery.size() <= 64)) &&
              data.wins is number && data.wins >= 0 &&
-             data.rating is number &&
-             data.rankTier is string && data.rankTier.size() <= 32;
+             (!('winStreak' in data) || (data.winStreak is number && data.winStreak >= 0)) &&
+             (!('captures' in data) || (data.captures is number && data.captures >= 0)) &&
+             (!('totalGoldEarned' in data) || (data.totalGoldEarned is number && data.totalGoldEarned >= 0)) &&
+             (!('rating' in data) || (data.rating is number && data.rating >= 0)) &&
+             (!('rankTier' in data) || (data.rankTier is string && data.rankTier.size() <= 32)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidLeaderboardEntry(data, userId) {
+      return data.keys().hasAll(['userId', 'displayName', 'wins', 'rating', 'rankTier']) &&
+             data.keys().hasOnly([
+               'userId',
+               'displayName',
+               'photoURL',
+               'wins',
+               'captures',
+               'rating',
+               'rankTier',
+               'rankNumeral',
+               'activePieceType',
+               'updatedAt'
+             ]) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 128 &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 250000)) &&
+             data.wins is number && data.wins >= 0 &&
+             (!('captures' in data) || (data.captures is number && data.captures >= 0)) &&
+             data.rating is number && data.rating >= 0 &&
+             data.rankTier is string && data.rankTier.size() <= 32 &&
+             (!('rankNumeral' in data) || (data.rankNumeral is string && data.rankNumeral.size() <= 16)) &&
+             (!('activePieceType' in data) || (data.activePieceType is string && data.activePieceType.size() <= 64)) &&
+             (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 
     function isValidMatchmakingTicket(data) {
@@ -60,21 +123,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Private User Profiles & Economy Progress
+    // Private User Profiles & Game Progress — strictly restricted to the authenticated owner
     match /users/{userId} {
-      allow get: if isValidId(userId) && isOwner(userId);
-      allow create: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming());
-      allow update: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming());
-      allow delete: if isValidId(userId) && isOwner(userId);
+      allow get: if isSignedIn() && isValidId(userId) && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId) && existing().userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming(), userId);
+      allow update: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming(), userId) && incoming().userId == existing().userId;
+      allow delete: if isSignedIn() && isValidId(userId) && isOwner(userId);
     }
 
-    // Public Live Leaderboard
+    // Public Live Leaderboard (writes restricted to the authenticated owner of that entry)
     match /leaderboard/{userId} {
       allow get: if isValidId(userId);
       allow list: if existing().rating is number;
-      allow create: if isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming());
-      allow update: if isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming());
-      allow delete: if isValidId(userId) && isOwner(userId);
+      allow create: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming(), userId);
+      allow update: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming(), userId) && incoming().userId == existing().userId;
+      allow delete: if isSignedIn() && isValidId(userId) && isOwner(userId);
     }
 
     // Global Cross-Device Matchmaking Queue

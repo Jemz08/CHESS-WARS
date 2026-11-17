@@ -763,6 +763,18 @@ async function startServer() {
     });
   });
 
+  app.get('/sw.js', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Service-Worker-Allowed', '/');
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    const publicSw = path.resolve(process.cwd(), 'public', 'sw.js');
+    if (fs.existsSync(publicSw)) {
+      res.sendFile(publicSw);
+      return;
+    }
+    next();
+  });
+
   // --- Vite Middleware in Development / Static Build in Production ---
   const distPath = path.resolve(process.cwd(), 'dist');
   const isProd = process.env.NODE_ENV === 'production' && fs.existsSync(distPath);
@@ -771,7 +783,11 @@ async function startServer() {
     app.use(
       express.static(distPath, {
         setHeaders: (res, filePath) => {
-          if (filePath.endsWith('index.html') || filePath.endsWith('manifest.json')) {
+          if (
+            filePath.endsWith('index.html') ||
+            filePath.endsWith('manifest.json') ||
+            filePath.endsWith('sw.js')
+          ) {
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
           }
         }
