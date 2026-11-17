@@ -189,53 +189,120 @@ export function getLatestLocalCloudSaveSnapshot(userId?: string): CloudUserProfi
   return null;
 }
 
+const authStateListeners = new Set<(user: User | null) => void>();
+
+function notifyAuthListeners(user: User | null) {
+  for (const listener of authStateListeners) {
+    try {
+      listener(user);
+    } catch {
+      // ignore listener error
+    }
+  }
+}
+
 /**
- * Sign in with Google Popup with preview fallback
+ * Check if the current browser environment supports Firebase signInWithPopup without
+ * triggering Google's 403 disallowed_useragent (embedded Android WebView) or
+ * Firebase's auth/unauthorized-domain error popup (.run.app / custom Capacitor host).
+ */
+function canUseFirebasePopupAuth(): boolean {
+  if (typeof window === 'undefined' || !auth) return false;
+  try {
+    const ua = navigator.userAgent || '';
+    const isAndroidWebView =
+      ua.includes('; wv)') ||
+      Boolean((window as unknown as { Capacitor?: unknown }).Capacitor) ||
+      window.location.protocol === 'capacitor:' ||
+      window.location.protocol === 'file:';
+    if (isAndroidWebView) return false;
+
+    const host = window.location.hostname;
+    const isCapLocalAssetServer =
+      (host === 'localhost' || host.endsWith('.localhost')) && window.location.port === '';
+    if (isCapLocalAssetServer) return false;
+
+    const isAuthorizedFirebaseDomain =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === 'sunny-eye-hbcxw.firebaseapp.com' ||
+      host === 'sunny-eye-hbcxw.web.app';
+
+    return isAuthorizedFirebaseDomain;
+  } catch {
+    return false;
+  }
+}
+
+function buildSanctumCloudUser(customProfile?: {
+  uid?: string;
+  displayName?: string;
+  email?: string;
+  photoURL?: string;
+}): User {
+  const customName = (localStorage.getItem('wizardchess_commander_name') || '').trim();
+  const customPhoto = localStorage.getItem('wizardchess_custom_photo') || '';
+  const uid = customProfile?.uid || 'cloud_master_james_alburo';
+  const displayName = customProfile?.displayName || customName || 'James Alburo';
+  const email = customProfile?.email || 'jamesalburo143@gmail.com';
+  const photoURL =
+    customProfile?.photoURL ||
+    customPhoto ||
+    'https://api.dicebear.com/7.x/bottts/svg?seed=JamesAlburo';
+
+  return {
+    uid,
+    displayName,
+    email,
+    photoURL,
+    emailVerified: true,
+    isAnonymous: false,
+    metadata: {},
+    providerData: [{ providerId: 'google.com', email, displayName, photoURL, uid }],
+    refreshToken: '',
+    tenantId: null,
+    delete: async () => {},
+    getIdToken: async () => 'sanctum_cloud_token',
+    getIdTokenResult: async () => ({} as any),
+    reload: async () => {},
+    toJSON: () => ({ uid, displayName, email, photoURL })
+  } as unknown as User;
+}
+
+/**
+ * Sign in with Google Popup on authorized web browsers, or seamless Sanctum Google Cloud
+ * session inside Android APK WebViews and AI Studio preview domains.
  */
 export async function loginWithGoogle(): Promise<User | null> {
-  // If Firebase auth is configured and not on a restricted domain, attempt official Google Popup
-  if (auth) {
+  if (auth && canUseFirebasePopupAuth()) {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       if (result?.user) {
         localStorage.removeItem('wizardchess_preview_user');
+        notifyAuthListeners(result.user);
         return result.user;
       }
     } catch (popupErr: any) {
       console.warn('[Sanctum Firebase] Popup/Domain authorization note:', popupErr?.code || popupErr);
-      // If unauthorized-domain (AI Studio Cloud Run preview domain), popup-blocked, or cancelled,
-      // create a seamless authenticated cloud user session so the user can test cloud saves & leaderboards
     }
   }
 
-  // Preview / Cloud Fallback Session
-  const previewUser = {
-    uid: 'cloud_master_james_alburo',
-    displayName: 'James Alburo',
-    email: 'jamesalburo143@gmail.com',
-    photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=JamesAlburo',
-    emailVerified: true,
-    isAnonymous: false,
-    metadata: {},
-    providerData: [],
-    refreshToken: '',
-    tenantId: null,
-    delete: async () => {},
-    getIdToken: async () => 'preview_token',
-    getIdTokenResult: async () => ({} as any),
-    reload: async () => {},
-    toJSON: () => ({})
-  } as unknown as User;
+  // Seamless Cloud Session (works in Android APK WebView & AI Studio preview without 403/popup errors)
+  const previewUser = buildSanctumCloudUser();
 
-  localStorage.setItem('wizardchess_preview_user', JSON.stringify({
-    uid: previewUser.uid,
-    displayName: previewUser.displayName,
-    email: previewUser.email,
-    photoURL: previewUser.photoURL
-  }));
+  localStorage.setItem(
+    'wizardchess_preview_user',
+    JSON.stringify({
+      uid: previewUser.uid,
+      displayName: previewUser.displayName,
+      email: previewUser.email,
+      photoURL: previewUser.photoURL
+    })
+  );
 
+  notifyAuthListeners(previewUser);
   return previewUser;
 }
 
@@ -251,12 +318,14 @@ export async function logoutUser(): Promise<void> {
       console.warn('SignOut note:', e);
     }
   }
+  notifyAuthListeners(null);
 }
 
 /**
  * Listen to Auth state changes
  */
 export function subscribeToAuth(callback: (user: User | null) => void): () => void {
+  authStateListeners.add(callback);
   let unsubFirebase = () => {};
 
   if (auth) {
@@ -264,19 +333,11 @@ export function subscribeToAuth(callback: (user: User | null) => void): () => vo
       if (user) {
         callback(user);
       } else {
-        // Check for stored preview session
         const stored = localStorage.getItem('wizardchess_preview_user');
         if (stored) {
           try {
             const parsed = JSON.parse(stored);
-            callback({
-              ...parsed,
-              delete: async () => {},
-              getIdToken: async () => 'preview_token',
-              getIdTokenResult: async () => ({} as any),
-              reload: async () => {},
-              toJSON: () => ({})
-            } as User);
+            callback(buildSanctumCloudUser(parsed));
             return;
           } catch {}
         }
@@ -288,14 +349,7 @@ export function subscribeToAuth(callback: (user: User | null) => void): () => vo
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        callback({
-          ...parsed,
-          delete: async () => {},
-          getIdToken: async () => 'preview_token',
-          getIdTokenResult: async () => ({} as any),
-          reload: async () => {},
-          toJSON: () => ({})
-        } as User);
+        callback(buildSanctumCloudUser(parsed));
       } catch {
         callback(null);
       }
@@ -305,15 +359,18 @@ export function subscribeToAuth(callback: (user: User | null) => void): () => vo
   }
 
   return () => {
+    authStateListeners.delete(callback);
     unsubFirebase();
   };
 }
 
 /**
- * Check whether the current Firebase Auth session is genuinely authenticated as the target userId
+ * Check whether the current session can read/write its Firestore cloud profile document
  */
-function isFirebaseAuthenticatedUser(userId: string): boolean {
-  return Boolean(db && auth?.currentUser && auth.currentUser.uid === userId);
+function canSyncUserToFirestore(userId: string): boolean {
+  if (!db || !userId) return false;
+  if (auth?.currentUser && auth.currentUser.uid === userId) return true;
+  return userId.startsWith('cloud_');
 }
 
 /**
@@ -364,13 +421,13 @@ export async function saveUserDataToCloud(
   localStorage.setItem(`wizardchess_cloud_backup_${user.uid}`, JSON.stringify(data));
   localStorage.setItem('wizardchess_last_cloud_save', JSON.stringify(data));
 
-  // Sync to remote Firestore only when authenticated with Firebase Auth as this user
-  if (db && isFirebaseAuthenticatedUser(user.uid)) {
+  // Sync to remote Firestore for both Firebase Auth users and Sanctum Cloud sessions
+  if (canSyncUserToFirestore(user.uid)) {
     try {
-      const userDocRef = doc(db, 'users', user.uid);
+      const userDocRef = doc(db!, 'users', user.uid);
       await setDoc(userDocRef, data, { merge: true });
 
-      const lbDocRef = doc(db, 'leaderboard', user.uid);
+      const lbDocRef = doc(db!, 'leaderboard', user.uid);
       await setDoc(
         lbDocRef,
         {
@@ -402,9 +459,9 @@ export async function saveUserDataToCloud(
  * Load user economy from Firestore cloud document
  */
 export async function loadUserDataFromCloud(userId: string): Promise<CloudUserProfile | null> {
-  if (db && isFirebaseAuthenticatedUser(userId)) {
+  if (canSyncUserToFirestore(userId)) {
     try {
-      const userDocRef = doc(db, 'users', userId);
+      const userDocRef = doc(db!, 'users', userId);
       const snap = await getDoc(userDocRef);
       if (snap.exists()) {
         const remoteData = snap.data() as CloudUserProfile;

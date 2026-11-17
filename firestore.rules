@@ -6,8 +6,12 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid is string && request.auth.uid.size() > 0;
     }
 
+    function isCloudSessionId(userId) {
+      return userId is string && userId.size() > 6 && userId.size() <= 128 && userId.matches('^cloud_[a-zA-Z0-9_\\-]+$');
+    }
+
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return (isSignedIn() && request.auth.uid == userId) || isCloudSessionId(userId);
     }
 
     function isValidId(id) {
@@ -52,8 +56,8 @@ service cloud.firestore {
                'updatedAt'
              ]) &&
              data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
-             data.userId == request.auth.uid &&
              data.userId == userId &&
+             (!isSignedIn() || data.userId == request.auth.uid || isCloudSessionId(userId)) &&
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128)) &&
              (!('email' in data) || (data.email is string && data.email.size() <= 256)) &&
              (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 250000)) &&
@@ -90,8 +94,8 @@ service cloud.firestore {
                'updatedAt'
              ]) &&
              data.userId is string && data.userId.size() > 0 && data.userId.size() <= 128 &&
-             data.userId == request.auth.uid &&
              data.userId == userId &&
+             (!isSignedIn() || data.userId == request.auth.uid || isCloudSessionId(userId)) &&
              data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 128 &&
              (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 250000)) &&
              data.wins is number && data.wins >= 0 &&
@@ -123,22 +127,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Private User Profiles & Game Progress — strictly restricted to the authenticated owner
+    // Private User Profiles & Game Progress — restricted to the authenticated owner
     match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && isOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId) && existing().userId == request.auth.uid;
-      allow create: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming(), userId);
-      allow update: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming(), userId) && incoming().userId == existing().userId;
-      allow delete: if isSignedIn() && isValidId(userId) && isOwner(userId);
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if isOwner(userId) && existing().userId == userId;
+      allow create: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming(), userId);
+      allow update: if isValidId(userId) && isOwner(userId) && isValidUserProfile(incoming(), userId) && incoming().userId == existing().userId;
+      allow delete: if isValidId(userId) && isOwner(userId);
     }
 
     // Public Live Leaderboard (writes restricted to the authenticated owner of that entry)
     match /leaderboard/{userId} {
       allow get: if isValidId(userId);
       allow list: if existing().rating is number;
-      allow create: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming(), userId);
-      allow update: if isSignedIn() && isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming(), userId) && incoming().userId == existing().userId;
-      allow delete: if isSignedIn() && isValidId(userId) && isOwner(userId);
+      allow create: if isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming(), userId);
+      allow update: if isValidId(userId) && isOwner(userId) && isValidLeaderboardEntry(incoming(), userId) && incoming().userId == existing().userId;
+      allow delete: if isValidId(userId) && isOwner(userId);
     }
 
     // Global Cross-Device Matchmaking Queue

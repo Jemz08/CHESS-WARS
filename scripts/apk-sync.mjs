@@ -11,14 +11,13 @@ try {
   const rootDir = process.cwd();
   console.log(`[Wizard Chess APK Sync] Working directory: ${rootDir}`);
 
-  // 1. Ensure root capacitor.config.json does not contain a private preview server.url
+  // 1. Ensure root capacitor.config.json does not contain a private preview server.url or external OAuth allowNavigation
   const rootCapConfigPath = resolve(rootDir, 'capacitor.config.json');
   if (existsSync(rootCapConfigPath)) {
     const capCfg = JSON.parse(readFileSync(rootCapConfigPath, 'utf8'));
     capCfg.server = capCfg.server || {};
-    if (capCfg.server.url) {
-      delete capCfg.server.url;
-    }
+    delete capCfg.server.url;
+    delete capCfg.server.allowNavigation;
     capCfg.server.hostname = 'wizardchess.localhost';
     capCfg.server.androidScheme = 'https';
     writeFileSync(rootCapConfigPath, JSON.stringify(capCfg, null, 2) + '\n', 'utf8');
@@ -60,9 +59,8 @@ try {
   if (existsSync(androidCapConfigPath)) {
     const androidCapCfg = JSON.parse(readFileSync(androidCapConfigPath, 'utf8'));
     androidCapCfg.server = androidCapCfg.server || {};
-    if (androidCapCfg.server.url) {
-      delete androidCapCfg.server.url;
-    }
+    delete androidCapCfg.server.url;
+    delete androidCapCfg.server.allowNavigation;
     androidCapCfg.server.hostname = 'wizardchess.localhost';
     androidCapCfg.server.androidScheme = 'https';
     writeFileSync(androidCapConfigPath, JSON.stringify(androidCapCfg, null, 2) + '\n', 'utf8');

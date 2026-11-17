@@ -7,12 +7,7 @@
   "server": {
     "hostname": "wizardchess.localhost",
     "androidScheme": "https",
-    "cleartext": true,
-    "allowNavigation": [
-      "*.googleapis.com",
-      "*.firebaseapp.com",
-      "*.google.com"
-    ]
+    "cleartext": true
   },
   "android": {
     "backgroundColor": "#F5ECD9",
