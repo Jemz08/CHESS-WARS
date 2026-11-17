@@ -153,6 +153,7 @@ export default defineConfig(({ mode }) => {
       reportCompressedSize: false,
       rollupOptions: {
         output: {
+          inlineDynamicImports: true,
           // Obfuscate output bundle and asset filenames using hashes only
           entryFileNames: 'assets/c-[hash].js',
           chunkFileNames: 'assets/k-[hash].js',

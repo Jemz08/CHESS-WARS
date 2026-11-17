@@ -66,9 +66,11 @@ import {
   registerGameServiceWorkerAndVersionWatcher,
   getGitHubUpdateConfig,
   saveGitHubUpdateConfig,
+  restartApkToApplyChanges,
   usePWAInstall,
   useOnlineStatus,
-  type DetectedVersionUpdate
+  type DetectedVersionUpdate,
+  type DownloadProgressUpdate
 } from './pwaRegistration';
 
 export type TimeControlCategory = 'bullet' | 'blitz' | 'rapid';
@@ -605,6 +607,7 @@ export default function App() {
     details?: DetectedVersionUpdate;
   } | null>(null);
   const [isRefreshingVersion, setIsRefreshingVersion] = useState(false);
+  const [otaDownloadProgress, setOtaDownloadProgress] = useState<DownloadProgressUpdate | null>(null);
   const [versionCheckNotice, setVersionCheckNotice] = useState<string | null>(null);
   const [githubRepoInput, setGithubRepoInput] = useState<string>(() => getGitHubUpdateConfig().githubRepo);
   const [githubBranchInput, setGithubBranchInput] = useState<string>(() => getGitHubUpdateConfig().branch);
@@ -1425,11 +1428,16 @@ export default function App() {
       await swControllerRef.current.applyUpdateAndRefreshState(
         targetBuildId,
         persistStateBeforeReload,
-        details
+        details,
+        (prog) => {
+          setOtaDownloadProgress(prog);
+          setVersionCheckNotice(`${prog.stepLabel} (${prog.percent}%)`);
+        }
       );
+      setIsRefreshingVersion(false);
     } else {
       persistStateBeforeReload();
-      window.location.reload();
+      restartApkToApplyChanges();
     }
   };
 
@@ -1450,7 +1458,7 @@ export default function App() {
     }
 
     setVersionCheckNotice(`Checking GitHub (${saved.githubRepo || 'live URL'}) for new commits...`);
-    const result = await swControllerRef.current?.checkForUpdatesNow();
+    const result = await swControllerRef.current?.checkForUpdatesNow({ force: true });
     if (result) {
       setVersionCheckNotice(result.message);
     }
@@ -1474,11 +1482,13 @@ export default function App() {
     );
     const result = await swControllerRef.current?.checkForUpdatesNow({ force: true });
     if (result?.found) {
-      setVersionCheckNotice(result.message || 'New version detected! Tap "Update & Reload Now" or "Force Apply Latest Update".');
+      setVersionCheckNotice(
+        result.message || 'New version detected! Tap "Download Changes & Restart APK" below.'
+      );
     } else {
       setVersionCheckNotice(
         result?.message ||
-          'Tap "Force Apply Latest Update" below to hot-pull the latest live bundle into your APK.'
+          'Tap "Download Changes & Restart APK" below to download the latest assets and restart.'
       );
     }
   };
@@ -1492,7 +1502,7 @@ export default function App() {
       branch: githubBranchInput || 'main',
       liveUrl: otaLiveUrlInput
     });
-    setVersionCheckNotice('Downloading & hot-applying latest live bundle into your app...');
+    setVersionCheckNotice('Starting download of updated game code & 3D assets...');
 
     const persistStateBeforeReload = () => {
       try {
@@ -1510,7 +1520,13 @@ export default function App() {
       } catch {}
     };
 
-    const res = await swControllerRef.current?.forcePullAndApplyLatestUpdate(persistStateBeforeReload);
+    const res = await swControllerRef.current?.forcePullAndApplyLatestUpdate(
+      persistStateBeforeReload,
+      (prog) => {
+        setOtaDownloadProgress(prog);
+        setVersionCheckNotice(`${prog.stepLabel} (${prog.percent}%)`);
+      }
+    );
     setIsRefreshingVersion(false);
     if (res) {
       setVersionCheckNotice(res.message);
@@ -5267,6 +5283,57 @@ export default function App() {
                       />
                     </div>
                   </div>
+                  {otaDownloadProgress && (
+                    <div
+                      className="settings-profile-upload-card"
+                      style={{
+                        marginBottom: 10,
+                        padding: '8px 10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 5
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          fontSize: '0.74rem',
+                          fontWeight: 800,
+                          color: '#2b1604'
+                        }}
+                      >
+                        <span>{otaDownloadProgress.stepLabel}</span>
+                        <span>{otaDownloadProgress.percent}%</span>
+                      </div>
+                      <div
+                        style={{
+                          width: '100%',
+                          height: 8,
+                          borderRadius: 999,
+                          background: 'rgba(120, 74, 18, 0.18)',
+                          overflow: 'hidden',
+                          border: '1px solid rgba(138, 86, 20, 0.35)'
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${otaDownloadProgress.percent}%`,
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #f5c344 0%, #d98218 100%)',
+                            transition: 'width 0.22s ease'
+                          }}
+                        />
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#5c3812', fontWeight: 600 }}>
+                        {otaDownloadProgress.detailLabel}
+                        {otaDownloadProgress.downloadedBytes > 0
+                          ? ` • ${Math.round(otaDownloadProgress.downloadedBytes / 1024)} KB downloaded`
+                          : ''}
+                      </div>
+                    </div>
+                  )}
                   {versionCheckNotice && (
                     <div className="sanctum-sync-feedback synced" style={{ marginBottom: 10 }}>
                       <CloudCheckVectorIcon size={14} />
@@ -5276,11 +5343,14 @@ export default function App() {
                   <div className="sanctum-cloud-btn-row">
                     <button
                       type="button"
-                      className="sanctum-action-btn sync-btn"
-                      id="btn-save-github-ota-config"
-                      onClick={handleSaveGitHubConfigAndCheck}
+                      className="sanctum-action-btn load-save-btn"
+                      id="btn-force-apply-ota-update"
+                      disabled={isRefreshingVersion}
+                      onClick={handleForceApplyLatestUpdate}
                     >
-                      Save GitHub Repo &amp; Check
+                      {isRefreshingVersion
+                        ? `Downloading (${otaDownloadProgress?.percent ?? 0}%)...`
+                        : '⬇ Download Changes & Restart APK'}
                     </button>
                     <button
                       type="button"
@@ -5292,12 +5362,19 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      className="sanctum-action-btn load-save-btn"
-                      id="btn-force-apply-ota-update"
-                      disabled={isRefreshingVersion}
-                      onClick={handleForceApplyLatestUpdate}
+                      className="sanctum-action-btn sync-btn"
+                      id="btn-save-github-ota-config"
+                      onClick={handleSaveGitHubConfigAndCheck}
                     >
-                      {isRefreshingVersion ? 'Applying Update...' : 'Force Apply Latest Update'}
+                      Save GitHub Repo
+                    </button>
+                    <button
+                      type="button"
+                      className="sanctum-action-btn save-now-btn"
+                      id="btn-restart-apk-now"
+                      onClick={() => restartApkToApplyChanges()}
+                    >
+                      ↻ Restart APK Now
                     </button>
                     {!isInstalled && isInstallable && (
                       <button
@@ -5484,13 +5561,36 @@ export default function App() {
             <div className="cozy-version-toast-title">
               {newVersionToast.details?.source === 'github'
                 ? `New GitHub Update (#${newVersionToast.details.commitSha})`
-                : 'New Version Available'}
+                : 'New Game Update & Assets Ready'}
             </div>
             <div className="cozy-version-toast-desc">
-              {newVersionToast.details?.commitMessage
-                ? `${newVersionToast.details.commitMessage} — Tap Refresh Game to sync & load the latest update.`
-                : 'Updated game assets & features are ready. Refresh to update your game state without a manual APK update.'}
+              {otaDownloadProgress
+                ? `${otaDownloadProgress.stepLabel} (${otaDownloadProgress.percent}%)`
+                : newVersionToast.details?.commitMessage
+                  ? `${newVersionToast.details.commitMessage} — Tap below to download changes & restart APK.`
+                  : 'Updated game code & 3D assets are ready. Tap below to download changes and automatically restart the APK.'}
             </div>
+            {otaDownloadProgress && (
+              <div
+                style={{
+                  width: '100%',
+                  height: 6,
+                  borderRadius: 999,
+                  background: 'rgba(120, 74, 18, 0.2)',
+                  overflow: 'hidden',
+                  marginTop: 5
+                }}
+              >
+                <div
+                  style={{
+                    width: `${otaDownloadProgress.percent}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #f5c344 0%, #d98218 100%)',
+                    transition: 'width 0.2s ease'
+                  }}
+                />
+              </div>
+            )}
           </div>
           <div className="cozy-version-toast-actions">
             <button
@@ -5500,7 +5600,9 @@ export default function App() {
               disabled={isRefreshingVersion}
               onClick={handleRefreshToNewVersion}
             >
-              {isRefreshingVersion ? 'Updating...' : 'Refresh Game'}
+              {isRefreshingVersion
+                ? `Downloading ${otaDownloadProgress?.percent ?? 0}%...`
+                : '⬇ Download & Restart APK'}
             </button>
             {newVersionToast.details?.apkDownloadUrl && (
               <a

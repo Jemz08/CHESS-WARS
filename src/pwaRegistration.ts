@@ -10,6 +10,7 @@ export const CACHED_COMMIT_SHA_STORAGE_KEY = 'wizardchess_cached_commit_sha';
 export const APPLIED_OTA_BUILD_ID_KEY = 'wizardchess_applied_ota_build_id';
 export const APPLIED_OTA_COMMIT_SHA_KEY = 'wizardchess_applied_ota_commit_sha';
 export const APPLIED_OTA_TIMESTAMP_KEY = 'wizardchess_applied_ota_timestamp';
+export const OTA_READY_TO_BOOT_KEY = 'wizardchess_ota_ready_to_boot';
 export const GITHUB_REPO_STORAGE_KEY = 'wizardchess_github_repo';
 export const GITHUB_BRANCH_STORAGE_KEY = 'wizardchess_github_branch';
 export const OTA_LIVE_URL_STORAGE_KEY = 'wizardchess_ota_live_url';
@@ -66,6 +67,14 @@ export interface StoredOtaBundle {
   savedAt: number;
 }
 
+export interface DownloadProgressUpdate {
+  percent: number;
+  stepLabel: string;
+  detailLabel: string;
+  downloadedBytes: number;
+  status: 'downloading' | 'ready-to-restart' | 'restarting' | 'error';
+}
+
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
@@ -74,6 +83,8 @@ interface BeforeInstallPromptEvent extends Event {
 const OTA_IDB_NAME = 'wizardchess_ota_db_v1';
 const OTA_IDB_STORE = 'bundles';
 const OTA_IDB_KEY = 'active_bundle';
+const OTA_CACHE_STORAGE_NAME = 'wizard-chess-ota-bundle-v1';
+const OTA_CACHE_BUNDLE_URL = '/__wizardchess_ota_bundle__.json';
 
 function openOtaIndexedDB(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
@@ -94,50 +105,103 @@ function openOtaIndexedDB(): Promise<IDBDatabase | null> {
   });
 }
 
-export async function saveOtaBundleToIndexedDB(bundle: StoredOtaBundle): Promise<boolean> {
+export async function saveOtaBundleToStorage(bundle: StoredOtaBundle): Promise<boolean> {
+  let savedIdb = false;
+  let savedCache = false;
+
+  // 1. Save to IndexedDB
   const db = await openOtaIndexedDB();
-  if (!db) return false;
-  return new Promise((resolve) => {
-    try {
-      const tx = db.transaction(OTA_IDB_STORE, 'readwrite');
-      const store = tx.objectStore(OTA_IDB_STORE);
-      store.put(bundle, OTA_IDB_KEY);
-      tx.oncomplete = () => {
-        db.close();
-        resolve(true);
-      };
-      tx.onerror = () => {
+  if (db) {
+    savedIdb = await new Promise<boolean>((resolve) => {
+      try {
+        const tx = db.transaction(OTA_IDB_STORE, 'readwrite');
+        const store = tx.objectStore(OTA_IDB_STORE);
+        store.put(bundle, OTA_IDB_KEY);
+        tx.oncomplete = () => {
+          db.close();
+          resolve(true);
+        };
+        tx.onerror = () => {
+          db.close();
+          resolve(false);
+        };
+      } catch {
         db.close();
         resolve(false);
-      };
+      }
+    });
+  }
+
+  // 2. Also save to CacheStorage as redundant backup across APK restarts
+  if (typeof caches !== 'undefined') {
+    try {
+      const cache = await caches.open(OTA_CACHE_STORAGE_NAME);
+      const res = new Response(JSON.stringify(bundle), {
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      });
+      await cache.put(OTA_CACHE_BUNDLE_URL, res);
+      savedCache = true;
     } catch {
-      db.close();
-      resolve(false);
+      // Ignore if CacheStorage unavailable
     }
-  });
+  }
+
+  try {
+    localStorage.setItem(OTA_READY_TO_BOOT_KEY, 'true');
+    localStorage.setItem(APPLIED_OTA_BUILD_ID_KEY, bundle.buildId);
+    if (bundle.commitSha) {
+      localStorage.setItem(APPLIED_OTA_COMMIT_SHA_KEY, bundle.commitSha);
+    }
+    if (bundle.buildTimestamp) {
+      localStorage.setItem(APPLIED_OTA_TIMESTAMP_KEY, String(bundle.buildTimestamp));
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
+
+  return savedIdb || savedCache;
 }
 
-export async function loadOtaBundleFromIndexedDB(): Promise<StoredOtaBundle | null> {
+export async function loadOtaBundleFromStorage(): Promise<StoredOtaBundle | null> {
+  // 1. Try IndexedDB first
   const db = await openOtaIndexedDB();
-  if (!db) return null;
-  return new Promise((resolve) => {
-    try {
-      const tx = db.transaction(OTA_IDB_STORE, 'readonly');
-      const store = tx.objectStore(OTA_IDB_STORE);
-      const req = store.get(OTA_IDB_KEY);
-      req.onsuccess = () => {
-        db.close();
-        resolve((req.result as StoredOtaBundle) || null);
-      };
-      req.onerror = () => {
+  if (db) {
+    const fromIdb = await new Promise<StoredOtaBundle | null>((resolve) => {
+      try {
+        const tx = db.transaction(OTA_IDB_STORE, 'readonly');
+        const store = tx.objectStore(OTA_IDB_STORE);
+        const req = store.get(OTA_IDB_KEY);
+        req.onsuccess = () => {
+          db.close();
+          resolve((req.result as StoredOtaBundle) || null);
+        };
+        req.onerror = () => {
+          db.close();
+          resolve(null);
+        };
+      } catch {
         db.close();
         resolve(null);
-      };
+      }
+    });
+    if (fromIdb && fromIdb.jsText) return fromIdb;
+  }
+
+  // 2. Fallback to CacheStorage backup
+  if (typeof caches !== 'undefined') {
+    try {
+      const cache = await caches.open(OTA_CACHE_STORAGE_NAME);
+      const matched = await cache.match(OTA_CACHE_BUNDLE_URL);
+      if (matched) {
+        const parsed = (await matched.json()) as StoredOtaBundle;
+        if (parsed && parsed.jsText) return parsed;
+      }
     } catch {
-      db.close();
-      resolve(null);
+      // Ignore
     }
-  });
+  }
+
+  return null;
 }
 
 function rewriteBundleRelativeAssets(code: string, baseUrl: string): string {
@@ -152,32 +216,25 @@ function rewriteBundleRelativeAssets(code: string, baseUrl: string): string {
 export async function executeHotOtaBundleInPlace(bundle: StoredOtaBundle): Promise<boolean> {
   try {
     const win = window as unknown as Record<string, unknown>;
+    win.__WIZARD_CHESS_RUNNING_OTA_PAYLOAD__ = true;
     win.__WIZARD_CHESS_ACTIVE_OTA_BUILD__ = {
       buildId: bundle.buildId,
       commitSha: bundle.commitSha,
       buildTimestamp: bundle.buildTimestamp
     };
 
-    localStorage.setItem(APPLIED_OTA_BUILD_ID_KEY, bundle.buildId);
-    if (bundle.commitSha) {
-      localStorage.setItem(APPLIED_OTA_COMMIT_SHA_KEY, bundle.commitSha);
-    }
-    if (bundle.buildTimestamp) {
-      localStorage.setItem(APPLIED_OTA_TIMESTAMP_KEY, String(bundle.buildTimestamp));
-    }
-
-    // Inject updated CSS
+    // Inject updated CSS and keep it at the end of <head> so it overrides baked-in APK CSS
     if (bundle.cssText) {
       let styleEl = document.getElementById('wizardchess-ota-live-style') as HTMLStyleElement | null;
       if (!styleEl) {
         styleEl = document.createElement('style');
         styleEl.id = 'wizardchess-ota-live-style';
-        document.head.appendChild(styleEl);
       }
       styleEl.textContent = rewriteBundleRelativeAssets(bundle.cssText, bundle.baseUrl);
+      document.head.appendChild(styleEl);
     }
 
-    // Clean up existing 3D canvas / UI overlays before mounting new bundle
+    // Clean up any existing 3D canvas or root nodes if called mid-session
     const oldCanvas = document.getElementById('game-canvas');
     if (oldCanvas && oldCanvas.parentNode) {
       const freshCanvas = document.createElement('canvas');
@@ -202,34 +259,57 @@ export async function executeHotOtaBundleInPlace(bundle: StoredOtaBundle): Promi
 }
 
 /**
- * Called at startup in src/main.tsx: if running inside the Capacitor Android APK
- * and IndexedDB has a hot-downloaded OTA bundle that is strictly newer than the
- * APK's baked-in compile timestamp, execute the newer OTA bundle automatically!
+ * Called at startup in src/main.tsx when the APK starts or restarts after downloading changes.
+ * If a downloaded OTA bundle is stored in IndexedDB/CacheStorage and we are not already
+ * inside the OTA payload execution, it boots the downloaded OTA bundle instead of the old APK code!
  */
 export async function bootInstalledOtaBundleIfNewer(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   const win = window as unknown as Record<string, unknown>;
-  if (win.__WIZARD_CHESS_OTA_BOOTING__) return false;
-  if (!isRunningInCapacitorOrAndroidWebView()) return false;
+  // If we are ALREADY executing inside the imported OTA Blob payload, return false so main.tsx mounts <App />!
+  if (win.__WIZARD_CHESS_RUNNING_OTA_PAYLOAD__) {
+    return false;
+  }
 
   try {
-    const cached = await loadOtaBundleFromIndexedDB();
+    const cached = await loadOtaBundleFromStorage();
     if (!cached || !cached.jsText) return false;
+
+    const readyFlag = localStorage.getItem(OTA_READY_TO_BOOT_KEY) === 'true';
+    const isDifferentBuild = Boolean(cached.buildId && cached.buildId !== COMPILED_BUILD_ID);
     const isNewerTimestamp =
       cached.buildTimestamp > 0 &&
       COMPILED_BUILD_TIMESTAMP > 0 &&
-      cached.buildTimestamp > COMPILED_BUILD_TIMESTAMP + 2000;
-    const isDifferentBuild = cached.buildId && cached.buildId !== COMPILED_BUILD_ID;
-    if (isNewerTimestamp && isDifferentBuild) {
-      win.__WIZARD_CHESS_OTA_BOOTING__ = true;
+      cached.buildTimestamp >= COMPILED_BUILD_TIMESTAMP;
+
+    if (isDifferentBuild && (readyFlag || isNewerTimestamp || isRunningInCapacitorOrAndroidWebView())) {
       const ok = await executeHotOtaBundleInPlace(cached);
       if (ok) return true;
-      win.__WIZARD_CHESS_OTA_BOOTING__ = false;
+      win.__WIZARD_CHESS_RUNNING_OTA_PAYLOAD__ = false;
     }
   } catch {
-    // Fall back to baked-in bundle
+    win.__WIZARD_CHESS_RUNNING_OTA_PAYLOAD__ = false;
   }
   return false;
+}
+
+/**
+ * Restarts the APK / WebView cleanly so downloaded changes & assets take effect from a fresh boot.
+ */
+export function restartApkToApplyChanges(): void {
+  try {
+    sessionStorage.setItem('wizardchess_ota_restarted_at', String(Date.now()));
+  } catch {}
+
+  try {
+    const cleanPath = window.location.origin + window.location.pathname;
+    window.location.replace(`${cleanPath}?ota_reboot=${Date.now()}`);
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 180);
+  } catch {
+    window.location.reload();
+  }
 }
 
 export function sanitizeGitHubRepoInput(raw: string): string {
@@ -255,16 +335,12 @@ function sanitizeLiveUrlInput(raw: string): string {
   return '';
 }
 
-/**
- * Clean up any legacy placeholder strings in localStorage and return valid config
- */
 export function getGitHubUpdateConfig(): GitHubUpdateConfig {
   const env = (import.meta as unknown as { env?: Record<string, string> }).env || {};
   const rawStoredRepo = localStorage.getItem(GITHUB_REPO_STORAGE_KEY) || '';
   const rawStoredBranch = localStorage.getItem(GITHUB_BRANCH_STORAGE_KEY) || '';
   const rawStoredLiveUrl = localStorage.getItem(OTA_LIVE_URL_STORAGE_KEY) || '';
 
-  // Purge accidental Jemz1/Jemz2/Jemz3 placeholders if present in localStorage
   if (/^jemz\d*$/i.test(rawStoredRepo.trim())) {
     localStorage.removeItem(GITHUB_REPO_STORAGE_KEY);
   }
@@ -410,10 +486,6 @@ export function useOnlineStatus() {
   return isOnline;
 }
 
-/**
- * Returns the TRUE currently executing build metadata in memory (either the compiled
- * JS bundle or a hot-injected OTA bundle that is currently active in memory).
- */
 export function getActiveRunningBuildInfo(): {
   buildId: string;
   commitSha: string;
@@ -442,97 +514,217 @@ export function getActiveRunningBuildInfo(): {
 }
 
 /**
- * Try downloading a complete compiled OTA bundle (CSS + JS) from a candidate server URL
- * (such as Cloud Run /ota-dist, GitHub Pages, or jsDelivr GitHub CDN)
+ * Downloads the complete remote OTA bundle (Manifest + JS Engine + CSS Styles + Static 3D/Icon Assets)
+ * with step-by-step progress callbacks, saves to IndexedDB & CacheStorage, and restarts the APK!
  */
-async function fetchRemoteOtaBundleFromServer(
-  serverBaseUrl: string,
-  expectedBuildId?: string,
-  expectedCommitSha?: string
-): Promise<StoredOtaBundle | null> {
-  const cleanBase = serverBaseUrl.replace(/\/+$/, '');
-  const candidateBases = cleanBase.endsWith('/ota-dist')
-    ? [cleanBase, cleanBase.replace(/\/ota-dist$/, '')]
-    : [`${cleanBase}/ota-dist`, cleanBase];
+export async function downloadChangesAndAssetsWithProgress(
+  onProgress?: (update: DownloadProgressUpdate) => void,
+  beforeRestart?: () => void,
+  details?: DetectedVersionUpdate
+): Promise<{ ok: boolean; message: string; bundle?: StoredOtaBundle }> {
+  let totalBytes = 0;
+  const emit = (
+    percent: number,
+    stepLabel: string,
+    detailLabel: string,
+    status: DownloadProgressUpdate['status'] = 'downloading'
+  ) => {
+    onProgress?.({
+      percent: Math.max(0, Math.min(100, Math.round(percent))),
+      stepLabel,
+      detailLabel,
+      downloadedBytes: totalBytes,
+      status
+    });
+  };
 
-  for (const base of candidateBases) {
-    try {
-      // 1. Check if /api/version or /version.json provides entryJs & entryCss
-      let entryJs = '';
-      let entryCss = '';
-      let remoteBuildId = expectedBuildId || '';
-      let remoteCommitSha = expectedCommitSha || '';
-      let remoteTimestamp = Date.now();
+  emit(8, 'Step 1/4: Connecting to Update Server...', 'Checking latest version manifest & commit metadata');
 
-      const verUrl = base.endsWith('/ota-dist')
-        ? `${base.replace(/\/ota-dist$/, '')}/api/version?t=${Date.now()}`
-        : `${base}/version.json?t=${Date.now()}`;
+  const cfg = getGitHubUpdateConfig();
+  const candidateServers = Array.from(
+    new Set(
+      [
+        details?.otaBaseUrl,
+        details?.liveUrl,
+        cfg.liveUrl,
+        DEFAULT_CLOUD_RUN_LIVE_URL,
+        window.location.origin.startsWith('http') && !isRunningInCapacitorOrAndroidWebView()
+          ? window.location.origin
+          : ''
+      ].filter((x): x is string => Boolean(x))
+    )
+  );
 
-      const verRes = await fetch(verUrl, { cache: 'no-store' }).catch(() => null);
-      if (verRes && verRes.ok) {
-        const ctype = verRes.headers.get('content-type') || '';
-        if (ctype.includes('json') || ctype.includes('text/plain')) {
-          const vData = await verRes.json().catch(() => null);
-          if (vData) {
-            if (vData.entryJs) entryJs = String(vData.entryJs);
-            if (vData.entryCss) entryCss = String(vData.entryCss);
-            if (vData.buildId) remoteBuildId = String(vData.buildId);
-            if (vData.commitSha) remoteCommitSha = String(vData.commitSha);
-            if (vData.buildTimestamp) remoteTimestamp = Number(vData.buildTimestamp) || remoteTimestamp;
+  let downloadedBundle: StoredOtaBundle | null = null;
+
+  for (const rawSrv of candidateServers) {
+    const cleanSrv = rawSrv.replace(/\/+$/, '');
+    const candidateBases = cleanSrv.endsWith('/ota-dist')
+      ? [cleanSrv, cleanSrv.replace(/\/ota-dist$/, '')]
+      : [`${cleanSrv}/ota-dist`, cleanSrv];
+
+    for (const base of candidateBases) {
+      try {
+        let entryJs = '';
+        let entryCss = '';
+        let remoteBuildId = details?.buildId || '';
+        let remoteCommitSha = details?.commitSha || '';
+        let remoteTimestamp = Date.now();
+
+        const verUrl = base.endsWith('/ota-dist')
+          ? `${base.replace(/\/ota-dist$/, '')}/api/version?t=${Date.now()}`
+          : `${base}/version.json?t=${Date.now()}`;
+
+        const verRes = await fetch(verUrl, { cache: 'no-store' }).catch(() => null);
+        if (verRes && verRes.ok) {
+          const ctype = verRes.headers.get('content-type') || '';
+          if (ctype.includes('json') || ctype.includes('text/plain')) {
+            const vData = await verRes.json().catch(() => null);
+            if (vData) {
+              if (vData.entryJs) entryJs = String(vData.entryJs);
+              if (vData.entryCss) entryCss = String(vData.entryCss);
+              if (vData.buildId) remoteBuildId = String(vData.buildId);
+              if (vData.commitSha) remoteCommitSha = String(vData.commitSha);
+              if (vData.buildTimestamp) remoteTimestamp = Number(vData.buildTimestamp) || remoteTimestamp;
+            }
           }
         }
-      }
 
-      // 2. If entryJs was not in version.json, parse index.html from base
-      if (!entryJs) {
-        const htmlRes = await fetch(`${base}/index.html?t=${Date.now()}`, { cache: 'no-store' }).catch(
-          () => null
+        if (!entryJs) {
+          const htmlRes = await fetch(`${base}/index.html?t=${Date.now()}`, {
+            cache: 'no-store'
+          }).catch(() => null);
+          if (htmlRes && htmlRes.ok) {
+            const htmlText = await htmlRes.text();
+            const jsMatch = htmlText.match(/src=["'](?:\.\/|\/)?(assets\/c-[^"']+\.js)["']/i);
+            const cssMatch = htmlText.match(/href=["'](?:\.\/|\/)?(assets\/a-[^"']+\.css)["']/i);
+            if (jsMatch) entryJs = jsMatch[1];
+            if (cssMatch) entryCss = cssMatch[1];
+          }
+        }
+
+        if (!entryJs) continue;
+
+        emit(
+          28,
+          'Step 2/4: Downloading Updated Game Engine & UI...',
+          `Fetching ${entryJs} from ${base}`
         );
-        if (htmlRes && htmlRes.ok) {
-          const htmlText = await htmlRes.text();
-          const jsMatch = htmlText.match(/src=["'](?:\.\/|\/)?(assets\/c-[^"']+\.js)["']/i);
-          const cssMatch = htmlText.match(/href=["'](?:\.\/|\/)?(assets\/a-[^"']+\.css)["']/i);
-          if (jsMatch) entryJs = jsMatch[1];
-          if (cssMatch) entryCss = cssMatch[1];
-        }
-      }
 
-      if (!entryJs) continue;
-
-      const jsRes = await fetch(`${base}/${entryJs.replace(/^\/+/, '')}?t=${Date.now()}`, {
-        cache: 'no-store'
-      });
-      if (!jsRes.ok) continue;
-      const jsText = await jsRes.text();
-      if (!jsText || jsText.trim().startsWith('<')) continue;
-
-      let cssText = '';
-      if (entryCss) {
-        const cssRes = await fetch(`${base}/${entryCss.replace(/^\/+/, '')}?t=${Date.now()}`, {
+        const jsRes = await fetch(`${base}/${entryJs.replace(/^\/+/, '')}?t=${Date.now()}`, {
           cache: 'no-store'
-        }).catch(() => null);
-        if (cssRes && cssRes.ok) {
-          const rawCss = await cssRes.text();
-          if (!rawCss.trim().startsWith('<')) {
-            cssText = rawCss;
+        });
+        if (!jsRes.ok) continue;
+        const jsText = await jsRes.text();
+        if (!jsText || jsText.trim().startsWith('<')) continue;
+        totalBytes += jsText.length;
+
+        emit(
+          62,
+          'Step 3/4: Downloading Updated HUD & Layout Styles...',
+          entryCss ? `Fetching ${entryCss} (${Math.round(totalBytes / 1024)} KB downloaded)` : 'Verifying stylesheet assets'
+        );
+
+        let cssText = '';
+        if (entryCss) {
+          const cssRes = await fetch(`${base}/${entryCss.replace(/^\/+/, '')}?t=${Date.now()}`, {
+            cache: 'no-store'
+          }).catch(() => null);
+          if (cssRes && cssRes.ok) {
+            const rawCss = await cssRes.text();
+            if (!rawCss.trim().startsWith('<')) {
+              cssText = rawCss;
+              totalBytes += cssText.length;
+            }
           }
         }
-      }
 
-      return {
-        buildId: remoteBuildId || `ota-${Date.now()}`,
-        commitSha: remoteCommitSha || 'ota-live',
-        buildTimestamp: remoteTimestamp,
-        baseUrl: base,
-        cssText,
-        jsText,
-        savedAt: Date.now()
-      };
-    } catch {
-      // Try next candidate base
+        // Step 4: Pre-fetch & cache core static assets into CacheStorage so offline/3D assets are fresh
+        emit(
+          84,
+          'Step 4/4: Caching 3D Assets & Saving Update to Device...',
+          `Saving ${Math.round(totalBytes / 1024)} KB update package to device storage`
+        );
+
+        if (typeof caches !== 'undefined') {
+          try {
+            const assetCache = await caches.open('wizard-chess-assets-v3');
+            const staticUrls = [
+              `${base}/manifest.json`,
+              `${base}/assets/icon-192.svg`,
+              `${base}/assets/icon-512.svg`
+            ];
+            await Promise.allSettled(
+              staticUrls.map(async (u) => {
+                const r = await fetch(`${u}?t=${Date.now()}`, { cache: 'no-store' });
+                if (r.ok) {
+                  await assetCache.put(u, r.clone());
+                }
+              })
+            );
+          } catch {
+            // Optional static cache warm-up
+          }
+        }
+
+        downloadedBundle = {
+          buildId: remoteBuildId || `ota-${Date.now()}`,
+          commitSha: remoteCommitSha || 'ota-live',
+          buildTimestamp: Math.max(remoteTimestamp, Date.now()),
+          baseUrl: base,
+          cssText,
+          jsText,
+          savedAt: Date.now()
+        };
+        break;
+      } catch {
+        // Try next candidate
+      }
     }
+    if (downloadedBundle) break;
   }
-  return null;
+
+  if (!downloadedBundle) {
+    emit(
+      100,
+      'Download Failed — Could Not Fetch Remote Bundle',
+      'Make sure your internet connection is active or check your Live OTA URL in Settings.',
+      'error'
+    );
+    return {
+      ok: false,
+      message: 'Could not download update assets from server. Check your internet connection.'
+    };
+  }
+
+  // Save bundle to IndexedDB + CacheStorage + localStorage boot flags
+  await saveOtaBundleToStorage(downloadedBundle);
+
+  if (beforeRestart) {
+    try {
+      beforeRestart();
+    } catch {}
+  }
+
+  emit(
+    100,
+    'Download Complete (100%)! Restarting APK to Apply Changes...',
+    `Saved build ${downloadedBundle.buildId} (${Math.round(totalBytes / 1024)} KB) — Rebooting now...`,
+    'restarting'
+  );
+
+  // Also apply immediately in-place before triggering the APK restart so both work seamlessly
+  await executeHotOtaBundleInPlace(downloadedBundle).catch(() => false);
+
+  window.setTimeout(() => {
+    restartApkToApplyChanges();
+  }, 950);
+
+  return {
+    ok: true,
+    message: `Downloaded ${Math.round(totalBytes / 1024)} KB (${downloadedBundle.buildId})! Restarting APK to apply changes...`,
+    bundle: downloadedBundle
+  };
 }
 
 export function registerGameServiceWorkerAndVersionWatcher(
@@ -550,9 +742,13 @@ export function registerGameServiceWorkerAndVersionWatcher(
   applyUpdateAndRefreshState: (
     targetBuildId: string,
     beforeReload?: () => void,
-    details?: DetectedVersionUpdate
+    details?: DetectedVersionUpdate,
+    onProgress?: (update: DownloadProgressUpdate) => void
   ) => Promise<void>;
-  forcePullAndApplyLatestUpdate: (beforeReload?: () => void) => Promise<{
+  forcePullAndApplyLatestUpdate: (
+    beforeReload?: () => void,
+    onProgress?: (update: DownloadProgressUpdate) => void
+  ) => Promise<{
     applied: boolean;
     message: string;
   }>;
@@ -567,7 +763,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     onNewVersionDetected(details.buildId, details.previousBuildId, details);
   };
 
-  // Seed bundled version.json only if valid (never overwrite with Jemz1/Jemz2/Jemz3 placeholders)
   const seedBundledVersionManifest = async () => {
     try {
       const res = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -588,7 +783,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     }
   };
 
-  // 1. Check GitHub Repository Commits & Releases
   const checkGitHubForUpdates = async (
     force = false
   ): Promise<{
@@ -598,10 +792,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
   }> => {
     const { githubRepo, branch, liveUrl } = getGitHubUpdateConfig();
     if (!githubRepo || !githubRepo.includes('/')) {
-      return {
-        found: false,
-        message: ''
-      };
+      return { found: false, message: '' };
     }
 
     try {
@@ -683,8 +874,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
 
       const remoteBuildId = `gh-${shortSha}`;
 
-      // Notice: Do NOT silently overwrite localStorage when effectiveRunningSha is empty/local-head!
-      // If the APK was built with 'local-head' or an older SHA, treat any mismatched GitHub commit as an update!
       if (force || !effectiveRunningSha || shortSha !== effectiveRunningSha) {
         const details: DetectedVersionUpdate = {
           buildId: remoteBuildId,
@@ -702,7 +891,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
         notifyUpdate(details);
         return {
           found: true,
-          message: `New GitHub update ready! Commit #${shortSha}: "${commitMessage}" — tap Update Now to apply.`,
+          message: `New GitHub update ready! Commit #${shortSha}: "${commitMessage}" — tap "Download Changes & Restart APK" to apply.`,
           details
         };
       }
@@ -719,7 +908,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     }
   };
 
-  // 2. Check Remote Live OTA Server (both user's configured liveUrl AND Cloud Run Shared App URL)
   const checkLiveServersForUpdates = async (
     force = false
   ): Promise<{
@@ -738,8 +926,10 @@ export function registerGameServiceWorkerAndVersionWatcher(
     for (const srv of candidateServers) {
       try {
         const normalized = srv.replace(/\/+$/, '');
-        // Try /api/version first, then /version.json
-        const endpoints = [`${normalized}/api/version?t=${Date.now()}`, `${normalized}/version.json?t=${Date.now()}`];
+        const endpoints = [
+          `${normalized}/api/version?t=${Date.now()}`,
+          `${normalized}/version.json?t=${Date.now()}`
+        ];
         for (const ep of endpoints) {
           const res = await fetch(ep, { cache: 'no-store' }).catch(() => null);
           if (!res || !res.ok) continue;
@@ -765,8 +955,9 @@ export function registerGameServiceWorkerAndVersionWatcher(
               buildId: remoteBuildId,
               previousBuildId: activeInfo.buildId,
               commitSha: remoteSha || undefined,
-              commitMessage:
-                data.notes ? String(data.notes) : 'New Live OTA Game Update Ready',
+              commitMessage: data.notes
+                ? String(data.notes)
+                : 'New Live OTA Game Update & Assets Ready',
               buildTimestamp: remoteTs || Date.now(),
               source: 'live-url',
               liveUrl: normalized,
@@ -777,7 +968,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
             notifyUpdate(details);
             return {
               found: true,
-              message: `New Live Update detected (${remoteBuildId})! Tap "Update & Reload Now" to apply immediately.`,
+              message: `New Update Available (${remoteBuildId})! Tap "Download Changes & Restart APK" to install.`,
               details
             };
           }
@@ -791,7 +982,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     return { found: false, message: '' };
   };
 
-  // Combined Version Check (Service Worker + GitHub + Cloud Run / Live OTA Server)
   const checkForUpdatesNow = async (options?: {
     force?: boolean;
   }): Promise<{
@@ -803,7 +993,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     const force = Boolean(options?.force);
 
     try {
-      // 1. Check Service Worker waiting state on Web
       if (swRegistration && !isRunningInCapacitorOrAndroidWebView()) {
         await swRegistration.update().catch(() => undefined);
         if (swRegistration.waiting) {
@@ -817,19 +1006,17 @@ export function registerGameServiceWorkerAndVersionWatcher(
           notifyUpdate(details);
           return {
             found: true,
-            message: 'New Service Worker update ready to apply!',
+            message: 'New Service Worker update ready to download & restart!',
             details
           };
         }
       }
 
-      // 2. Check Live OTA Servers (Cloud Run Shared App URL + GitHub Pages) — works inside APK & Web!
       const liveResult = await checkLiveServersForUpdates(force);
       if (liveResult.found) {
         return liveResult;
       }
 
-      // 3. Check GitHub Repository API (if user configured a GitHub repo)
       const ghResult = await checkGitHubForUpdates(force);
       if (ghResult.found) {
         return ghResult;
@@ -840,7 +1027,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
         found: false,
         message:
           ghResult.message ||
-          `Running latest build (${activeInfo.buildId}). Tap "Force Apply Latest Update" anytime to hot-reload the live server bundle!`
+          `Active build: ${activeInfo.buildId}. Tap "Download Changes & Restart APK" below to download the latest assets and restart!`
       };
     } catch {
       return {
@@ -936,109 +1123,36 @@ export function registerGameServiceWorkerAndVersionWatcher(
   const applyUpdateAndRefreshState = async (
     targetBuildId: string,
     beforeReload?: () => void,
-    details?: DetectedVersionUpdate
+    details?: DetectedVersionUpdate,
+    onProgress?: (update: DownloadProgressUpdate) => void
   ): Promise<void> => {
-    try {
-      if (beforeReload) {
-        beforeReload();
-      }
-
-      if (swRegistration?.waiting) {
-        swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-      }
-
-      if (navigator.serviceWorker?.controller) {
-        await new Promise<void>((resolve) => {
-          const timeout = window.setTimeout(resolve, 450);
-          const handler = (ev: MessageEvent) => {
-            if (ev.data?.type === 'SHELL_CACHE_PURGED') {
-              window.clearTimeout(timeout);
-              navigator.serviceWorker.removeEventListener('message', handler);
-              resolve();
-            }
-          };
-          navigator.serviceWorker.addEventListener('message', handler);
-          navigator.serviceWorker.controller?.postMessage({
-            type: 'PURGE_SHELL_CACHE',
-            buildId: targetBuildId
-          });
-        });
-      }
-
-      // Try hot-downloading and executing the remote OTA bundle in-place (essential for Android APK!)
-      const cfg = getGitHubUpdateConfig();
-      const candidateBases = Array.from(
-        new Set(
-          [
-            details?.otaBaseUrl,
-            details?.liveUrl,
-            cfg.liveUrl,
-            DEFAULT_CLOUD_RUN_LIVE_URL
-          ].filter((x): x is string => Boolean(x))
-        )
-      );
-
-      for (const base of candidateBases) {
-        const bundle = await fetchRemoteOtaBundleFromServer(
-          base,
-          details?.buildId || targetBuildId,
-          details?.commitSha
-        );
-        if (bundle) {
-          await saveOtaBundleToIndexedDB(bundle);
-          const executed = await executeHotOtaBundleInPlace(bundle);
-          if (executed) {
-            return;
-          }
-        }
-      }
-    } catch {
-      // Fallback to reload
+    if (swRegistration?.waiting) {
+      swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'PURGE_SHELL_CACHE',
+        buildId: targetBuildId
+      });
     }
 
-    window.location.reload();
+    await downloadChangesAndAssetsWithProgress(onProgress, beforeReload, details);
   };
 
   const forcePullAndApplyLatestUpdate = async (
-    beforeReload?: () => void
+    beforeReload?: () => void,
+    onProgress?: (update: DownloadProgressUpdate) => void
   ): Promise<{ applied: boolean; message: string }> => {
-    try {
-      if (beforeReload) beforeReload();
-      localStorage.removeItem(APPLIED_OTA_BUILD_ID_KEY);
-      localStorage.removeItem(APPLIED_OTA_COMMIT_SHA_KEY);
-      localStorage.removeItem(CACHED_BUILD_ID_STORAGE_KEY);
-      localStorage.removeItem(CACHED_COMMIT_SHA_STORAGE_KEY);
+    localStorage.removeItem(APPLIED_OTA_BUILD_ID_KEY);
+    localStorage.removeItem(APPLIED_OTA_COMMIT_SHA_KEY);
+    localStorage.removeItem(CACHED_BUILD_ID_STORAGE_KEY);
+    localStorage.removeItem(CACHED_COMMIT_SHA_STORAGE_KEY);
 
-      const cfg = getGitHubUpdateConfig();
-      const candidateBases = Array.from(
-        new Set([cfg.liveUrl, DEFAULT_CLOUD_RUN_LIVE_URL].filter(Boolean))
-      );
-
-      for (const base of candidateBases) {
-        const bundle = await fetchRemoteOtaBundleFromServer(base);
-        if (bundle) {
-          await saveOtaBundleToIndexedDB(bundle);
-          const executed = await executeHotOtaBundleInPlace(bundle);
-          if (executed) {
-            return {
-              applied: true,
-              message: `Successfully pulled & applied live update (${bundle.buildId})!`
-            };
-          }
-        }
-      }
-
-      window.location.reload();
-      return {
-        applied: true,
-        message: 'Reloading with latest server assets...'
-      };
-    } catch {
-      return {
-        applied: false,
-        message: 'Could not reach the Live OTA Server. Check your internet connection.'
-      };
-    }
+    const res = await downloadChangesAndAssetsWithProgress(onProgress, beforeReload);
+    return {
+      applied: res.ok,
+      message: res.message
+    };
   };
 
   return {
