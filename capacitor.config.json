@@ -5,10 +5,9 @@
   "bundledWebRuntime": false,
   "backgroundColor": "#F5ECD9",
   "server": {
-    "url": "https://ais-pre-64yibneopxihyh3rjs6f74-281552636048.asia-southeast1.run.app",
+    "androidScheme": "https",
     "cleartext": true,
     "allowNavigation": [
-      "*.run.app",
       "*.googleapis.com",
       "*.firebaseapp.com",
       "*.google.com"

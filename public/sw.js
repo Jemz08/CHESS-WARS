@@ -8,8 +8,8 @@
  *   so players can refresh game state in-place without a manual APK update.
  */
 
-const SHELL_CACHE_NAME = 'wizard-chess-shell-v2';
-const ASSET_CACHE_NAME = 'wizard-chess-assets-v2';
+const SHELL_CACHE_NAME = 'wizard-chess-shell-v3';
+const ASSET_CACHE_NAME = 'wizard-chess-assets-v3';
 const FONT_CACHE_NAME = 'wizard-chess-fonts-v1';
 
 const PRECACHE_URLS = [

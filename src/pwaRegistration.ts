@@ -135,6 +135,8 @@ export function registerGameServiceWorkerAndVersionWatcher(
         headers: { 'Cache-Control': 'no-cache' }
       });
       if (!res.ok) return false;
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) return false;
       const data = await res.json();
       const remoteBuildId = data?.buildId ? String(data.buildId) : '';
       if (!remoteBuildId || isDisposed) return false;
