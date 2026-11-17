@@ -105,6 +105,167 @@ function openOtaIndexedDB(): Promise<IDBDatabase | null> {
   });
 }
 
+export const ACKNOWLEDGED_OTA_STATE_KEY = 'wizardchess_acknowledged_ota_v2';
+
+interface AcknowledgedOtaState {
+  buildIds: string[];
+  commitShas: string[];
+  lastAppliedTimestamp: number;
+}
+
+export function getAcknowledgedOtaState(): AcknowledgedOtaState {
+  try {
+    const raw = localStorage.getItem(ACKNOWLEDGED_OTA_STATE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        buildIds: Array.isArray(parsed?.buildIds) ? parsed.buildIds.map(String) : [],
+        commitShas: Array.isArray(parsed?.commitShas) ? parsed.commitShas.map(String) : [],
+        lastAppliedTimestamp: Number(parsed?.lastAppliedTimestamp) || 0
+      };
+    }
+  } catch {
+    // ignore
+  }
+  const singleBuild = localStorage.getItem(APPLIED_OTA_BUILD_ID_KEY) || '';
+  const singleSha = localStorage.getItem(APPLIED_OTA_COMMIT_SHA_KEY) || '';
+  const singleTs = Number(localStorage.getItem(APPLIED_OTA_TIMESTAMP_KEY)) || 0;
+  return {
+    buildIds: singleBuild ? [singleBuild] : [],
+    commitShas: singleSha && singleSha !== 'local-head' ? [singleSha] : [],
+    lastAppliedTimestamp: singleTs
+  };
+}
+
+export function markVersionUpdateAsAcknowledged(
+  buildId?: string,
+  details?: DetectedVersionUpdate,
+  extraBuildIds: string[] = [],
+  extraCommitShas: string[] = []
+): void {
+  try {
+    const current = getAcknowledgedOtaState();
+    const nextBuildIds = new Set<string>(current.buildIds);
+    const nextShas = new Set<string>(current.commitShas);
+
+    const allCandidateBuilds = [
+      buildId,
+      details?.buildId,
+      details?.commitSha ? `gh-${details.commitSha}` : '',
+      COMPILED_BUILD_ID,
+      ...extraBuildIds
+    ].filter((x): x is string => Boolean(x && x.trim()));
+
+    for (const b of allCandidateBuilds) {
+      nextBuildIds.add(b.trim());
+    }
+
+    const allCandidateShas = [
+      details?.commitSha,
+      COMPILED_COMMIT_SHA,
+      ...extraCommitShas
+    ].filter((x): x is string => Boolean(x && x.trim() && x.trim() !== 'local-head'));
+
+    for (const s of allCandidateShas) {
+      const clean = s.trim();
+      nextShas.add(clean);
+      nextShas.add(clean.slice(0, 8));
+      nextBuildIds.add(`gh-${clean}`);
+      nextBuildIds.add(`gh-${clean.slice(0, 8)}`);
+    }
+
+    const nowTs = Math.max(
+      Date.now(),
+      current.lastAppliedTimestamp,
+      details?.buildTimestamp || 0,
+      COMPILED_BUILD_TIMESTAMP || 0
+    );
+
+    const updated: AcknowledgedOtaState = {
+      buildIds: Array.from(nextBuildIds).slice(-50),
+      commitShas: Array.from(nextShas).slice(-50),
+      lastAppliedTimestamp: nowTs
+    };
+
+    localStorage.setItem(ACKNOWLEDGED_OTA_STATE_KEY, JSON.stringify(updated));
+
+    const primaryBuild = buildId || details?.buildId || extraBuildIds[0] || '';
+    if (primaryBuild) {
+      localStorage.setItem(APPLIED_OTA_BUILD_ID_KEY, primaryBuild);
+      localStorage.setItem(CACHED_BUILD_ID_STORAGE_KEY, primaryBuild);
+    }
+    const primarySha =
+      (details?.commitSha && details.commitSha !== 'local-head' ? details.commitSha : '') ||
+      extraCommitShas.find((s) => s && s !== 'local-head') ||
+      '';
+    if (primarySha) {
+      localStorage.setItem(APPLIED_OTA_COMMIT_SHA_KEY, primarySha);
+      localStorage.setItem(CACHED_COMMIT_SHA_STORAGE_KEY, primarySha);
+    }
+    localStorage.setItem(APPLIED_OTA_TIMESTAMP_KEY, String(nowTs));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function isVersionUpdateAlreadyAcknowledged(
+  remoteBuildId?: string,
+  remoteCommitSha?: string,
+  remoteTimestamp?: number
+): boolean {
+  try {
+    // If the app JUST rebooted from an OTA update within the last 45 seconds, suppress automatic re-prompts
+    const sessionRebootTs = Number(sessionStorage.getItem('wizardchess_ota_restarted_at')) || 0;
+    if (sessionRebootTs > 0 && Date.now() - sessionRebootTs < 45000) {
+      return true;
+    }
+    if (typeof window !== 'undefined' && window.location.search.includes('ota_reboot=')) {
+      const match = window.location.search.match(/ota_reboot=(\d+)/);
+      if (match && Date.now() - Number(match[1]) < 45000) {
+        return true;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const ack = getAcknowledgedOtaState();
+  const active = getActiveRunningBuildInfo();
+
+  if (remoteBuildId) {
+    if (
+      remoteBuildId === active.buildId ||
+      remoteBuildId === COMPILED_BUILD_ID ||
+      ack.buildIds.includes(remoteBuildId)
+    ) {
+      return true;
+    }
+  }
+
+  if (remoteCommitSha && remoteCommitSha !== 'local-head') {
+    const short8 = remoteCommitSha.slice(0, 8);
+    if (
+      remoteCommitSha === active.commitSha ||
+      short8 === active.commitSha.slice(0, 8) ||
+      ack.commitShas.includes(remoteCommitSha) ||
+      ack.commitShas.includes(short8) ||
+      ack.buildIds.includes(`gh-${remoteCommitSha}`) ||
+      ack.buildIds.includes(`gh-${short8}`)
+    ) {
+      return true;
+    }
+  }
+
+  if (remoteTimestamp && remoteTimestamp > 0) {
+    const effectiveTs = Math.max(active.buildTimestamp || 0, ack.lastAppliedTimestamp || 0);
+    if (effectiveTs > 0 && remoteTimestamp <= effectiveTs + 5000) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function saveOtaBundleToStorage(bundle: StoredOtaBundle): Promise<boolean> {
   let savedIdb = false;
   let savedCache = false;
@@ -148,13 +309,18 @@ export async function saveOtaBundleToStorage(bundle: StoredOtaBundle): Promise<b
 
   try {
     localStorage.setItem(OTA_READY_TO_BOOT_KEY, 'true');
-    localStorage.setItem(APPLIED_OTA_BUILD_ID_KEY, bundle.buildId);
-    if (bundle.commitSha) {
-      localStorage.setItem(APPLIED_OTA_COMMIT_SHA_KEY, bundle.commitSha);
-    }
-    if (bundle.buildTimestamp) {
-      localStorage.setItem(APPLIED_OTA_TIMESTAMP_KEY, String(bundle.buildTimestamp));
-    }
+    markVersionUpdateAsAcknowledged(
+      bundle.buildId,
+      {
+        buildId: bundle.buildId,
+        previousBuildId: COMPILED_BUILD_ID,
+        commitSha: bundle.commitSha,
+        buildTimestamp: bundle.buildTimestamp,
+        source: 'live-url'
+      },
+      [bundle.buildId],
+      [bundle.commitSha]
+    );
   } catch {
     // Ignore storage quota errors
   }
@@ -282,7 +448,7 @@ export async function bootInstalledOtaBundleIfNewer(): Promise<boolean> {
       COMPILED_BUILD_TIMESTAMP > 0 &&
       cached.buildTimestamp >= COMPILED_BUILD_TIMESTAMP;
 
-    if (isDifferentBuild && (readyFlag || isNewerTimestamp || isRunningInCapacitorOrAndroidWebView())) {
+    if (readyFlag || (isDifferentBuild && (isNewerTimestamp || isRunningInCapacitorOrAndroidWebView()))) {
       const ok = await executeHotOtaBundleInPlace(cached);
       if (ok) return true;
       win.__WIZARD_CHESS_RUNNING_OTA_PAYLOAD__ = false;
@@ -499,17 +665,49 @@ export function getActiveRunningBuildInfo(): {
     };
   };
   const activeOta = win.__WIZARD_CHESS_ACTIVE_OTA_BUILD__;
+  let storedBuildId = '';
+  let storedCommitSha = '';
+  let storedTimestamp = 0;
+  try {
+    storedBuildId = localStorage.getItem(APPLIED_OTA_BUILD_ID_KEY) || '';
+    storedCommitSha = localStorage.getItem(APPLIED_OTA_COMMIT_SHA_KEY) || '';
+    storedTimestamp = Number(localStorage.getItem(APPLIED_OTA_TIMESTAMP_KEY)) || 0;
+  } catch {
+    // ignore
+  }
+
   if (activeOta?.buildId) {
     return {
       buildId: activeOta.buildId,
-      commitSha: activeOta.commitSha || COMPILED_COMMIT_SHA,
-      buildTimestamp: activeOta.buildTimestamp || COMPILED_BUILD_TIMESTAMP
+      commitSha:
+        (activeOta.commitSha && activeOta.commitSha !== 'local-head' ? activeOta.commitSha : '') ||
+        (storedCommitSha && storedCommitSha !== 'local-head' ? storedCommitSha : '') ||
+        COMPILED_COMMIT_SHA,
+      buildTimestamp: Math.max(
+        activeOta.buildTimestamp || 0,
+        storedTimestamp,
+        COMPILED_BUILD_TIMESTAMP
+      )
     };
   }
+
+  if (storedBuildId && storedTimestamp >= COMPILED_BUILD_TIMESTAMP) {
+    return {
+      buildId: storedBuildId,
+      commitSha:
+        (storedCommitSha && storedCommitSha !== 'local-head' ? storedCommitSha : '') ||
+        COMPILED_COMMIT_SHA,
+      buildTimestamp: Math.max(storedTimestamp, COMPILED_BUILD_TIMESTAMP)
+    };
+  }
+
   return {
     buildId: COMPILED_BUILD_ID,
-    commitSha: COMPILED_COMMIT_SHA,
-    buildTimestamp: COMPILED_BUILD_TIMESTAMP
+    commitSha:
+      (COMPILED_COMMIT_SHA && COMPILED_COMMIT_SHA !== 'local-head' ? COMPILED_COMMIT_SHA : '') ||
+      (storedCommitSha && storedCommitSha !== 'local-head' ? storedCommitSha : '') ||
+      'local-head',
+    buildTimestamp: Math.max(COMPILED_BUILD_TIMESTAMP, storedTimestamp)
   };
 }
 
@@ -566,6 +764,11 @@ export async function downloadChangesAndAssetsWithProgress(
   );
 
   let downloadedBundle: StoredOtaBundle | null = null;
+  const discoveredBuildIds: string[] = [];
+  const discoveredCommitShas: string[] = [];
+  if (details?.buildId) discoveredBuildIds.push(details.buildId);
+  if (details?.commitSha) discoveredCommitShas.push(details.commitSha);
+
   let fallbackMetadata: {
     buildId: string;
     commitSha: string;
@@ -605,8 +808,22 @@ export async function downloadChangesAndAssetsWithProgress(
               if (vData) {
                 if (vData.entryJs) entryJs = String(vData.entryJs);
                 if (vData.entryCss) entryCss = String(vData.entryCss);
-                if (vData.buildId) remoteBuildId = String(vData.buildId);
-                if (vData.commitSha) remoteCommitSha = String(vData.commitSha);
+                if (vData.buildId) {
+                  const vBuild = String(vData.buildId);
+                  discoveredBuildIds.push(vBuild);
+                  if (!remoteBuildId) remoteBuildId = vBuild;
+                }
+                if (vData.commitSha) {
+                  const vSha = String(vData.commitSha);
+                  if (vSha !== 'local-head') {
+                    discoveredCommitShas.push(vSha);
+                    if (!remoteCommitSha || remoteCommitSha === 'local-head') {
+                      remoteCommitSha = vSha;
+                    }
+                  } else if (!remoteCommitSha) {
+                    remoteCommitSha = vSha;
+                  }
+                }
                 if (vData.buildTimestamp) remoteTimestamp = Number(vData.buildTimestamp) || remoteTimestamp;
                 if (!fallbackMetadata) {
                   fallbackMetadata = {
@@ -717,10 +934,19 @@ export async function downloadChangesAndAssetsWithProgress(
           }
         }
 
+        const effectiveBuildId =
+          details?.buildId || remoteBuildId || discoveredBuildIds[0] || `ota-${Date.now()}`;
+        const effectiveCommitSha =
+          (details?.commitSha && details.commitSha !== 'local-head' ? details.commitSha : '') ||
+          (remoteCommitSha && remoteCommitSha !== 'local-head' ? remoteCommitSha : '') ||
+          discoveredCommitShas[0] ||
+          remoteCommitSha ||
+          'ota-live';
+
         downloadedBundle = {
-          buildId: remoteBuildId || `ota-${Date.now()}`,
-          commitSha: remoteCommitSha || 'ota-live',
-          buildTimestamp: Math.max(remoteTimestamp, Date.now()),
+          buildId: effectiveBuildId,
+          commitSha: effectiveCommitSha,
+          buildTimestamp: Math.max(remoteTimestamp, details?.buildTimestamp || 0, Date.now()),
           baseUrl: base,
           cssText,
           jsText,
@@ -737,6 +963,12 @@ export async function downloadChangesAndAssetsWithProgress(
   if (downloadedBundle) {
     // Save full bundle to IndexedDB + CacheStorage + localStorage boot flags
     await saveOtaBundleToStorage(downloadedBundle);
+    markVersionUpdateAsAcknowledged(
+      downloadedBundle.buildId,
+      details,
+      [downloadedBundle.buildId, ...discoveredBuildIds],
+      [downloadedBundle.commitSha, ...discoveredCommitShas]
+    );
 
     if (beforeRestart) {
       try {
@@ -769,11 +1001,6 @@ export async function downloadChangesAndAssetsWithProgress(
   // Refresh manifest & core assets, record updated build/commit markers, purge stale caches, and restart app!
   emit(45, 'Downloading new version...', 'Synchronizing latest version manifest & assets...');
 
-  const fallbackBase =
-    fallbackMetadata?.baseUrl ||
-    candidateServers[0]?.replace(/\/+$/, '') ||
-    window.location.origin;
-
   const assetPaths = ['./version.json', './manifest.json', './index.html', './assets/icon-192.svg'];
   for (let i = 0; i < assetPaths.length; i++) {
     const p = assetPaths[i];
@@ -794,19 +1021,21 @@ export async function downloadChangesAndAssetsWithProgress(
   }
 
   const finalBuildId =
-    details?.buildId || fallbackMetadata?.buildId || `build-${Date.now()}`;
+    details?.buildId || fallbackMetadata?.buildId || discoveredBuildIds[0] || `build-${Date.now()}`;
   const finalCommitSha =
-    details?.commitSha || fallbackMetadata?.commitSha || finalBuildId.slice(0, 12);
+    (details?.commitSha && details.commitSha !== 'local-head' ? details.commitSha : '') ||
+    (fallbackMetadata?.commitSha && fallbackMetadata.commitSha !== 'local-head'
+      ? fallbackMetadata.commitSha
+      : '') ||
+    discoveredCommitShas[0] ||
+    finalBuildId.slice(0, 12);
 
-  try {
-    localStorage.setItem(APPLIED_OTA_BUILD_ID_KEY, finalBuildId);
-    localStorage.setItem(APPLIED_OTA_COMMIT_SHA_KEY, finalCommitSha);
-    localStorage.setItem(CACHED_BUILD_ID_STORAGE_KEY, finalBuildId);
-    localStorage.setItem(CACHED_COMMIT_SHA_STORAGE_KEY, finalCommitSha);
-    localStorage.setItem(APPLIED_OTA_TIMESTAMP_KEY, String(Date.now()));
-  } catch {
-    // ignore storage quota errors
-  }
+  markVersionUpdateAsAcknowledged(
+    finalBuildId,
+    details,
+    [finalBuildId, ...discoveredBuildIds],
+    [finalCommitSha, ...discoveredCommitShas]
+  );
 
   if (beforeRestart) {
     try {
@@ -960,7 +1189,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
       }
     }
 
-    // 3. Fallback to api.github.com ONLY if needed — and if 403 rate-limited, bypass via Live OTA Server!
+    // 3. Fallback to api.github.com ONLY if needed
     if (!shortSha) {
       try {
         const commitRes = await fetch(
@@ -972,35 +1201,9 @@ export function registerGameServiceWorkerAndVersionWatcher(
         );
 
         if (!commitRes.ok) {
-          if (commitRes.status === 403 || commitRes.status === 429) {
-            // GitHub REST API rate-limited (60/hr limit per IP) — automatically bypass via Live OTA Server!
-            const fallbackBuildId = `ota-bypass-${Date.now()}`;
-            const details: DetectedVersionUpdate = {
-              buildId: fallbackBuildId,
-              previousBuildId: activeInfo.buildId,
-              commitMessage: 'GitHub API rate-limit bypassed via Direct Live OTA Server',
-              buildTimestamp: Date.now(),
-              source: 'live-url',
-              liveUrl: liveUrl || DEFAULT_CLOUD_RUN_LIVE_URL,
-              otaBaseUrl: `${(liveUrl || DEFAULT_CLOUD_RUN_LIVE_URL).replace(/\/+$/, '')}/ota-dist`
-            };
-            notifyUpdate(details);
-            return {
-              found: true,
-              message:
-                'GitHub API 403 rate-limit bypassed! Tap "⬇ Download Changes & Restart APK" below to download directly from the Live OTA Server.',
-              details
-            };
-          }
-          if (commitRes.status === 404) {
-            return {
-              found: false,
-              message: `GitHub repo "${githubRepo}" (branch "${branch}") not found or is private. You can still tap "⬇ Download Changes & Restart APK" to update from the Live Server!`
-            };
-          }
           return {
             found: false,
-            message: `GitHub returned status ${commitRes.status} — tap "⬇ Download Changes & Restart APK" to update directly.`
+            message: `Up to date with active build (${activeInfo.buildId}).`
           };
         }
 
@@ -1016,7 +1219,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
       } catch {
         return {
           found: false,
-          message: 'Tap "⬇ Download Changes & Restart APK" below to pull the latest assets directly.'
+          message: 'Up to date.'
         };
       }
     }
@@ -1028,7 +1231,10 @@ export function registerGameServiceWorkerAndVersionWatcher(
     const commitTs = commitDate ? Date.parse(commitDate) || 0 : 0;
     const remoteBuildId = `gh-${shortSha}`;
 
-    if (force || !effectiveRunningSha || shortSha !== effectiveRunningSha) {
+    const alreadyInstalled =
+      !force && isVersionUpdateAlreadyAcknowledged(remoteBuildId, shortSha, commitTs);
+
+    if (!alreadyInstalled && (force || !effectiveRunningSha || shortSha !== effectiveRunningSha)) {
       const details: DetectedVersionUpdate = {
         buildId: remoteBuildId,
         previousBuildId: effectiveRunningSha ? `gh-${effectiveRunningSha}` : activeInfo.buildId,
@@ -1038,20 +1244,20 @@ export function registerGameServiceWorkerAndVersionWatcher(
         buildTimestamp: commitTs || Date.now(),
         source: 'github',
         liveUrl: liveUrl || DEFAULT_CLOUD_RUN_LIVE_URL,
-        otaBaseUrl: `https://cdn.jsdelivr.net/gh/${githubRepo}@${shortSha}/dist`,
+        otaBaseUrl: `https://cdn.jsdelivr.net/gh/${githubRepo}@${shortSha}/public`,
         releaseHtmlUrl: `https://github.com/${githubRepo}/commits/${branch}`
       };
       notifyUpdate(details);
       return {
         found: true,
-        message: `New GitHub update ready! Commit #${shortSha}: "${commitMessage}" — tap "⬇ Download Changes & Restart APK" to apply.`,
+        message: `Found an update (#${shortSha}): "${commitMessage}"`,
         details
       };
     }
 
     return {
       found: false,
-      message: `Synced with GitHub commit #${shortSha} ("${commitMessage}").`
+      message: `Up to date with GitHub commit #${shortSha} ("${commitMessage}").`
     };
   };
 
@@ -1068,7 +1274,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     );
 
     const activeInfo = getActiveRunningBuildInfo();
-    const appliedOtaBuildId = localStorage.getItem(APPLIED_OTA_BUILD_ID_KEY) || '';
 
     for (const srv of candidateServers) {
       try {
@@ -1090,12 +1295,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
           const remoteSha = data.commitSha ? String(data.commitSha) : '';
 
           const alreadyApplied =
-            !force &&
-            (remoteBuildId === activeInfo.buildId ||
-              remoteBuildId === appliedOtaBuildId ||
-              (remoteTs > 0 &&
-                activeInfo.buildTimestamp > 0 &&
-                remoteTs <= activeInfo.buildTimestamp + 1500));
+            !force && isVersionUpdateAlreadyAcknowledged(remoteBuildId, remoteSha, remoteTs);
 
           if (!alreadyApplied) {
             const details: DetectedVersionUpdate = {
@@ -1108,14 +1308,14 @@ export function registerGameServiceWorkerAndVersionWatcher(
               buildTimestamp: remoteTs || Date.now(),
               source: 'live-url',
               liveUrl: normalized,
-              otaBaseUrl: data.otaDistAvailable ? `${normalized}/ota-dist` : normalized,
+              otaBaseUrl: normalized,
               entryJs: data.entryJs ? String(data.entryJs) : undefined,
               entryCss: data.entryCss ? String(data.entryCss) : undefined
             };
             notifyUpdate(details);
             return {
               found: true,
-              message: `New Update Available (${remoteBuildId})! Tap "⬇ Download Changes & Restart APK" to install.`,
+              message: `Found an update (${remoteBuildId})!`,
               details
             };
           }
@@ -1142,21 +1342,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     try {
       if (swRegistration && !isRunningInCapacitorOrAndroidWebView()) {
         await swRegistration.update().catch(() => undefined);
-        if (swRegistration.waiting) {
-          const swBuildId = 'sw-update-' + Date.now();
-          const details: DetectedVersionUpdate = {
-            buildId: swBuildId,
-            previousBuildId: getActiveRunningBuildInfo().buildId,
-            source: 'service-worker',
-            commitMessage: 'New Service Worker asset bundle ready'
-          };
-          notifyUpdate(details);
-          return {
-            found: true,
-            message: 'New Service Worker update ready to download & restart!',
-            details
-          };
-        }
       }
 
       const liveResult = await checkLiveServersForUpdates(force);
@@ -1174,12 +1359,12 @@ export function registerGameServiceWorkerAndVersionWatcher(
         found: false,
         message:
           ghResult.message ||
-          `Active build: ${activeInfo.buildId}. Tap "⬇ Download Changes & Restart APK" below to download the latest assets and restart!`
+          `Up to date (${activeInfo.buildId}).`
       };
     } catch {
       return {
         found: false,
-        message: 'Tap "⬇ Download Changes & Restart APK" below to download the latest update.'
+        message: 'Up to date.'
       };
     }
   };
@@ -1204,11 +1389,14 @@ export function registerGameServiceWorkerAndVersionWatcher(
           const msg = event.data;
           if (!msg || typeof msg.type !== 'string') return;
           if (msg.type === 'NEW_VERSION_AVAILABLE' && msg.buildId) {
-            notifyUpdate({
-              buildId: String(msg.buildId),
-              previousBuildId: getActiveRunningBuildInfo().buildId,
-              source: 'service-worker'
-            });
+            const candidateId = String(msg.buildId);
+            if (!isVersionUpdateAlreadyAcknowledged(candidateId)) {
+              notifyUpdate({
+                buildId: candidateId,
+                previousBuildId: getActiveRunningBuildInfo().buildId,
+                source: 'service-worker'
+              });
+            }
           }
         };
         navigator.serviceWorker.addEventListener('message', onSwMessage);
@@ -1218,14 +1406,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
           .then((reg) => {
             if (isDisposed) return;
             swRegistration = reg;
-
-            if (reg.waiting) {
-              notifyUpdate({
-                buildId: 'sw-waiting-' + Date.now(),
-                previousBuildId: getActiveRunningBuildInfo().buildId,
-                source: 'service-worker'
-              });
-            }
 
             reg.addEventListener('updatefound', () => {
               const installingWorker = reg.installing;
@@ -1274,6 +1454,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
     details?: DetectedVersionUpdate,
     onProgress?: (update: DownloadProgressUpdate) => void
   ): Promise<void> => {
+    markVersionUpdateAsAcknowledged(targetBuildId, details);
     if (swRegistration?.waiting) {
       swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
     }
@@ -1291,11 +1472,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     beforeReload?: () => void,
     onProgress?: (update: DownloadProgressUpdate) => void
   ): Promise<{ applied: boolean; message: string }> => {
-    localStorage.removeItem(APPLIED_OTA_BUILD_ID_KEY);
-    localStorage.removeItem(APPLIED_OTA_COMMIT_SHA_KEY);
-    localStorage.removeItem(CACHED_BUILD_ID_STORAGE_KEY);
-    localStorage.removeItem(CACHED_COMMIT_SHA_STORAGE_KEY);
-
     const res = await downloadChangesAndAssetsWithProgress(onProgress, beforeReload);
     return {
       applied: res.ok,

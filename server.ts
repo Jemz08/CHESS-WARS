@@ -794,25 +794,13 @@ async function startServer() {
   } {
     const meta = getDistBundleMetadata();
     try {
-      let maxMtime = Math.max(serverBootTs, meta.distTimestamp);
-      const rootFiles = ['index.html', 'server.ts', 'package.json'];
-      for (const rf of rootFiles) {
-        const p = path.resolve(process.cwd(), rf);
-        if (fs.existsSync(p)) {
-          maxMtime = Math.max(maxMtime, Math.floor(fs.statSync(p).mtimeMs));
-        }
-      }
-      const srcDir = path.resolve(process.cwd(), 'src');
-      if (fs.existsSync(srcDir)) {
-        for (const entry of fs.readdirSync(srcDir)) {
-          const ep = path.join(srcDir, entry);
-          try {
-            const st = fs.statSync(ep);
-            if (st.isFile()) {
-              maxMtime = Math.max(maxMtime, Math.floor(st.mtimeMs));
-            }
-          } catch {
-            // ignore
+      let maxMtime = meta.distTimestamp > 0 ? meta.distTimestamp : serverBootTs;
+      if (!meta.distBuildId) {
+        const rootFiles = ['index.html', 'server.ts', 'package.json'];
+        for (const rf of rootFiles) {
+          const p = path.resolve(process.cwd(), rf);
+          if (fs.existsSync(p)) {
+            maxMtime = Math.max(maxMtime, Math.floor(fs.statSync(p).mtimeMs));
           }
         }
       }
@@ -827,7 +815,7 @@ async function startServer() {
     } catch {
       return {
         buildId: meta.distBuildId || String(serverBootTs),
-        buildTimestamp: serverBootTs,
+        buildTimestamp: meta.distTimestamp || serverBootTs,
         commitSha: meta.distCommitSha,
         entryJs: meta.entryJs,
         entryCss: meta.entryCss

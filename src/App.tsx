@@ -67,6 +67,7 @@ import {
   getGitHubUpdateConfig,
   saveGitHubUpdateConfig,
   restartApkToApplyChanges,
+  markVersionUpdateAsAcknowledged,
   usePWAInstall,
   useOnlineStatus,
   type DetectedVersionUpdate,
@@ -1464,6 +1465,15 @@ export default function App() {
     }
   };
 
+  const handleCloseVersionUpdateToast = () => {
+    getEngine()?.playLobbyClickSfx?.('close');
+    if (newVersionToast) {
+      markVersionUpdateAsAcknowledged(newVersionToast.buildId, newVersionToast.details);
+    }
+    setNewVersionToast(null);
+    setOtaDownloadProgress(null);
+  };
+
   const handleManualCheckForUpdates = async () => {
     getEngine()?.playLobbyClickSfx?.('card');
     const saved = saveGitHubUpdateConfig({
@@ -1480,7 +1490,7 @@ export default function App() {
     if (result?.found) {
       setVersionCheckNotice('Found an update! Tap "Update" below to download and restart the app.');
     } else {
-      setVersionCheckNotice('Found an update! Tap "Update" below to download and restart the app.');
+      setVersionCheckNotice(result?.message || 'App is up to date!');
     }
   };
 
@@ -5598,6 +5608,15 @@ export default function App() {
                   ? 'Restarting...'
                   : `${otaDownloadProgress?.percent ?? 0}%`
                 : 'Update'}
+            </button>
+            <button
+              type="button"
+              className="cozy-version-dismiss-btn"
+              id="btn-close-new-version"
+              disabled={isRefreshingVersion}
+              onClick={handleCloseVersionUpdateToast}
+            >
+              Close
             </button>
           </div>
         </div>
