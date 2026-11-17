@@ -6,7 +6,22 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
  * Loads and caches actual 3D .gltf and .glb models and .png/.jpg textures from /public/assets/halloween/
  */
 
-const gltfLoader = new GLTFLoader();
+THREE.Cache.enabled = true;
+
+// Instant 1x1 PNG data URI used by GLTFLoader for external halloweenbits_texture.png references
+// since all HalloweenBits meshes immediately receive the single sharedHalloweenAtlasMat instance.
+const INLINE_PLACEHOLDER_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+const halloweenLoadingManager = new THREE.LoadingManager();
+halloweenLoadingManager.setURLModifier((url) => {
+  if (typeof url === 'string' && url.includes('halloweenbits_texture.png')) {
+    return INLINE_PLACEHOLDER_PNG;
+  }
+  return url;
+});
+
+const gltfLoader = new GLTFLoader(halloweenLoadingManager);
 const textureLoader = new THREE.TextureLoader();
 
 const modelTemplateCache = new Map();
@@ -31,6 +46,7 @@ export function getSharedHalloweenAtlasMaterial() {
   if (sharedHalloweenAtlasMat) return sharedHalloweenAtlasMat;
   const map = getSharedHalloweenAtlasTexture();
   sharedHalloweenAtlasMat = new THREE.MeshStandardMaterial({
+    name: 'HalloweenBits',
     map,
     roughness: 0.58,
     metalness: 0.08
@@ -76,6 +92,8 @@ export function loadHalloweenModelTemplate(modelName) {
 
   const url = resolveHalloweenModelUrl(modelName);
   const sharedAtlasMat = getSharedHalloweenAtlasMaterial();
+  const isSharedAtlasModel =
+    modelName !== 'cauldron' && modelName !== 'character_skeleton_minion';
 
   const promise = new Promise((resolve) => {
     gltfLoader.load(
@@ -91,7 +109,10 @@ export function loadHalloweenModelTemplate(modelName) {
           child.castShadow = true;
           child.receiveShadow = true;
           if (child.material) {
-            if (child.material.name === 'HalloweenBits' && sharedAtlasMat) {
+            if (
+              sharedAtlasMat &&
+              (child.material.name === 'HalloweenBits' || isSharedAtlasModel)
+            ) {
               child.material = sharedAtlasMat;
             } else {
               const mats = Array.isArray(child.material) ? child.material : [child.material];

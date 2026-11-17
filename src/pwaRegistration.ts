@@ -173,48 +173,83 @@ export function registerGameServiceWorkerAndVersionWatcher(
     }
   };
 
-  // 2. Register Service Worker (`/sw.js`) for game asset caching & update lifecycle
+  // Detect whether we are running inside a native Android Capacitor WebView
+  const isCapacitorOrAndroidWebView = (() => {
+    try {
+      const ua = navigator.userAgent || '';
+      const hasCap = Boolean((window as unknown as { Capacitor?: unknown }).Capacitor);
+      const isWv = ua.includes('; wv)');
+      const isCapLocalOrigin =
+        (window.location.hostname === 'localhost' ||
+          window.location.hostname.endsWith('.localhost')) &&
+        window.location.port === '';
+      return (
+        hasCap ||
+        isWv ||
+        isCapLocalOrigin ||
+        window.location.protocol === 'capacitor:' ||
+        window.location.protocol === 'file:'
+      );
+    } catch {
+      return false;
+    }
+  })();
+
+  // 2. Register Service Worker (`/sw.js`) on standard Web, or clean up inside Capacitor WebView
   if ('serviceWorker' in navigator) {
-    const onSwMessage = (event: MessageEvent) => {
-      const msg = event.data;
-      if (!msg || typeof msg.type !== 'string') return;
-      if (msg.type === 'NEW_VERSION_AVAILABLE' && msg.buildId) {
-        notifyUpdate(String(msg.buildId));
-      }
-    };
-    navigator.serviceWorker.addEventListener('message', onSwMessage);
-
-    navigator.serviceWorker
-      .register('/sw.js', { scope: '/', updateViaCache: 'none' })
-      .then((reg) => {
-        if (isDisposed) return;
-        swRegistration = reg;
-
-        if (reg.waiting) {
-          notifyUpdate('sw-waiting-' + Date.now());
+    if (isCapacitorOrAndroidWebView) {
+      // Inside Capacitor APK, all assets are already stored locally in assets/public;
+      // unregister any Service Worker so Android WebViewLocalServer never returns 404.
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => {
+          for (const r of regs) {
+            r.unregister().catch(() => undefined);
+          }
+        })
+        .catch(() => undefined);
+    } else {
+      const onSwMessage = (event: MessageEvent) => {
+        const msg = event.data;
+        if (!msg || typeof msg.type !== 'string') return;
+        if (msg.type === 'NEW_VERSION_AVAILABLE' && msg.buildId) {
+          notifyUpdate(String(msg.buildId));
         }
+      };
+      navigator.serviceWorker.addEventListener('message', onSwMessage);
 
-        reg.addEventListener('updatefound', () => {
-          const installingWorker = reg.installing;
-          if (!installingWorker) return;
-          installingWorker.addEventListener('statechange', () => {
-            if (
-              installingWorker.state === 'installed' &&
-              navigator.serviceWorker.controller
-            ) {
-              // New Service Worker installed & waiting -> trigger New Version Available toast
-              checkForUpdatesNow();
-            }
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/', updateViaCache: 'none' })
+        .then((reg) => {
+          if (isDisposed) return;
+          swRegistration = reg;
+
+          if (reg.waiting) {
+            notifyUpdate('sw-waiting-' + Date.now());
+          }
+
+          reg.addEventListener('updatefound', () => {
+            const installingWorker = reg.installing;
+            if (!installingWorker) return;
+            installingWorker.addEventListener('statechange', () => {
+              if (
+                installingWorker.state === 'installed' &&
+                navigator.serviceWorker.controller
+              ) {
+                // New Service Worker installed & waiting -> trigger New Version Available toast
+                checkForUpdatesNow();
+              }
+            });
           });
-        });
 
-        // Perform initial version check on load once SW is registered
-        checkForUpdatesNow();
-      })
-      .catch(() => {
-        // Fallback direct version check if SW registration is blocked by iframe security policy
-        checkForUpdatesNow();
-      });
+          // Perform initial version check on load once SW is registered
+          checkForUpdatesNow();
+        })
+        .catch(() => {
+          // Fallback direct version check if SW registration is blocked by iframe security policy
+          checkForUpdatesNow();
+        });
+    }
   } else {
     checkForUpdatesNow();
   }

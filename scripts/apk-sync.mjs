@@ -15,12 +15,13 @@ try {
   const rootCapConfigPath = resolve(rootDir, 'capacitor.config.json');
   if (existsSync(rootCapConfigPath)) {
     const capCfg = JSON.parse(readFileSync(rootCapConfigPath, 'utf8'));
-    if (capCfg?.server?.url) {
+    capCfg.server = capCfg.server || {};
+    if (capCfg.server.url) {
       delete capCfg.server.url;
-      capCfg.server.androidScheme = 'https';
-      writeFileSync(rootCapConfigPath, JSON.stringify(capCfg, null, 2) + '\n', 'utf8');
-      console.log('[Wizard Chess APK Sync] Removed remote server.url from capacitor.config.json to prevent 404 Page Not Found.');
     }
+    capCfg.server.hostname = 'wizardchess.localhost';
+    capCfg.server.androidScheme = 'https';
+    writeFileSync(rootCapConfigPath, JSON.stringify(capCfg, null, 2) + '\n', 'utf8');
   }
 
   // 2. Ensure Capacitor packages are installed
@@ -58,12 +59,14 @@ try {
   );
   if (existsSync(androidCapConfigPath)) {
     const androidCapCfg = JSON.parse(readFileSync(androidCapConfigPath, 'utf8'));
-    if (androidCapCfg?.server?.url) {
+    androidCapCfg.server = androidCapCfg.server || {};
+    if (androidCapCfg.server.url) {
       delete androidCapCfg.server.url;
-      androidCapCfg.server.androidScheme = 'https';
-      writeFileSync(androidCapConfigPath, JSON.stringify(androidCapCfg, null, 2) + '\n', 'utf8');
-      console.log('[Wizard Chess APK Sync] Cleaned stale server.url from android/app/src/main/assets/capacitor.config.json.');
     }
+    androidCapCfg.server.hostname = 'wizardchess.localhost';
+    androidCapCfg.server.androidScheme = 'https';
+    writeFileSync(androidCapConfigPath, JSON.stringify(androidCapCfg, null, 2) + '\n', 'utf8');
+    console.log('[Wizard Chess APK Sync] Verified clean local origin (https://wizardchess.localhost) in android/app/src/main/assets/capacitor.config.json.');
   }
 
   console.log('\n✅ [Wizard Chess APK Sync] Success! Bundled assets are synced into android/app/src/main/assets/public.');

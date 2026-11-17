@@ -10,6 +10,8 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  setLogLevel,
   doc,
   getDoc,
   getDocs,
@@ -32,16 +34,31 @@ let auth: Auth | null = null;
 let db: Firestore | null = null;
 
 try {
+  // Silence internal @firebase/firestore transport retry console.error logs when offline or switching to long-polling
+  setLogLevel('silent');
+
   if (!getApps().length && firebaseConfig?.apiKey && firebaseConfig.apiKey !== '') {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     const dbId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId;
-    db = dbId ? getFirestore(app, dbId) : getFirestore(app);
+    try {
+      db = dbId
+        ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, dbId)
+        : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+    } catch {
+      db = dbId ? getFirestore(app, dbId) : getFirestore(app);
+    }
   } else if (getApps().length) {
     app = getApps()[0];
     auth = getAuth(app);
     const dbId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId;
-    db = dbId ? getFirestore(app, dbId) : getFirestore(app);
+    try {
+      db = dbId
+        ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, dbId)
+        : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+    } catch {
+      db = dbId ? getFirestore(app, dbId) : getFirestore(app);
+    }
   }
 } catch (err) {
   console.warn('[Sanctum Firebase] Initialization error:', err);

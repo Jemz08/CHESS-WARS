@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: rootDir,
+    base: './',
     esbuild: {
       // Strip all license/legal and inline comments from the compiled output
       legalComments: 'none',

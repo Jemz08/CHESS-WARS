@@ -90,7 +90,21 @@ self.addEventListener('install', (event) => {
   );
 });
 
+const IS_CAPACITOR_LOCAL =
+  (self.location.hostname === 'localhost' ||
+    self.location.hostname.endsWith('.localhost')) &&
+  self.location.port === '';
+
 self.addEventListener('activate', (event) => {
+  if (IS_CAPACITOR_LOCAL) {
+    event.waitUntil(
+      caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+        .then(() => self.registration.unregister())
+    );
+    return;
+  }
   event.waitUntil(
     caches
       .keys()
@@ -113,6 +127,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (IS_CAPACITOR_LOCAL) {
+    return;
+  }
+
   const { request } = event;
   let url;
   try {
@@ -176,20 +194,33 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. App Shell, Navigation, & JS/CSS Bundles: Network-First with Cache Fallback
+  // 3. App Shell, Navigation, & JS/CSS Bundles: Network-First with Cache Fallback (never return 404 on navigation)
   event.respondWith(
     caches.open(SHELL_CACHE_NAME).then(async (cache) => {
       try {
-        const networkRes = await fetch(request);
+        const fetchTarget =
+          request.mode === 'navigate' && url.pathname === '/'
+            ? '/index.html'
+            : request;
+        const networkRes = await fetch(fetchTarget);
         if (networkRes && networkRes.ok && networkRes.status === 200) {
           cache.put(request, networkRes.clone());
+          return networkRes;
+        }
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        if (request.mode === 'navigate') {
+          const fallbackIndex =
+            (await cache.match('/index.html')) || (await cache.match('/'));
+          if (fallbackIndex) return fallbackIndex;
         }
         return networkRes;
       } catch {
         const cached = await cache.match(request);
         if (cached) return cached;
         if (request.mode === 'navigate') {
-          const fallbackIndex = await cache.match('/index.html');
+          const fallbackIndex =
+            (await cache.match('/index.html')) || (await cache.match('/'));
           if (fallbackIndex) return fallbackIndex;
         }
         return new Response('Offline — please reconnect to load Wizard Chess.', {

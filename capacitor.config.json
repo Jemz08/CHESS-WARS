@@ -5,6 +5,7 @@
   "bundledWebRuntime": false,
   "backgroundColor": "#F5ECD9",
   "server": {
+    "hostname": "wizardchess.localhost",
     "androidScheme": "https",
     "cleartext": true,
     "allowNavigation": [

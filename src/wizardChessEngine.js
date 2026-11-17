@@ -5986,7 +5986,10 @@ export function initWizardChess() {
       window.location.hostname.includes('github.io') ||
       window.location.protocol === 'file:' ||
       window.location.protocol === 'capacitor:' ||
-      (window.location.hostname === 'localhost' && window.location.port === '');
+      Boolean(window.Capacitor) ||
+      ((window.location.hostname === 'localhost' ||
+        window.location.hostname.endsWith('.localhost')) &&
+        window.location.port === '');
 
     const MATCHMAKING_TIMEOUT_MS = 30000;
     let matchmakingTimeoutTimer = null;
