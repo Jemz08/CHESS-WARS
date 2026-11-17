@@ -795,117 +795,160 @@ export function registerGameServiceWorkerAndVersionWatcher(
       return { found: false, message: '' };
     }
 
-    try {
-      const commitRes = await fetch(
-        `https://api.github.com/repos/${githubRepo}/commits/${encodeURIComponent(branch)}?t=${Date.now()}`,
-        {
-          cache: 'no-store',
-          headers: { Accept: 'application/vnd.github.v3+json' }
-        }
-      );
+    const activeInfo = getActiveRunningBuildInfo();
+    const appliedOtaSha = localStorage.getItem(APPLIED_OTA_COMMIT_SHA_KEY) || '';
+    const effectiveRunningSha =
+      activeInfo.commitSha && activeInfo.commitSha !== 'local-head'
+        ? activeInfo.commitSha
+        : appliedOtaSha;
 
-      if (!commitRes.ok) {
-        if (commitRes.status === 404) {
-          return {
-            found: false,
-            message: `GitHub repo "${githubRepo}" (branch "${branch}") not found or is private.`
-          };
-        }
-        return {
-          found: false,
-          message: `GitHub API returned status ${commitRes.status}.`
-        };
-      }
+    let shortSha = '';
+    let commitMessage = 'New update pushed to GitHub';
+    let commitDate = '';
 
-      const commitData = await commitRes.json();
-      const fullSha = typeof commitData?.sha === 'string' ? commitData.sha : '';
-      const shortSha = fullSha ? fullSha.slice(0, 8) : '';
-      const commitMessage =
-        typeof commitData?.commit?.message === 'string'
-          ? commitData.commit.message.split('\n')[0].trim()
-          : 'New commit pushed to GitHub';
-      const commitDate =
-        typeof commitData?.commit?.committer?.date === 'string'
-          ? commitData.commit.committer.date
-          : '';
-      const commitTs = commitDate ? Date.parse(commitDate) || 0 : 0;
-
-      if (!shortSha) {
-        return { found: false, message: 'Could not read commit SHA from GitHub.' };
-      }
-
-      let apkDownloadUrl = '';
-      let releaseHtmlUrl = '';
+    // 1. Try zero-rate-limit /api/github-version proxy (uses GitHub Atom feed + raw CDN, never 403s)
+    const proxyServers = Array.from(
+      new Set([liveUrl, DEFAULT_CLOUD_RUN_LIVE_URL].filter(Boolean))
+    );
+    for (const srv of proxyServers) {
       try {
-        const relRes = await fetch(
-          `https://api.github.com/repos/${githubRepo}/releases/latest?t=${Date.now()}`,
+        const cleanSrv = srv.replace(/\/+$/, '').replace(/\/ota-dist$/, '');
+        const proxyRes = await fetch(
+          `${cleanSrv}/api/github-version?repo=${encodeURIComponent(githubRepo)}&branch=${encodeURIComponent(branch)}&t=${Date.now()}`,
+          { cache: 'no-store' }
+        ).catch(() => null);
+        if (proxyRes && proxyRes.ok) {
+          const pData = await proxyRes.json().catch(() => null);
+          if (pData?.ok && pData.shortSha && pData.shortSha !== 'local-head') {
+            shortSha = String(pData.shortSha).slice(0, 8);
+            if (pData.commitMessage) commitMessage = String(pData.commitMessage);
+            if (pData.commitDate) commitDate = String(pData.commitDate);
+            break;
+          }
+        }
+      } catch {
+        // Continue to next source
+      }
+    }
+
+    // 2. Try zero-rate-limit raw.githubusercontent.com & cdn.jsdelivr.net
+    if (!shortSha) {
+      const rawUrls = [
+        `https://raw.githubusercontent.com/${githubRepo}/${encodeURIComponent(branch)}/public/version.json?t=${Date.now()}`,
+        `https://cdn.jsdelivr.net/gh/${githubRepo}@${encodeURIComponent(branch)}/public/version.json?t=${Date.now()}`
+      ];
+      for (const rUrl of rawUrls) {
+        try {
+          const rRes = await fetch(rUrl, { cache: 'no-store' }).catch(() => null);
+          if (rRes && rRes.ok) {
+            const rData = await rRes.json().catch(() => null);
+            const candidateSha = String(rData?.commitSha || rData?.buildId || '');
+            if (candidateSha && candidateSha !== 'local-head') {
+              shortSha = candidateSha.slice(0, 12);
+              if (rData?.notes) commitMessage = String(rData.notes);
+              if (rData?.updatedAt) commitDate = String(rData.updatedAt);
+              break;
+            }
+          }
+        } catch {
+          // Continue
+        }
+      }
+    }
+
+    // 3. Fallback to api.github.com ONLY if needed — and if 403 rate-limited, bypass via Live OTA Server!
+    if (!shortSha) {
+      try {
+        const commitRes = await fetch(
+          `https://api.github.com/repos/${githubRepo}/commits/${encodeURIComponent(branch)}?t=${Date.now()}`,
           {
             cache: 'no-store',
             headers: { Accept: 'application/vnd.github.v3+json' }
           }
         );
-        if (relRes.ok) {
-          const relData = await relRes.json();
-          if (typeof relData?.html_url === 'string') {
-            releaseHtmlUrl = relData.html_url;
+
+        if (!commitRes.ok) {
+          if (commitRes.status === 403 || commitRes.status === 429) {
+            // GitHub REST API rate-limited (60/hr limit per IP) — automatically bypass via Live OTA Server!
+            const fallbackBuildId = `ota-bypass-${Date.now()}`;
+            const details: DetectedVersionUpdate = {
+              buildId: fallbackBuildId,
+              previousBuildId: activeInfo.buildId,
+              commitMessage: 'GitHub API rate-limit bypassed via Direct Live OTA Server',
+              buildTimestamp: Date.now(),
+              source: 'live-url',
+              liveUrl: liveUrl || DEFAULT_CLOUD_RUN_LIVE_URL,
+              otaBaseUrl: `${(liveUrl || DEFAULT_CLOUD_RUN_LIVE_URL).replace(/\/+$/, '')}/ota-dist`
+            };
+            notifyUpdate(details);
+            return {
+              found: true,
+              message:
+                'GitHub API 403 rate-limit bypassed! Tap "⬇ Download Changes & Restart APK" below to download directly from the Live OTA Server.',
+              details
+            };
           }
-          if (Array.isArray(relData?.assets)) {
-            const apkAsset = relData.assets.find(
-              (a: { name?: string; browser_download_url?: string }) =>
-                typeof a?.name === 'string' &&
-                a.name.toLowerCase().endsWith('.apk') &&
-                typeof a?.browser_download_url === 'string'
-            );
-            if (apkAsset?.browser_download_url) {
-              apkDownloadUrl = apkAsset.browser_download_url;
-            }
+          if (commitRes.status === 404) {
+            return {
+              found: false,
+              message: `GitHub repo "${githubRepo}" (branch "${branch}") not found or is private. You can still tap "⬇ Download Changes & Restart APK" to update from the Live Server!`
+            };
           }
+          return {
+            found: false,
+            message: `GitHub returned status ${commitRes.status} — tap "⬇ Download Changes & Restart APK" to update directly.`
+          };
+        }
+
+        const commitData = await commitRes.json();
+        const fullSha = typeof commitData?.sha === 'string' ? commitData.sha : '';
+        shortSha = fullSha ? fullSha.slice(0, 8) : '';
+        if (typeof commitData?.commit?.message === 'string') {
+          commitMessage = commitData.commit.message.split('\n')[0].trim();
+        }
+        if (typeof commitData?.commit?.committer?.date === 'string') {
+          commitDate = commitData.commit.committer.date;
         }
       } catch {
-        // Optional release check
-      }
-
-      const activeInfo = getActiveRunningBuildInfo();
-      const appliedOtaSha = localStorage.getItem(APPLIED_OTA_COMMIT_SHA_KEY) || '';
-      const effectiveRunningSha =
-        activeInfo.commitSha && activeInfo.commitSha !== 'local-head'
-          ? activeInfo.commitSha
-          : appliedOtaSha;
-
-      const remoteBuildId = `gh-${shortSha}`;
-
-      if (force || !effectiveRunningSha || shortSha !== effectiveRunningSha) {
-        const details: DetectedVersionUpdate = {
-          buildId: remoteBuildId,
-          previousBuildId: effectiveRunningSha ? `gh-${effectiveRunningSha}` : activeInfo.buildId,
-          commitSha: shortSha,
-          commitMessage,
-          commitDate,
-          buildTimestamp: commitTs || Date.now(),
-          source: 'github',
-          liveUrl: liveUrl || DEFAULT_CLOUD_RUN_LIVE_URL,
-          otaBaseUrl: `https://cdn.jsdelivr.net/gh/${githubRepo}@${shortSha}/dist`,
-          apkDownloadUrl: apkDownloadUrl || undefined,
-          releaseHtmlUrl: releaseHtmlUrl || `https://github.com/${githubRepo}/commits/${branch}`
-        };
-        notifyUpdate(details);
         return {
-          found: true,
-          message: `New GitHub update ready! Commit #${shortSha}: "${commitMessage}" — tap "Download Changes & Restart APK" to apply.`,
-          details
+          found: false,
+          message: 'Tap "⬇ Download Changes & Restart APK" below to pull the latest assets directly.'
         };
       }
+    }
 
-      return {
-        found: false,
-        message: `Running latest GitHub commit #${shortSha} ("${commitMessage}").`
+    if (!shortSha) {
+      return { found: false, message: '' };
+    }
+
+    const commitTs = commitDate ? Date.parse(commitDate) || 0 : 0;
+    const remoteBuildId = `gh-${shortSha}`;
+
+    if (force || !effectiveRunningSha || shortSha !== effectiveRunningSha) {
+      const details: DetectedVersionUpdate = {
+        buildId: remoteBuildId,
+        previousBuildId: effectiveRunningSha ? `gh-${effectiveRunningSha}` : activeInfo.buildId,
+        commitSha: shortSha,
+        commitMessage,
+        commitDate,
+        buildTimestamp: commitTs || Date.now(),
+        source: 'github',
+        liveUrl: liveUrl || DEFAULT_CLOUD_RUN_LIVE_URL,
+        otaBaseUrl: `https://cdn.jsdelivr.net/gh/${githubRepo}@${shortSha}/dist`,
+        releaseHtmlUrl: `https://github.com/${githubRepo}/commits/${branch}`
       };
-    } catch {
+      notifyUpdate(details);
       return {
-        found: false,
-        message: 'Could not reach GitHub API. Checking Live OTA Server...'
+        found: true,
+        message: `New GitHub update ready! Commit #${shortSha}: "${commitMessage}" — tap "⬇ Download Changes & Restart APK" to apply.`,
+        details
       };
     }
+
+    return {
+      found: false,
+      message: `Synced with GitHub commit #${shortSha} ("${commitMessage}").`
+    };
   };
 
   const checkLiveServersForUpdates = async (
@@ -968,7 +1011,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
             notifyUpdate(details);
             return {
               found: true,
-              message: `New Update Available (${remoteBuildId})! Tap "Download Changes & Restart APK" to install.`,
+              message: `New Update Available (${remoteBuildId})! Tap "⬇ Download Changes & Restart APK" to install.`,
               details
             };
           }
@@ -1027,12 +1070,12 @@ export function registerGameServiceWorkerAndVersionWatcher(
         found: false,
         message:
           ghResult.message ||
-          `Active build: ${activeInfo.buildId}. Tap "Download Changes & Restart APK" below to download the latest assets and restart!`
+          `Active build: ${activeInfo.buildId}. Tap "⬇ Download Changes & Restart APK" below to download the latest assets and restart!`
       };
     } catch {
       return {
         found: false,
-        message: 'Unable to check for updates right now.'
+        message: 'Tap "⬇ Download Changes & Restart APK" below to download the latest update.'
       };
     }
   };
@@ -1104,17 +1147,18 @@ export function registerGameServiceWorkerAndVersionWatcher(
     }
   });
 
+  // Poll only the Live OTA Server in the background every 2 minutes (never spam api.github.com!)
   const intervalId = window.setInterval(() => {
-    checkForUpdatesNow();
-  }, 30000);
+    checkLiveServersForUpdates(false);
+  }, 120000);
 
   const handleVisibility = () => {
     if (document.visibilityState === 'visible') {
-      checkForUpdatesNow();
+      checkLiveServersForUpdates(false);
     }
   };
   const handleFocus = () => {
-    checkForUpdatesNow();
+    checkLiveServersForUpdates(false);
   };
 
   document.addEventListener('visibilitychange', handleVisibility);

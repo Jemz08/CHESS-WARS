@@ -859,6 +859,104 @@ async function startServer() {
     });
   });
 
+  // Zero-Rate-Limit GitHub Version Proxy (uses github.com Atom feed + raw.githubusercontent.com to avoid api.github.com 403 rate limits)
+  const ghCache = new Map<string, { ts: number; data: Record<string, unknown> }>();
+  app.get('/api/github-version', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    const repo = String(req.query.repo || '').trim();
+    const branch = String(req.query.branch || 'main').trim();
+    if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo)) {
+      res.status(400).json({ ok: false, error: 'Invalid repo format' });
+      return;
+    }
+
+    const cacheKey = `${repo}@${branch}`;
+    const cached = ghCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < 45_000) {
+      res.json(cached.data);
+      return;
+    }
+
+    const info = computeLiveBuildVersion();
+    try {
+      // 1. Fetch GitHub public Atom commit feed (not subject to 60/hr REST API 403 rate limit!)
+      const atomUrl = `https://github.com/${repo}/commits/${encodeURIComponent(branch)}.atom`;
+      const atomRes = await fetch(atomUrl, {
+        headers: { 'User-Agent': 'WizardChess-OTA-Updater/1.0' }
+      }).catch(() => null);
+
+      if (atomRes && atomRes.ok) {
+        const xml = await atomRes.text();
+        const entryMatch = xml.match(/<entry>([\s\S]*?)<\/entry>/i);
+        if (entryMatch) {
+          const entryXml = entryMatch[1];
+          const shaMatch = entryXml.match(/Commit\/([0-9a-f]{7,40})/i);
+          const titleMatch = entryXml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+          const updatedMatch = entryXml.match(/<updated>([\s\S]*?)<\/updated>/i);
+          const fullSha = shaMatch ? shaMatch[1] : '';
+          const shortSha = fullSha ? fullSha.slice(0, 8) : '';
+          const commitMessage = titleMatch
+            ? titleMatch[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
+            : 'New commit pushed to GitHub';
+          const commitDate = updatedMatch ? updatedMatch[1].trim() : new Date().toISOString();
+
+          if (shortSha) {
+            const payload = {
+              ok: true,
+              source: 'github-atom',
+              shortSha,
+              fullSha,
+              commitMessage,
+              commitDate,
+              serverBuildId: info.buildId,
+              entryJs: info.entryJs,
+              entryCss: info.entryCss
+            };
+            ghCache.set(cacheKey, { ts: Date.now(), data: payload });
+            res.json(payload);
+            return;
+          }
+        }
+      }
+
+      // 2. Fallback: raw.githubusercontent.com/repo/branch/public/version.json (0 rate limit)
+      const rawUrl = `https://raw.githubusercontent.com/${repo}/${encodeURIComponent(branch)}/public/version.json?t=${Date.now()}`;
+      const rawRes = await fetch(rawUrl).catch(() => null);
+      if (rawRes && rawRes.ok) {
+        const rawJson = (await rawRes.json().catch(() => null)) as Record<string, unknown> | null;
+        if (rawJson) {
+          const sha = String(rawJson.commitSha || rawJson.buildId || '').slice(0, 16);
+          const payload = {
+            ok: true,
+            source: 'github-raw',
+            shortSha: sha || info.commitSha,
+            commitMessage: String(rawJson.notes || 'GitHub version.json update'),
+            commitDate: String(rawJson.updatedAt || new Date().toISOString()),
+            serverBuildId: info.buildId,
+            entryJs: info.entryJs,
+            entryCss: info.entryCss
+          };
+          ghCache.set(cacheKey, { ts: Date.now(), data: payload });
+          res.json(payload);
+          return;
+        }
+      }
+    } catch {
+      // Fallback to live server version
+    }
+
+    res.json({
+      ok: true,
+      source: 'live-server-fallback',
+      shortSha: info.commitSha,
+      commitMessage: 'Live OTA Server Bundle Ready',
+      commitDate: new Date(info.buildTimestamp).toISOString(),
+      serverBuildId: info.buildId,
+      entryJs: info.entryJs,
+      entryCss: info.entryCss
+    });
+  });
+
   // Always serve compiled /dist under /ota-dist with CORS so Android APKs can hot-load the compiled bundle
   app.use(
     '/ota-dist',
