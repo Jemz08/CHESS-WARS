@@ -18,7 +18,7 @@
     "backgroundColor": "#F5ECD9",
     "allowMixedContent": true,
     "captureInput": true,
-    "webContentsDebuggingEnabled": true
+    "webContentsDebuggingEnabled": false
   },
   "plugins": {
     "SplashScreen": {

@@ -369,10 +369,34 @@ function applyRoomMove(
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
+  app.disable('x-powered-by');
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+    // Block external scraping of sensitive repository configs, source maps, and dotfiles
+    const reqPath = (req.path || '').toLowerCase();
+    if (
+      reqPath.startsWith('/.env') ||
+      reqPath.startsWith('/.git') ||
+      reqPath.startsWith('/.aistudio') ||
+      reqPath.endsWith('.map') ||
+      reqPath.endsWith('.jks') ||
+      reqPath.endsWith('.keystore') ||
+      reqPath === '/server.ts' ||
+      reqPath === '/firestore.rules' ||
+      reqPath === '/firebase-blueprint.json' ||
+      reqPath === '/capacitor.config.json' ||
+      reqPath === '/package.json' ||
+      reqPath === '/bun.lock'
+    ) {
+      res.status(403).json({ ok: false, error: 'Forbidden' });
+      return;
+    }
+
     if (req.method === 'OPTIONS') {
       res.status(204).end();
       return;
