@@ -1469,23 +1469,51 @@ export default function App() {
 
     setVersionCheckNotice(
       saved.githubRepo
-        ? `Checking GitHub (${saved.githubRepo}@${saved.branch}) for new commits & releases...`
-        : 'Checking server & Service Worker cache for new version...'
+        ? `Checking GitHub (${saved.githubRepo}@${saved.branch}) & Live OTA Server for updates...`
+        : 'Checking Live OTA Server & Service Worker for updates...'
     );
-    const result = await swControllerRef.current?.checkForUpdatesNow();
+    const result = await swControllerRef.current?.checkForUpdatesNow({ force: true });
     if (result?.found) {
-      setVersionCheckNotice(result.message || 'New version detected! Ready to refresh.');
+      setVersionCheckNotice(result.message || 'New version detected! Tap "Update & Reload Now" or "Force Apply Latest Update".');
     } else {
       setVersionCheckNotice(
         result?.message ||
-          'You are on the latest build — or tap "Refresh Game" on the preview toast below to force a clean state reload.'
+          'Tap "Force Apply Latest Update" below to hot-pull the latest live bundle into your APK.'
       );
-      if (!saved.githubRepo) {
-        setNewVersionToast({
-          available: true,
-          buildId: String(Date.now())
-        });
-      }
+    }
+  };
+
+  const handleForceApplyLatestUpdate = async () => {
+    if (isRefreshingVersion) return;
+    setIsRefreshingVersion(true);
+    getEngine()?.playLobbyClickSfx?.('unlock');
+    saveGitHubUpdateConfig({
+      githubRepo: githubRepoInput,
+      branch: githubBranchInput || 'main',
+      liveUrl: otaLiveUrlInput
+    });
+    setVersionCheckNotice('Downloading & hot-applying latest live bundle into your app...');
+
+    const persistStateBeforeReload = () => {
+      try {
+        saveEconomyState(economy);
+        if (currentUser) {
+          saveUserDataToCloud(
+            currentUser,
+            economy,
+            playerRating,
+            rankProgress.currentTier.id,
+            rankProgress.currentTier.numeral,
+            customProfilePhoto
+          ).catch(() => undefined);
+        }
+      } catch {}
+    };
+
+    const res = await swControllerRef.current?.forcePullAndApplyLatestUpdate(persistStateBeforeReload);
+    setIsRefreshingVersion(false);
+    if (res) {
+      setVersionCheckNotice(res.message);
     }
   };
 
@@ -5261,6 +5289,15 @@ export default function App() {
                       onClick={handleManualCheckForUpdates}
                     >
                       Check for Updates
+                    </button>
+                    <button
+                      type="button"
+                      className="sanctum-action-btn load-save-btn"
+                      id="btn-force-apply-ota-update"
+                      disabled={isRefreshingVersion}
+                      onClick={handleForceApplyLatestUpdate}
+                    >
+                      {isRefreshingVersion ? 'Applying Update...' : 'Force Apply Latest Update'}
                     </button>
                     {!isInstalled && isInstallable && (
                       <button

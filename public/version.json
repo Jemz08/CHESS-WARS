@@ -1,10 +1,11 @@
 {
-  "version": "1.0.4",
-  "buildId": "build-20261117-ota",
+  "version": "1.0.5",
+  "buildId": "build-local-head-1794925400000",
   "commitSha": "local-head",
+  "buildTimestamp": 1794925400000,
   "branch": "main",
   "githubRepo": "",
-  "liveUrl": "",
-  "updatedAt": "2026-11-17T04:20:00.000Z",
-  "notes": "Compact HUD layout, high-contrast button typography, and GitHub OTA auto-update support"
+  "liveUrl": "https://ais-pre-64yibneopxihyh3rjs6f74-281552636048.asia-southeast1.run.app",
+  "updatedAt": "2026-11-17T14:23:20.000Z",
+  "notes": "Gameplay Landscape/Portrait toggle, Capture Camera Zoom ON/OFF toggle, and APK Live OTA Hot-Update"
 }

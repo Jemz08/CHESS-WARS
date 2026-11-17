@@ -721,11 +721,69 @@ async function startServer() {
     });
   });
 
+  // --- CORS Middleware for Android APK (https://wizardchess.localhost) & OTA Clients ---
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, Pragma, Authorization');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
   // --- Live Build Version Endpoint for APK / Web Auto-Update Detection ---
   const serverBootTs = Date.now();
-  function computeLiveBuildVersion(): string {
+  const distPath = path.resolve(process.cwd(), 'dist');
+
+  function getDistBundleMetadata(): {
+    entryJs: string;
+    entryCss: string;
+    distBuildId: string;
+    distCommitSha: string;
+    distTimestamp: number;
+  } {
+    let entryJs = '';
+    let entryCss = '';
+    let distBuildId = '';
+    let distCommitSha = 'local-head';
+    let distTimestamp = 0;
+
     try {
-      let maxMtime = serverBootTs;
+      const assetsDir = path.join(distPath, 'assets');
+      if (fs.existsSync(assetsDir)) {
+        const files = fs.readdirSync(assetsDir);
+        const jsFile = files.find((f) => /^c-.*\.js$/i.test(f));
+        const cssFile = files.find((f) => /^a-.*\.css$/i.test(f));
+        if (jsFile) entryJs = `assets/${jsFile}`;
+        if (cssFile) entryCss = `assets/${cssFile}`;
+      }
+      const distVerPath = path.join(distPath, 'version.json');
+      const pubVerPath = path.resolve(process.cwd(), 'public', 'version.json');
+      const verPath = fs.existsSync(distVerPath) ? distVerPath : fs.existsSync(pubVerPath) ? pubVerPath : '';
+      if (verPath) {
+        const verJson = JSON.parse(fs.readFileSync(verPath, 'utf8'));
+        if (verJson.buildId) distBuildId = String(verJson.buildId);
+        if (verJson.commitSha) distCommitSha = String(verJson.commitSha);
+        if (verJson.buildTimestamp) distTimestamp = Number(verJson.buildTimestamp) || 0;
+      }
+    } catch {
+      // ignore
+    }
+    return { entryJs, entryCss, distBuildId, distCommitSha, distTimestamp };
+  }
+
+  function computeLiveBuildVersion(): {
+    buildId: string;
+    buildTimestamp: number;
+    commitSha: string;
+    entryJs: string;
+    entryCss: string;
+  } {
+    const meta = getDistBundleMetadata();
+    try {
+      let maxMtime = Math.max(serverBootTs, meta.distTimestamp);
       const rootFiles = ['index.html', 'server.ts', 'package.json'];
       for (const rf of rootFiles) {
         const p = path.resolve(process.cwd(), rf);
@@ -747,9 +805,22 @@ async function startServer() {
           }
         }
       }
-      return String(maxMtime);
+      const buildId = meta.distBuildId || `build-${meta.distCommitSha}-${maxMtime}`;
+      return {
+        buildId,
+        buildTimestamp: maxMtime,
+        commitSha: meta.distCommitSha,
+        entryJs: meta.entryJs,
+        entryCss: meta.entryCss
+      };
     } catch {
-      return String(serverBootTs);
+      return {
+        buildId: meta.distBuildId || String(serverBootTs),
+        buildTimestamp: serverBootTs,
+        commitSha: meta.distCommitSha,
+        entryJs: meta.entryJs,
+        entryCss: meta.entryCss
+      };
     }
   }
 
@@ -757,11 +828,47 @@ async function startServer() {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
+    const info = computeLiveBuildVersion();
     res.json({
       ok: true,
-      buildId: computeLiveBuildVersion()
+      version: '1.0.5',
+      buildId: info.buildId,
+      buildTimestamp: info.buildTimestamp,
+      commitSha: info.commitSha,
+      entryJs: info.entryJs,
+      entryCss: info.entryCss,
+      otaDistAvailable: Boolean(info.entryJs)
     });
   });
+
+  app.get('/version.json', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    const info = computeLiveBuildVersion();
+    res.json({
+      version: '1.0.5',
+      buildId: info.buildId,
+      buildTimestamp: info.buildTimestamp,
+      commitSha: info.commitSha,
+      entryJs: info.entryJs,
+      entryCss: info.entryCss,
+      otaDistAvailable: Boolean(info.entryJs),
+      updatedAt: new Date(info.buildTimestamp).toISOString(),
+      notes: 'Gameplay Landscape/Portrait toggle, Capture Camera Zoom ON/OFF toggle, and APK Live OTA Hot-Update'
+    });
+  });
+
+  // Always serve compiled /dist under /ota-dist with CORS so Android APKs can hot-load the compiled bundle
+  app.use(
+    '/ota-dist',
+    express.static(distPath, {
+      setHeaders: (res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      }
+    })
+  );
 
   app.get('/sw.js', (_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -776,13 +883,13 @@ async function startServer() {
   });
 
   // --- Vite Middleware in Development / Static Build in Production ---
-  const distPath = path.resolve(process.cwd(), 'dist');
   const isProd = process.env.NODE_ENV === 'production' && fs.existsSync(distPath);
 
   if (isProd) {
     app.use(
       express.static(distPath, {
         setHeaders: (res, filePath) => {
+          res.setHeader('Access-Control-Allow-Origin', '*');
           if (
             filePath.endsWith('index.html') ||
             filePath.endsWith('manifest.json') ||
@@ -794,6 +901,7 @@ async function startServer() {
       })
     );
     app.get('*all', (_req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });

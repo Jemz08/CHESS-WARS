@@ -1,10 +1,38 @@
 import { useEffect, useState } from 'react';
 
+declare const __APP_BUILD_ID__: string | undefined;
+declare const __APP_COMMIT_SHA__: string | undefined;
+declare const __APP_BUILD_TIMESTAMP__: number | undefined;
+declare const __APP_DEFAULT_LIVE_URL__: string | undefined;
+
 export const CACHED_BUILD_ID_STORAGE_KEY = 'wizardchess_cached_build_id';
 export const CACHED_COMMIT_SHA_STORAGE_KEY = 'wizardchess_cached_commit_sha';
+export const APPLIED_OTA_BUILD_ID_KEY = 'wizardchess_applied_ota_build_id';
+export const APPLIED_OTA_COMMIT_SHA_KEY = 'wizardchess_applied_ota_commit_sha';
+export const APPLIED_OTA_TIMESTAMP_KEY = 'wizardchess_applied_ota_timestamp';
 export const GITHUB_REPO_STORAGE_KEY = 'wizardchess_github_repo';
 export const GITHUB_BRANCH_STORAGE_KEY = 'wizardchess_github_branch';
 export const OTA_LIVE_URL_STORAGE_KEY = 'wizardchess_ota_live_url';
+
+export const DEFAULT_CLOUD_RUN_LIVE_URL =
+  typeof __APP_DEFAULT_LIVE_URL__ === 'string' && __APP_DEFAULT_LIVE_URL__.startsWith('http')
+    ? __APP_DEFAULT_LIVE_URL__
+    : 'https://ais-pre-64yibneopxihyh3rjs6f74-281552636048.asia-southeast1.run.app';
+
+export const COMPILED_BUILD_ID =
+  typeof __APP_BUILD_ID__ === 'string' && __APP_BUILD_ID__
+    ? __APP_BUILD_ID__
+    : 'build-local-head';
+
+export const COMPILED_COMMIT_SHA =
+  typeof __APP_COMMIT_SHA__ === 'string' && __APP_COMMIT_SHA__
+    ? __APP_COMMIT_SHA__
+    : 'local-head';
+
+export const COMPILED_BUILD_TIMESTAMP =
+  typeof __APP_BUILD_TIMESTAMP__ === 'number' && __APP_BUILD_TIMESTAMP__ > 0
+    ? __APP_BUILD_TIMESTAMP__
+    : 0;
 
 export interface GitHubUpdateConfig {
   githubRepo: string;
@@ -18,17 +46,24 @@ export interface DetectedVersionUpdate {
   commitSha?: string;
   commitMessage?: string;
   commitDate?: string;
+  buildTimestamp?: number;
   source: 'github' | 'live-url' | 'server' | 'service-worker';
   liveUrl?: string;
+  otaBaseUrl?: string;
+  entryJs?: string;
+  entryCss?: string;
   apkDownloadUrl?: string;
   releaseHtmlUrl?: string;
 }
 
-export interface VersionUpdateState {
-  available: boolean;
-  newBuildId: string;
-  currentBuildId: string;
-  checking: boolean;
+export interface StoredOtaBundle {
+  buildId: string;
+  commitSha: string;
+  buildTimestamp: number;
+  baseUrl: string;
+  cssText: string;
+  jsText: string;
+  savedAt: number;
 }
 
 interface BeforeInstallPromptEvent extends Event {
@@ -36,23 +71,225 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
+const OTA_IDB_NAME = 'wizardchess_ota_db_v1';
+const OTA_IDB_STORE = 'bundles';
+const OTA_IDB_KEY = 'active_bundle';
+
+function openOtaIndexedDB(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(OTA_IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(OTA_IDB_STORE)) {
+          db.createObjectStore(OTA_IDB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+export async function saveOtaBundleToIndexedDB(bundle: StoredOtaBundle): Promise<boolean> {
+  const db = await openOtaIndexedDB();
+  if (!db) return false;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(OTA_IDB_STORE, 'readwrite');
+      const store = tx.objectStore(OTA_IDB_STORE);
+      store.put(bundle, OTA_IDB_KEY);
+      tx.oncomplete = () => {
+        db.close();
+        resolve(true);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve(false);
+      };
+    } catch {
+      db.close();
+      resolve(false);
+    }
+  });
+}
+
+export async function loadOtaBundleFromIndexedDB(): Promise<StoredOtaBundle | null> {
+  const db = await openOtaIndexedDB();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(OTA_IDB_STORE, 'readonly');
+      const store = tx.objectStore(OTA_IDB_STORE);
+      const req = store.get(OTA_IDB_KEY);
+      req.onsuccess = () => {
+        db.close();
+        resolve((req.result as StoredOtaBundle) || null);
+      };
+      req.onerror = () => {
+        db.close();
+        resolve(null);
+      };
+    } catch {
+      db.close();
+      resolve(null);
+    }
+  });
+}
+
+function rewriteBundleRelativeAssets(code: string, baseUrl: string): string {
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  return code
+    .replace(/(["'`])\.\/assets\//g, `$1${cleanBase}/assets/`)
+    .replace(/(["'`])\/assets\//g, `$1${cleanBase}/assets/`)
+    .replace(/url\(\s*(['"]?)\.\/assets\//g, `url($1${cleanBase}/assets/`)
+    .replace(/url\(\s*(['"]?)\/assets\//g, `url($1${cleanBase}/assets/`);
+}
+
+export async function executeHotOtaBundleInPlace(bundle: StoredOtaBundle): Promise<boolean> {
+  try {
+    const win = window as unknown as Record<string, unknown>;
+    win.__WIZARD_CHESS_ACTIVE_OTA_BUILD__ = {
+      buildId: bundle.buildId,
+      commitSha: bundle.commitSha,
+      buildTimestamp: bundle.buildTimestamp
+    };
+
+    localStorage.setItem(APPLIED_OTA_BUILD_ID_KEY, bundle.buildId);
+    if (bundle.commitSha) {
+      localStorage.setItem(APPLIED_OTA_COMMIT_SHA_KEY, bundle.commitSha);
+    }
+    if (bundle.buildTimestamp) {
+      localStorage.setItem(APPLIED_OTA_TIMESTAMP_KEY, String(bundle.buildTimestamp));
+    }
+
+    // Inject updated CSS
+    if (bundle.cssText) {
+      let styleEl = document.getElementById('wizardchess-ota-live-style') as HTMLStyleElement | null;
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'wizardchess-ota-live-style';
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = rewriteBundleRelativeAssets(bundle.cssText, bundle.baseUrl);
+    }
+
+    // Clean up existing 3D canvas / UI overlays before mounting new bundle
+    const oldCanvas = document.getElementById('game-canvas');
+    if (oldCanvas && oldCanvas.parentNode) {
+      const freshCanvas = document.createElement('canvas');
+      freshCanvas.id = 'game-canvas';
+      oldCanvas.parentNode.replaceChild(freshCanvas, oldCanvas);
+    }
+    const rootEl = document.getElementById('root');
+    if (rootEl && rootEl.parentNode) {
+      const freshRoot = document.createElement('div');
+      freshRoot.id = 'root';
+      rootEl.parentNode.replaceChild(freshRoot, rootEl);
+    }
+
+    const rewrittenJs = rewriteBundleRelativeAssets(bundle.jsText, bundle.baseUrl);
+    const blob = new Blob([rewrittenJs], { type: 'text/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    await import(/* @vite-ignore */ blobUrl);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Helper to read/write GitHub Auto-Update configuration from localStorage / env
+ * Called at startup in src/main.tsx: if running inside the Capacitor Android APK
+ * and IndexedDB has a hot-downloaded OTA bundle that is strictly newer than the
+ * APK's baked-in compile timestamp, execute the newer OTA bundle automatically!
+ */
+export async function bootInstalledOtaBundleIfNewer(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const win = window as unknown as Record<string, unknown>;
+  if (win.__WIZARD_CHESS_OTA_BOOTING__) return false;
+  if (!isRunningInCapacitorOrAndroidWebView()) return false;
+
+  try {
+    const cached = await loadOtaBundleFromIndexedDB();
+    if (!cached || !cached.jsText) return false;
+    const isNewerTimestamp =
+      cached.buildTimestamp > 0 &&
+      COMPILED_BUILD_TIMESTAMP > 0 &&
+      cached.buildTimestamp > COMPILED_BUILD_TIMESTAMP + 2000;
+    const isDifferentBuild = cached.buildId && cached.buildId !== COMPILED_BUILD_ID;
+    if (isNewerTimestamp && isDifferentBuild) {
+      win.__WIZARD_CHESS_OTA_BOOTING__ = true;
+      const ok = await executeHotOtaBundleInPlace(cached);
+      if (ok) return true;
+      win.__WIZARD_CHESS_OTA_BOOTING__ = false;
+    }
+  } catch {
+    // Fall back to baked-in bundle
+  }
+  return false;
+}
+
+export function sanitizeGitHubRepoInput(raw: string): string {
+  const trimmed = (raw || '').trim();
+  if (!trimmed || /^jemz\d*$/i.test(trimmed)) return '';
+  const urlMatch = trimmed.match(/github\.com[:/]([^/]+\/[^/#?]+?)(?:\.git|\/)?$/i);
+  if (urlMatch) return urlMatch[1];
+  const pairMatch = trimmed.match(/^([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)$/);
+  if (pairMatch) return pairMatch[1];
+  return '';
+}
+
+function sanitizeBranchInput(raw: string): string {
+  const trimmed = (raw || '').trim();
+  if (!trimmed || /^jemz\d*$/i.test(trimmed)) return 'main';
+  return trimmed;
+}
+
+function sanitizeLiveUrlInput(raw: string): string {
+  const trimmed = (raw || '').trim();
+  if (!trimmed || /^jemz\d*$/i.test(trimmed)) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/+$/, '');
+  return '';
+}
+
+/**
+ * Clean up any legacy placeholder strings in localStorage and return valid config
  */
 export function getGitHubUpdateConfig(): GitHubUpdateConfig {
   const env = (import.meta as unknown as { env?: Record<string, string> }).env || {};
-  const storedRepo = (localStorage.getItem(GITHUB_REPO_STORAGE_KEY) || '').trim();
-  const storedBranch = (localStorage.getItem(GITHUB_BRANCH_STORAGE_KEY) || '').trim();
-  const storedLiveUrl = (localStorage.getItem(OTA_LIVE_URL_STORAGE_KEY) || '').trim();
+  const rawStoredRepo = localStorage.getItem(GITHUB_REPO_STORAGE_KEY) || '';
+  const rawStoredBranch = localStorage.getItem(GITHUB_BRANCH_STORAGE_KEY) || '';
+  const rawStoredLiveUrl = localStorage.getItem(OTA_LIVE_URL_STORAGE_KEY) || '';
 
-  const githubRepo = sanitizeGitHubRepoInput(storedRepo || env.VITE_GITHUB_REPO || '');
-  const branch = storedBranch || env.VITE_GITHUB_BRANCH || 'main';
-  let liveUrl = storedLiveUrl || env.VITE_OTA_LIVE_URL || '';
+  // Purge accidental Jemz1/Jemz2/Jemz3 placeholders if present in localStorage
+  if (/^jemz\d*$/i.test(rawStoredRepo.trim())) {
+    localStorage.removeItem(GITHUB_REPO_STORAGE_KEY);
+  }
+  if (/^jemz\d*$/i.test(rawStoredBranch.trim())) {
+    localStorage.removeItem(GITHUB_BRANCH_STORAGE_KEY);
+  }
+  if (/^jemz\d*$/i.test(rawStoredLiveUrl.trim())) {
+    localStorage.removeItem(OTA_LIVE_URL_STORAGE_KEY);
+  }
 
-  if (!liveUrl && githubRepo.includes('/')) {
+  const githubRepo =
+    sanitizeGitHubRepoInput(rawStoredRepo) ||
+    sanitizeGitHubRepoInput(env.VITE_GITHUB_REPO || '');
+  const branch =
+    sanitizeBranchInput(rawStoredBranch) ||
+    sanitizeBranchInput(env.VITE_GITHUB_BRANCH || 'main');
+  let liveUrl =
+    sanitizeLiveUrlInput(rawStoredLiveUrl) ||
+    sanitizeLiveUrlInput(env.VITE_OTA_LIVE_URL || '') ||
+    DEFAULT_CLOUD_RUN_LIVE_URL;
+
+  if (!sanitizeLiveUrlInput(rawStoredLiveUrl) && githubRepo.includes('/')) {
     const [owner, repo] = githubRepo.split('/');
     if (owner && repo) {
-      liveUrl = `https://${owner}.github.io/${repo}/`;
+      liveUrl = `https://${owner}.github.io/${repo}`;
     }
   }
 
@@ -66,32 +303,17 @@ export function saveGitHubUpdateConfig(cfg: Partial<GitHubUpdateConfig>): GitHub
     else localStorage.removeItem(GITHUB_REPO_STORAGE_KEY);
   }
   if (cfg.branch !== undefined) {
-    const cleanedBranch = cfg.branch.trim() || 'main';
+    const cleanedBranch = sanitizeBranchInput(cfg.branch);
     localStorage.setItem(GITHUB_BRANCH_STORAGE_KEY, cleanedBranch);
   }
   if (cfg.liveUrl !== undefined) {
-    const cleanedUrl = cfg.liveUrl.trim();
+    const cleanedUrl = sanitizeLiveUrlInput(cfg.liveUrl);
     if (cleanedUrl) localStorage.setItem(OTA_LIVE_URL_STORAGE_KEY, cleanedUrl);
     else localStorage.removeItem(OTA_LIVE_URL_STORAGE_KEY);
   }
   return getGitHubUpdateConfig();
 }
 
-export function sanitizeGitHubRepoInput(raw: string): string {
-  const trimmed = (raw || '').trim();
-  if (!trimmed) return '';
-  // Accept full GitHub URLs like https://github.com/owner/repo or https://github.com/owner/repo.git
-  const urlMatch = trimmed.match(/github\.com[:/]([^/]+\/[^/#?]+?)(?:\.git|\/)?$/i);
-  if (urlMatch) return urlMatch[1];
-  // Accept "owner/repo"
-  const pairMatch = trimmed.match(/^([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)$/);
-  if (pairMatch) return pairMatch[1];
-  return trimmed;
-}
-
-/**
- * Detect whether we are running inside a native Android Capacitor WebView
- */
 export function isRunningInCapacitorOrAndroidWebView(): boolean {
   try {
     const ua = navigator.userAgent || '';
@@ -113,9 +335,6 @@ export function isRunningInCapacitorOrAndroidWebView(): boolean {
   }
 }
 
-/**
- * Hook for in-app PWA installation prompt (Android / Chromium & iOS Safari guide)
- */
 export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -170,9 +389,6 @@ export function usePWAInstall() {
   };
 }
 
-/**
- * Hook for tracking online/offline status
- */
 export function useOnlineStatus() {
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -195,12 +411,130 @@ export function useOnlineStatus() {
 }
 
 /**
- * Registers the Service Worker (`/sw.js`), loads bundled `./version.json`, and checks:
- * 1. GitHub Repository Commits & Releases API (`api.github.com/repos/<owner>/<repo>/commits/<branch>`)
- * 2. Remote Live OTA URL (`<liveUrl>/version.json`)
- * 3. Same-origin `/api/version` & Service Worker updates
- * Calls `onNewVersionDetected` when a new commit, build, or waiting SW is found.
+ * Returns the TRUE currently executing build metadata in memory (either the compiled
+ * JS bundle or a hot-injected OTA bundle that is currently active in memory).
  */
+export function getActiveRunningBuildInfo(): {
+  buildId: string;
+  commitSha: string;
+  buildTimestamp: number;
+} {
+  const win = window as unknown as {
+    __WIZARD_CHESS_ACTIVE_OTA_BUILD__?: {
+      buildId?: string;
+      commitSha?: string;
+      buildTimestamp?: number;
+    };
+  };
+  const activeOta = win.__WIZARD_CHESS_ACTIVE_OTA_BUILD__;
+  if (activeOta?.buildId) {
+    return {
+      buildId: activeOta.buildId,
+      commitSha: activeOta.commitSha || COMPILED_COMMIT_SHA,
+      buildTimestamp: activeOta.buildTimestamp || COMPILED_BUILD_TIMESTAMP
+    };
+  }
+  return {
+    buildId: COMPILED_BUILD_ID,
+    commitSha: COMPILED_COMMIT_SHA,
+    buildTimestamp: COMPILED_BUILD_TIMESTAMP
+  };
+}
+
+/**
+ * Try downloading a complete compiled OTA bundle (CSS + JS) from a candidate server URL
+ * (such as Cloud Run /ota-dist, GitHub Pages, or jsDelivr GitHub CDN)
+ */
+async function fetchRemoteOtaBundleFromServer(
+  serverBaseUrl: string,
+  expectedBuildId?: string,
+  expectedCommitSha?: string
+): Promise<StoredOtaBundle | null> {
+  const cleanBase = serverBaseUrl.replace(/\/+$/, '');
+  const candidateBases = cleanBase.endsWith('/ota-dist')
+    ? [cleanBase, cleanBase.replace(/\/ota-dist$/, '')]
+    : [`${cleanBase}/ota-dist`, cleanBase];
+
+  for (const base of candidateBases) {
+    try {
+      // 1. Check if /api/version or /version.json provides entryJs & entryCss
+      let entryJs = '';
+      let entryCss = '';
+      let remoteBuildId = expectedBuildId || '';
+      let remoteCommitSha = expectedCommitSha || '';
+      let remoteTimestamp = Date.now();
+
+      const verUrl = base.endsWith('/ota-dist')
+        ? `${base.replace(/\/ota-dist$/, '')}/api/version?t=${Date.now()}`
+        : `${base}/version.json?t=${Date.now()}`;
+
+      const verRes = await fetch(verUrl, { cache: 'no-store' }).catch(() => null);
+      if (verRes && verRes.ok) {
+        const ctype = verRes.headers.get('content-type') || '';
+        if (ctype.includes('json') || ctype.includes('text/plain')) {
+          const vData = await verRes.json().catch(() => null);
+          if (vData) {
+            if (vData.entryJs) entryJs = String(vData.entryJs);
+            if (vData.entryCss) entryCss = String(vData.entryCss);
+            if (vData.buildId) remoteBuildId = String(vData.buildId);
+            if (vData.commitSha) remoteCommitSha = String(vData.commitSha);
+            if (vData.buildTimestamp) remoteTimestamp = Number(vData.buildTimestamp) || remoteTimestamp;
+          }
+        }
+      }
+
+      // 2. If entryJs was not in version.json, parse index.html from base
+      if (!entryJs) {
+        const htmlRes = await fetch(`${base}/index.html?t=${Date.now()}`, { cache: 'no-store' }).catch(
+          () => null
+        );
+        if (htmlRes && htmlRes.ok) {
+          const htmlText = await htmlRes.text();
+          const jsMatch = htmlText.match(/src=["'](?:\.\/|\/)?(assets\/c-[^"']+\.js)["']/i);
+          const cssMatch = htmlText.match(/href=["'](?:\.\/|\/)?(assets\/a-[^"']+\.css)["']/i);
+          if (jsMatch) entryJs = jsMatch[1];
+          if (cssMatch) entryCss = cssMatch[1];
+        }
+      }
+
+      if (!entryJs) continue;
+
+      const jsRes = await fetch(`${base}/${entryJs.replace(/^\/+/, '')}?t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      if (!jsRes.ok) continue;
+      const jsText = await jsRes.text();
+      if (!jsText || jsText.trim().startsWith('<')) continue;
+
+      let cssText = '';
+      if (entryCss) {
+        const cssRes = await fetch(`${base}/${entryCss.replace(/^\/+/, '')}?t=${Date.now()}`, {
+          cache: 'no-store'
+        }).catch(() => null);
+        if (cssRes && cssRes.ok) {
+          const rawCss = await cssRes.text();
+          if (!rawCss.trim().startsWith('<')) {
+            cssText = rawCss;
+          }
+        }
+      }
+
+      return {
+        buildId: remoteBuildId || `ota-${Date.now()}`,
+        commitSha: remoteCommitSha || 'ota-live',
+        buildTimestamp: remoteTimestamp,
+        baseUrl: base,
+        cssText,
+        jsText,
+        savedAt: Date.now()
+      };
+    } catch {
+      // Try next candidate base
+    }
+  }
+  return null;
+}
+
 export function registerGameServiceWorkerAndVersionWatcher(
   onNewVersionDetected: (
     newBuildId: string,
@@ -208,28 +542,32 @@ export function registerGameServiceWorkerAndVersionWatcher(
     details?: DetectedVersionUpdate
   ) => void
 ): {
-  checkForUpdatesNow: () => Promise<{ found: boolean; message: string; details?: DetectedVersionUpdate }>;
+  checkForUpdatesNow: (options?: { force?: boolean }) => Promise<{
+    found: boolean;
+    message: string;
+    details?: DetectedVersionUpdate;
+  }>;
   applyUpdateAndRefreshState: (
     targetBuildId: string,
     beforeReload?: () => void,
     details?: DetectedVersionUpdate
   ) => Promise<void>;
+  forcePullAndApplyLatestUpdate: (beforeReload?: () => void) => Promise<{
+    applied: boolean;
+    message: string;
+  }>;
   getBaselineVersionInfo: () => { buildId: string; commitSha: string };
   dispose: () => void;
 } {
   let isDisposed = false;
   let swRegistration: ServiceWorkerRegistration | null = null;
-  let sessionBaselineBuildId: string =
-    localStorage.getItem(CACHED_BUILD_ID_STORAGE_KEY) || '';
-  let sessionBaselineCommitSha: string =
-    localStorage.getItem(CACHED_COMMIT_SHA_STORAGE_KEY) || '';
 
   const notifyUpdate = (details: DetectedVersionUpdate) => {
     if (isDisposed) return;
     onNewVersionDetected(details.buildId, details.previousBuildId, details);
   };
 
-  // Seed baseline version info from bundled ./version.json (works inside Capacitor APK & Web)
+  // Seed bundled version.json only if valid (never overwrite with Jemz1/Jemz2/Jemz3 placeholders)
   const seedBundledVersionManifest = async () => {
     try {
       const res = await fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' });
@@ -237,28 +575,23 @@ export function registerGameServiceWorkerAndVersionWatcher(
       const ctype = res.headers.get('content-type') || '';
       if (!ctype.includes('application/json') && !ctype.includes('text/plain')) return;
       const manifest = await res.json();
-      if (manifest?.githubRepo && !localStorage.getItem(GITHUB_REPO_STORAGE_KEY)) {
+      const validRepo = sanitizeGitHubRepoInput(String(manifest?.githubRepo || ''));
+      if (validRepo && !localStorage.getItem(GITHUB_REPO_STORAGE_KEY)) {
         saveGitHubUpdateConfig({
-          githubRepo: String(manifest.githubRepo),
-          branch: manifest.branch ? String(manifest.branch) : 'main',
-          liveUrl: manifest.liveUrl ? String(manifest.liveUrl) : ''
+          githubRepo: validRepo,
+          branch: sanitizeBranchInput(String(manifest?.branch || 'main')),
+          liveUrl: sanitizeLiveUrlInput(String(manifest?.liveUrl || ''))
         });
       }
-      if (manifest?.buildId && !sessionBaselineBuildId) {
-        sessionBaselineBuildId = String(manifest.buildId);
-        localStorage.setItem(CACHED_BUILD_ID_STORAGE_KEY, sessionBaselineBuildId);
-      }
-      if (manifest?.commitSha && !sessionBaselineCommitSha) {
-        sessionBaselineCommitSha = String(manifest.commitSha);
-        localStorage.setItem(CACHED_COMMIT_SHA_STORAGE_KEY, sessionBaselineCommitSha);
-      }
     } catch {
-      // Ignore if local manifest not present
+      // Ignore
     }
   };
 
-  // Check GitHub Commits, Raw version.json, and Latest Release APK
-  const checkGitHubForUpdates = async (): Promise<{
+  // 1. Check GitHub Repository Commits & Releases
+  const checkGitHubForUpdates = async (
+    force = false
+  ): Promise<{
     found: boolean;
     message: string;
     details?: DetectedVersionUpdate;
@@ -267,19 +600,16 @@ export function registerGameServiceWorkerAndVersionWatcher(
     if (!githubRepo || !githubRepo.includes('/')) {
       return {
         found: false,
-        message: 'No GitHub repository configured yet.'
+        message: ''
       };
     }
 
     try {
-      // 1. Fetch latest commit on the configured branch from GitHub REST API
       const commitRes = await fetch(
         `https://api.github.com/repos/${githubRepo}/commits/${encodeURIComponent(branch)}?t=${Date.now()}`,
         {
           cache: 'no-store',
-          headers: {
-            Accept: 'application/vnd.github.v3+json'
-          }
+          headers: { Accept: 'application/vnd.github.v3+json' }
         }
       );
 
@@ -307,12 +637,12 @@ export function registerGameServiceWorkerAndVersionWatcher(
         typeof commitData?.commit?.committer?.date === 'string'
           ? commitData.commit.committer.date
           : '';
+      const commitTs = commitDate ? Date.parse(commitDate) || 0 : 0;
 
       if (!shortSha) {
         return { found: false, message: 'Could not read commit SHA from GitHub.' };
       }
 
-      // 2. Optionally check Latest GitHub Release for an attached .apk download link
       let apkDownloadUrl = '';
       let releaseHtmlUrl = '';
       try {
@@ -344,131 +674,143 @@ export function registerGameServiceWorkerAndVersionWatcher(
         // Optional release check
       }
 
-      const storedSha = localStorage.getItem(CACHED_COMMIT_SHA_STORAGE_KEY) || '';
-      const baselineSha =
-        sessionBaselineCommitSha && sessionBaselineCommitSha !== 'local-head'
-          ? sessionBaselineCommitSha
-          : storedSha && storedSha !== 'local-head'
-            ? storedSha
-            : '';
+      const activeInfo = getActiveRunningBuildInfo();
+      const appliedOtaSha = localStorage.getItem(APPLIED_OTA_COMMIT_SHA_KEY) || '';
+      const effectiveRunningSha =
+        activeInfo.commitSha && activeInfo.commitSha !== 'local-head'
+          ? activeInfo.commitSha
+          : appliedOtaSha;
 
       const remoteBuildId = `gh-${shortSha}`;
 
-      // First time connecting this GitHub repo: if baseline was 'local-head' or empty,
-      // check if raw version.json buildId differs or treat a new commit on GitHub as an update
-      // if the user already had a stored SHA.
-      if (!baselineSha) {
-        sessionBaselineCommitSha = shortSha;
-        localStorage.setItem(CACHED_COMMIT_SHA_STORAGE_KEY, shortSha);
-        localStorage.setItem(CACHED_BUILD_ID_STORAGE_KEY, remoteBuildId);
-        return {
-          found: false,
-          message: `Connected to GitHub (${githubRepo}@${branch}) — synced at commit #${shortSha} ("${commitMessage}"). Future pushes to GitHub will trigger Auto-Update!`
-        };
-      }
-
-      if (shortSha !== baselineSha) {
+      // Notice: Do NOT silently overwrite localStorage when effectiveRunningSha is empty/local-head!
+      // If the APK was built with 'local-head' or an older SHA, treat any mismatched GitHub commit as an update!
+      if (force || !effectiveRunningSha || shortSha !== effectiveRunningSha) {
         const details: DetectedVersionUpdate = {
           buildId: remoteBuildId,
-          previousBuildId: `gh-${baselineSha}`,
+          previousBuildId: effectiveRunningSha ? `gh-${effectiveRunningSha}` : activeInfo.buildId,
           commitSha: shortSha,
           commitMessage,
           commitDate,
+          buildTimestamp: commitTs || Date.now(),
           source: 'github',
-          liveUrl: liveUrl || undefined,
+          liveUrl: liveUrl || DEFAULT_CLOUD_RUN_LIVE_URL,
+          otaBaseUrl: `https://cdn.jsdelivr.net/gh/${githubRepo}@${shortSha}/dist`,
           apkDownloadUrl: apkDownloadUrl || undefined,
           releaseHtmlUrl: releaseHtmlUrl || `https://github.com/${githubRepo}/commits/${branch}`
         };
         notifyUpdate(details);
         return {
           found: true,
-          message: `New GitHub update found! Commit #${shortSha}: "${commitMessage}"`,
+          message: `New GitHub update ready! Commit #${shortSha}: "${commitMessage}" — tap Update Now to apply.`,
           details
         };
       }
 
       return {
         found: false,
-        message: `Up to date with GitHub (${githubRepo}@${branch}) at commit #${shortSha} ("${commitMessage}").`
+        message: `Running latest GitHub commit #${shortSha} ("${commitMessage}").`
       };
     } catch {
       return {
         found: false,
-        message: 'Could not reach GitHub API. Check your internet connection.'
+        message: 'Could not reach GitHub API. Checking Live OTA Server...'
       };
     }
   };
 
-  // Check remote Live OTA URL (e.g., GitHub Pages or deployed server)
-  const checkLiveUrlForUpdates = async (): Promise<{
+  // 2. Check Remote Live OTA Server (both user's configured liveUrl AND Cloud Run Shared App URL)
+  const checkLiveServersForUpdates = async (
+    force = false
+  ): Promise<{
     found: boolean;
     message: string;
     details?: DetectedVersionUpdate;
   }> => {
     const { liveUrl } = getGitHubUpdateConfig();
-    if (!liveUrl) {
-      return { found: false, message: '' };
-    }
-    try {
-      const normalized = liveUrl.replace(/\/+$/, '');
-      const res = await fetch(`${normalized}/version.json?t=${Date.now()}`, {
-        cache: 'no-store'
-      });
-      if (!res.ok) return { found: false, message: '' };
-      const ctype = res.headers.get('content-type') || '';
-      if (!ctype.includes('application/json') && !ctype.includes('text/plain')) {
-        return { found: false, message: '' };
-      }
-      const data = await res.json();
-      const remoteBuildId = data?.buildId ? String(data.buildId) : '';
-      const remoteSha = data?.commitSha ? String(data.commitSha) : '';
-      if (!remoteBuildId) return { found: false, message: '' };
+    const candidateServers = Array.from(
+      new Set([liveUrl, DEFAULT_CLOUD_RUN_LIVE_URL].filter(Boolean))
+    );
 
-      if (!sessionBaselineBuildId) {
-        sessionBaselineBuildId = remoteBuildId;
-        localStorage.setItem(CACHED_BUILD_ID_STORAGE_KEY, remoteBuildId);
-        return { found: false, message: '' };
-      }
+    const activeInfo = getActiveRunningBuildInfo();
+    const appliedOtaBuildId = localStorage.getItem(APPLIED_OTA_BUILD_ID_KEY) || '';
 
-      if (remoteBuildId !== sessionBaselineBuildId) {
-        const details: DetectedVersionUpdate = {
-          buildId: remoteBuildId,
-          previousBuildId: sessionBaselineBuildId,
-          commitSha: remoteSha || undefined,
-          commitMessage: data?.notes ? String(data.notes) : 'New Live OTA build deployed',
-          source: 'live-url',
-          liveUrl: normalized
-        };
-        notifyUpdate(details);
-        return {
-          found: true,
-          message: `New Live OTA build detected (${remoteBuildId})!`,
-          details
-        };
+    for (const srv of candidateServers) {
+      try {
+        const normalized = srv.replace(/\/+$/, '');
+        // Try /api/version first, then /version.json
+        const endpoints = [`${normalized}/api/version?t=${Date.now()}`, `${normalized}/version.json?t=${Date.now()}`];
+        for (const ep of endpoints) {
+          const res = await fetch(ep, { cache: 'no-store' }).catch(() => null);
+          if (!res || !res.ok) continue;
+          const ctype = res.headers.get('content-type') || '';
+          if (!ctype.includes('json') && !ctype.includes('text/plain')) continue;
+          const data = await res.json().catch(() => null);
+          if (!data || !data.buildId) continue;
+
+          const remoteBuildId = String(data.buildId);
+          const remoteTs = Number(data.buildTimestamp) || 0;
+          const remoteSha = data.commitSha ? String(data.commitSha) : '';
+
+          const alreadyApplied =
+            !force &&
+            (remoteBuildId === activeInfo.buildId ||
+              remoteBuildId === appliedOtaBuildId ||
+              (remoteTs > 0 &&
+                activeInfo.buildTimestamp > 0 &&
+                remoteTs <= activeInfo.buildTimestamp + 1500));
+
+          if (!alreadyApplied) {
+            const details: DetectedVersionUpdate = {
+              buildId: remoteBuildId,
+              previousBuildId: activeInfo.buildId,
+              commitSha: remoteSha || undefined,
+              commitMessage:
+                data.notes ? String(data.notes) : 'New Live OTA Game Update Ready',
+              buildTimestamp: remoteTs || Date.now(),
+              source: 'live-url',
+              liveUrl: normalized,
+              otaBaseUrl: data.otaDistAvailable ? `${normalized}/ota-dist` : normalized,
+              entryJs: data.entryJs ? String(data.entryJs) : undefined,
+              entryCss: data.entryCss ? String(data.entryCss) : undefined
+            };
+            notifyUpdate(details);
+            return {
+              found: true,
+              message: `New Live Update detected (${remoteBuildId})! Tap "Update & Reload Now" to apply immediately.`,
+              details
+            };
+          }
+          break;
+        }
+      } catch {
+        // Try next server
       }
-      return { found: false, message: '' };
-    } catch {
-      return { found: false, message: '' };
     }
+
+    return { found: false, message: '' };
   };
 
-  // Combined Version Check (GitHub + Live OTA URL + Same-Origin Server + Service Worker)
-  const checkForUpdatesNow = async (): Promise<{
+  // Combined Version Check (Service Worker + GitHub + Cloud Run / Live OTA Server)
+  const checkForUpdatesNow = async (options?: {
+    force?: boolean;
+  }): Promise<{
     found: boolean;
     message: string;
     details?: DetectedVersionUpdate;
   }> => {
     if (isDisposed) return { found: false, message: '' };
+    const force = Boolean(options?.force);
 
     try {
       // 1. Check Service Worker waiting state on Web
-      if (swRegistration) {
+      if (swRegistration && !isRunningInCapacitorOrAndroidWebView()) {
         await swRegistration.update().catch(() => undefined);
         if (swRegistration.waiting) {
           const swBuildId = 'sw-update-' + Date.now();
           const details: DetectedVersionUpdate = {
             buildId: swBuildId,
-            previousBuildId: sessionBaselineBuildId || 'cached',
+            previousBuildId: getActiveRunningBuildInfo().buildId,
             source: 'service-worker',
             commitMessage: 'New Service Worker asset bundle ready'
           };
@@ -481,70 +823,24 @@ export function registerGameServiceWorkerAndVersionWatcher(
         }
       }
 
-      // 2. Check GitHub Repository API (works in both Android APK and Web!)
-      const ghResult = await checkGitHubForUpdates();
-      if (ghResult.found) {
-        return ghResult;
-      }
-
-      // 3. Check Live OTA URL (e.g. GitHub Pages)
-      const liveResult = await checkLiveUrlForUpdates();
+      // 2. Check Live OTA Servers (Cloud Run Shared App URL + GitHub Pages) — works inside APK & Web!
+      const liveResult = await checkLiveServersForUpdates(force);
       if (liveResult.found) {
         return liveResult;
       }
 
-      // 4. Check same-origin /api/version (when running on the Node/Express server)
-      if (!isRunningInCapacitorOrAndroidWebView()) {
-        const res = await fetch(`/api/version?t=${Date.now()}`, {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' }
-        }).catch(() => null);
-
-        if (res && res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            const remoteBuildId = data?.buildId ? String(data.buildId) : '';
-            if (remoteBuildId && !isDisposed) {
-              const storedBuildId = localStorage.getItem(CACHED_BUILD_ID_STORAGE_KEY) || '';
-              if (!storedBuildId && !sessionBaselineBuildId) {
-                sessionBaselineBuildId = remoteBuildId;
-                localStorage.setItem(CACHED_BUILD_ID_STORAGE_KEY, remoteBuildId);
-              } else {
-                if (!sessionBaselineBuildId) {
-                  sessionBaselineBuildId = storedBuildId || remoteBuildId;
-                }
-                if (navigator.serviceWorker?.controller) {
-                  navigator.serviceWorker.controller.postMessage({
-                    type: 'CHECK_FOR_VERSION_UPDATE',
-                    currentBuildId: sessionBaselineBuildId
-                  });
-                }
-                if (remoteBuildId !== sessionBaselineBuildId) {
-                  const details: DetectedVersionUpdate = {
-                    buildId: remoteBuildId,
-                    previousBuildId: sessionBaselineBuildId,
-                    source: 'server',
-                    commitMessage: 'New server build available'
-                  };
-                  notifyUpdate(details);
-                  return {
-                    found: true,
-                    message: `New server build detected (${remoteBuildId})!`,
-                    details
-                  };
-                }
-              }
-            }
-          }
-        }
+      // 3. Check GitHub Repository API (if user configured a GitHub repo)
+      const ghResult = await checkGitHubForUpdates(force);
+      if (ghResult.found) {
+        return ghResult;
       }
 
+      const activeInfo = getActiveRunningBuildInfo();
       return {
         found: false,
         message:
           ghResult.message ||
-          'You are on the latest version. Set your GitHub repo below to auto-detect pushes from GitHub!'
+          `Running latest build (${activeInfo.buildId}). Tap "Force Apply Latest Update" anytime to hot-reload the live server bundle!`
       };
     } catch {
       return {
@@ -556,13 +852,10 @@ export function registerGameServiceWorkerAndVersionWatcher(
 
   const isCapWebView = isRunningInCapacitorOrAndroidWebView();
 
-  // Initialize bundled manifest seed, then register SW or run direct GitHub/OTA check
   seedBundledVersionManifest().finally(() => {
     if (isDisposed) return;
     if ('serviceWorker' in navigator) {
       if (isCapWebView) {
-        // Inside Capacitor APK, unregister any local Service Worker so WebViewLocalServer never 404s,
-        // and immediately check GitHub / Live OTA URL for updates!
         navigator.serviceWorker
           .getRegistrations()
           .then((regs) => {
@@ -579,7 +872,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
           if (msg.type === 'NEW_VERSION_AVAILABLE' && msg.buildId) {
             notifyUpdate({
               buildId: String(msg.buildId),
-              previousBuildId: sessionBaselineBuildId || 'cached',
+              previousBuildId: getActiveRunningBuildInfo().buildId,
               source: 'service-worker'
             });
           }
@@ -595,7 +888,7 @@ export function registerGameServiceWorkerAndVersionWatcher(
             if (reg.waiting) {
               notifyUpdate({
                 buildId: 'sw-waiting-' + Date.now(),
-                previousBuildId: sessionBaselineBuildId || 'cached',
+                previousBuildId: getActiveRunningBuildInfo().buildId,
                 source: 'service-worker'
               });
             }
@@ -640,24 +933,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
   document.addEventListener('visibilitychange', handleVisibility);
   window.addEventListener('focus', handleFocus);
 
-  // Verify whether a remote Live OTA URL (e.g., GitHub Pages) is live and returns 200 OK before navigating
-  const verifyLiveOtaUrlReachable = async (candidateUrl: string): Promise<string | null> => {
-    if (!candidateUrl) return null;
-    try {
-      const normalized = candidateUrl.replace(/\/+$/, '');
-      const checkRes = await fetch(`${normalized}/index.html?t=${Date.now()}`, {
-        method: 'GET',
-        cache: 'no-store'
-      });
-      if (checkRes.ok) {
-        return `${normalized}/?ota=${Date.now()}`;
-      }
-    } catch {
-      // Not reachable or CORS blocked
-    }
-    return null;
-  };
-
   const applyUpdateAndRefreshState = async (
     targetBuildId: string,
     beforeReload?: () => void,
@@ -666,14 +941,6 @@ export function registerGameServiceWorkerAndVersionWatcher(
     try {
       if (beforeReload) {
         beforeReload();
-      }
-      if (targetBuildId && !targetBuildId.startsWith('sw-')) {
-        localStorage.setItem(CACHED_BUILD_ID_STORAGE_KEY, targetBuildId);
-        sessionBaselineBuildId = targetBuildId;
-      }
-      if (details?.commitSha) {
-        localStorage.setItem(CACHED_COMMIT_SHA_STORAGE_KEY, details.commitSha);
-        sessionBaselineCommitSha = details.commitSha;
       }
 
       if (swRegistration?.waiting) {
@@ -698,31 +965,93 @@ export function registerGameServiceWorkerAndVersionWatcher(
         });
       }
 
-      // If running inside the Android APK (or when a Live OTA URL is configured),
-      // check if the Live OTA URL (e.g., GitHub Pages) is live and hot-load it!
+      // Try hot-downloading and executing the remote OTA bundle in-place (essential for Android APK!)
       const cfg = getGitHubUpdateConfig();
-      const candidateLiveUrl = details?.liveUrl || cfg.liveUrl;
-      if (isCapWebView && candidateLiveUrl) {
-        const verifiedUrl = await verifyLiveOtaUrlReachable(candidateLiveUrl);
-        if (verifiedUrl) {
-          window.location.href = verifiedUrl;
-          return;
+      const candidateBases = Array.from(
+        new Set(
+          [
+            details?.otaBaseUrl,
+            details?.liveUrl,
+            cfg.liveUrl,
+            DEFAULT_CLOUD_RUN_LIVE_URL
+          ].filter((x): x is string => Boolean(x))
+        )
+      );
+
+      for (const base of candidateBases) {
+        const bundle = await fetchRemoteOtaBundleFromServer(
+          base,
+          details?.buildId || targetBuildId,
+          details?.commitSha
+        );
+        if (bundle) {
+          await saveOtaBundleToIndexedDB(bundle);
+          const executed = await executeHotOtaBundleInPlace(bundle);
+          if (executed) {
+            return;
+          }
         }
       }
     } catch {
-      // Proceed to reload even if cache purge times out
+      // Fallback to reload
     }
 
     window.location.reload();
   };
 
+  const forcePullAndApplyLatestUpdate = async (
+    beforeReload?: () => void
+  ): Promise<{ applied: boolean; message: string }> => {
+    try {
+      if (beforeReload) beforeReload();
+      localStorage.removeItem(APPLIED_OTA_BUILD_ID_KEY);
+      localStorage.removeItem(APPLIED_OTA_COMMIT_SHA_KEY);
+      localStorage.removeItem(CACHED_BUILD_ID_STORAGE_KEY);
+      localStorage.removeItem(CACHED_COMMIT_SHA_STORAGE_KEY);
+
+      const cfg = getGitHubUpdateConfig();
+      const candidateBases = Array.from(
+        new Set([cfg.liveUrl, DEFAULT_CLOUD_RUN_LIVE_URL].filter(Boolean))
+      );
+
+      for (const base of candidateBases) {
+        const bundle = await fetchRemoteOtaBundleFromServer(base);
+        if (bundle) {
+          await saveOtaBundleToIndexedDB(bundle);
+          const executed = await executeHotOtaBundleInPlace(bundle);
+          if (executed) {
+            return {
+              applied: true,
+              message: `Successfully pulled & applied live update (${bundle.buildId})!`
+            };
+          }
+        }
+      }
+
+      window.location.reload();
+      return {
+        applied: true,
+        message: 'Reloading with latest server assets...'
+      };
+    } catch {
+      return {
+        applied: false,
+        message: 'Could not reach the Live OTA Server. Check your internet connection.'
+      };
+    }
+  };
+
   return {
     checkForUpdatesNow,
     applyUpdateAndRefreshState,
-    getBaselineVersionInfo: () => ({
-      buildId: sessionBaselineBuildId || 'local',
-      commitSha: sessionBaselineCommitSha || 'local-head'
-    }),
+    forcePullAndApplyLatestUpdate,
+    getBaselineVersionInfo: () => {
+      const info = getActiveRunningBuildInfo();
+      return {
+        buildId: info.buildId,
+        commitSha: info.commitSha
+      };
+    },
     dispose: () => {
       isDisposed = true;
       window.clearInterval(intervalId);
