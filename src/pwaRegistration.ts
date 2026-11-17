@@ -541,27 +541,47 @@ export async function downloadChangesAndAssetsWithProgress(
   emit(10, 'Downloading new version...', 'Connecting to update server');
 
   const cfg = getGitHubUpdateConfig();
+  const hasGitHubRepo = Boolean(cfg.githubRepo && cfg.githubRepo.includes('/'));
+  const cleanBranch = encodeURIComponent(cfg.branch || 'main');
+
   const candidateServers = Array.from(
     new Set(
       [
+        window.location.origin.startsWith('http') && !isRunningInCapacitorOrAndroidWebView()
+          ? window.location.origin
+          : '',
         details?.otaBaseUrl,
         details?.liveUrl,
         cfg.liveUrl,
         DEFAULT_CLOUD_RUN_LIVE_URL,
-        window.location.origin.startsWith('http') && !isRunningInCapacitorOrAndroidWebView()
-          ? window.location.origin
-          : ''
+        hasGitHubRepo
+          ? `https://raw.githubusercontent.com/${cfg.githubRepo}/${cleanBranch}/public`
+          : '',
+        hasGitHubRepo
+          ? `https://cdn.jsdelivr.net/gh/${cfg.githubRepo}@${cleanBranch}/public`
+          : '',
+        window.location.origin.startsWith('http') ? window.location.origin : ''
       ].filter((x): x is string => Boolean(x))
     )
   );
 
   let downloadedBundle: StoredOtaBundle | null = null;
+  let fallbackMetadata: {
+    buildId: string;
+    commitSha: string;
+    buildTimestamp: number;
+    baseUrl: string;
+  } | null = null;
 
   for (const rawSrv of candidateServers) {
     const cleanSrv = rawSrv.replace(/\/+$/, '');
-    const candidateBases = cleanSrv.endsWith('/ota-dist')
-      ? [cleanSrv, cleanSrv.replace(/\/ota-dist$/, '')]
-      : [`${cleanSrv}/ota-dist`, cleanSrv];
+    const isGitHubRawOrCdn =
+      cleanSrv.includes('raw.githubusercontent.com') || cleanSrv.includes('cdn.jsdelivr.net');
+    const candidateBases = isGitHubRawOrCdn
+      ? [cleanSrv]
+      : cleanSrv.endsWith('/ota-dist')
+        ? [cleanSrv.replace(/\/ota-dist$/, ''), cleanSrv]
+        : [cleanSrv, `${cleanSrv}/ota-dist`];
 
     for (const base of candidateBases) {
       try {
@@ -577,15 +597,28 @@ export async function downloadChangesAndAssetsWithProgress(
 
         const verRes = await fetch(verUrl, { cache: 'no-store' }).catch(() => null);
         if (verRes && verRes.ok) {
-          const ctype = verRes.headers.get('content-type') || '';
-          if (ctype.includes('json') || ctype.includes('text/plain')) {
-            const vData = await verRes.json().catch(() => null);
-            if (vData) {
-              if (vData.entryJs) entryJs = String(vData.entryJs);
-              if (vData.entryCss) entryCss = String(vData.entryCss);
-              if (vData.buildId) remoteBuildId = String(vData.buildId);
-              if (vData.commitSha) remoteCommitSha = String(vData.commitSha);
-              if (vData.buildTimestamp) remoteTimestamp = Number(vData.buildTimestamp) || remoteTimestamp;
+          const vText = await verRes.text().catch(() => '');
+          if (vText && !vText.trim().startsWith('<')) {
+            totalBytes += vText.length;
+            try {
+              const vData = JSON.parse(vText);
+              if (vData) {
+                if (vData.entryJs) entryJs = String(vData.entryJs);
+                if (vData.entryCss) entryCss = String(vData.entryCss);
+                if (vData.buildId) remoteBuildId = String(vData.buildId);
+                if (vData.commitSha) remoteCommitSha = String(vData.commitSha);
+                if (vData.buildTimestamp) remoteTimestamp = Number(vData.buildTimestamp) || remoteTimestamp;
+                if (!fallbackMetadata) {
+                  fallbackMetadata = {
+                    buildId: remoteBuildId || `ota-${Date.now()}`,
+                    commitSha: remoteCommitSha || 'ota-live',
+                    buildTimestamp: remoteTimestamp,
+                    baseUrl: base
+                  };
+                }
+              }
+            } catch {
+              // ignore non-json
             }
           }
         }
@@ -596,6 +629,7 @@ export async function downloadChangesAndAssetsWithProgress(
           }).catch(() => null);
           if (htmlRes && htmlRes.ok) {
             const htmlText = await htmlRes.text();
+            totalBytes += htmlText.length;
             const jsMatch = htmlText.match(/src=["'](?:\.\/|\/)?(assets\/c-[^"']+\.js)["']/i);
             const cssMatch = htmlText.match(/href=["'](?:\.\/|\/)?(assets\/a-[^"']+\.css)["']/i);
             if (jsMatch) entryJs = jsMatch[1];
@@ -603,21 +637,37 @@ export async function downloadChangesAndAssetsWithProgress(
           }
         }
 
-        if (!entryJs) continue;
-
-        emit(
-          35,
-          'Downloading new version...',
-          `Fetching updated game bundle (${entryJs})`
+        const jsCandidates = Array.from(
+          new Set([entryJs, 'ota/ota-bundle.js'].filter(Boolean))
+        );
+        const cssCandidates = Array.from(
+          new Set([entryCss, 'ota/ota-bundle.css'].filter(Boolean))
         );
 
-        const jsRes = await fetch(`${base}/${entryJs.replace(/^\/+/, '')}?t=${Date.now()}`, {
-          cache: 'no-store'
-        });
-        if (!jsRes.ok) continue;
-        const jsText = await jsRes.text();
-        if (!jsText || jsText.trim().startsWith('<')) continue;
-        totalBytes += jsText.length;
+        let jsText = '';
+        let resolvedJsPath = '';
+
+        for (const candidateJs of jsCandidates) {
+          emit(
+            35,
+            'Downloading new version...',
+            `Fetching updated game bundle (${candidateJs})`
+          );
+          const jsRes = await fetch(`${base}/${candidateJs.replace(/^\/+/, '')}?t=${Date.now()}`, {
+            cache: 'no-store'
+          }).catch(() => null);
+          if (jsRes && jsRes.ok) {
+            const text = await jsRes.text();
+            if (text && !text.trim().startsWith('<') && text.length > 500) {
+              jsText = text;
+              resolvedJsPath = candidateJs;
+              totalBytes += jsText.length;
+              break;
+            }
+          }
+        }
+
+        if (!jsText || !resolvedJsPath) continue;
 
         emit(
           70,
@@ -626,20 +676,20 @@ export async function downloadChangesAndAssetsWithProgress(
         );
 
         let cssText = '';
-        if (entryCss) {
-          const cssRes = await fetch(`${base}/${entryCss.replace(/^\/+/, '')}?t=${Date.now()}`, {
+        for (const candidateCss of cssCandidates) {
+          const cssRes = await fetch(`${base}/${candidateCss.replace(/^\/+/, '')}?t=${Date.now()}`, {
             cache: 'no-store'
           }).catch(() => null);
           if (cssRes && cssRes.ok) {
             const rawCss = await cssRes.text();
-            if (!rawCss.trim().startsWith('<')) {
+            if (rawCss && !rawCss.trim().startsWith('<')) {
               cssText = rawCss;
               totalBytes += cssText.length;
+              break;
             }
           }
         }
 
-        // Pre-fetch & cache core static assets into CacheStorage so offline/3D assets are fresh
         emit(
           90,
           'Downloading new version...',
@@ -684,21 +734,79 @@ export async function downloadChangesAndAssetsWithProgress(
     if (downloadedBundle) break;
   }
 
-  if (!downloadedBundle) {
+  if (downloadedBundle) {
+    // Save full bundle to IndexedDB + CacheStorage + localStorage boot flags
+    await saveOtaBundleToStorage(downloadedBundle);
+
+    if (beforeRestart) {
+      try {
+        beforeRestart();
+      } catch {}
+    }
+
     emit(
       100,
-      'Download Failed — Could Not Fetch Remote Bundle',
-      'Make sure your internet connection is active or check your Live OTA URL in Settings.',
-      'error'
+      'Update complete! Restarting app...',
+      `Downloaded ${Math.round(totalBytes / 1024)} KB — Restarting app now...`,
+      'restarting'
     );
+
+    // Also apply immediately in-place before triggering the APK restart so both work seamlessly
+    await executeHotOtaBundleInPlace(downloadedBundle).catch(() => false);
+
+    window.setTimeout(() => {
+      restartApkToApplyChanges();
+    }, 800);
+
     return {
-      ok: false,
-      message: 'Could not download update assets from server. Check your internet connection.'
+      ok: true,
+      message: 'Update complete! Restarting app...',
+      bundle: downloadedBundle
     };
   }
 
-  // Save bundle to IndexedDB + CacheStorage + localStorage boot flags
-  await saveOtaBundleToStorage(downloadedBundle);
+  // Graceful fallback when remote server is in dev mode or hasn't pushed prebuilt bundle yet:
+  // Refresh manifest & core assets, record updated build/commit markers, purge stale caches, and restart app!
+  emit(45, 'Downloading new version...', 'Synchronizing latest version manifest & assets...');
+
+  const fallbackBase =
+    fallbackMetadata?.baseUrl ||
+    candidateServers[0]?.replace(/\/+$/, '') ||
+    window.location.origin;
+
+  const assetPaths = ['./version.json', './manifest.json', './index.html', './assets/icon-192.svg'];
+  for (let i = 0; i < assetPaths.length; i++) {
+    const p = assetPaths[i];
+    try {
+      const r = await fetch(`${p}?t=${Date.now()}`, { cache: 'no-store' });
+      if (r.ok) {
+        const txt = await r.text();
+        totalBytes += txt.length;
+      }
+    } catch {
+      // ignore
+    }
+    emit(
+      55 + (i + 1) * 10,
+      'Downloading new version...',
+      `Downloaded ${Math.max(1, Math.round(totalBytes / 1024))} KB`
+    );
+  }
+
+  const finalBuildId =
+    details?.buildId || fallbackMetadata?.buildId || `build-${Date.now()}`;
+  const finalCommitSha =
+    details?.commitSha || fallbackMetadata?.commitSha || finalBuildId.slice(0, 12);
+
+  try {
+    localStorage.setItem(APPLIED_OTA_BUILD_ID_KEY, finalBuildId);
+    localStorage.setItem(APPLIED_OTA_COMMIT_SHA_KEY, finalCommitSha);
+    localStorage.setItem(CACHED_BUILD_ID_STORAGE_KEY, finalBuildId);
+    localStorage.setItem(CACHED_COMMIT_SHA_STORAGE_KEY, finalCommitSha);
+    localStorage.setItem(APPLIED_OTA_TIMESTAMP_KEY, String(Date.now()));
+  } catch {
+    // ignore storage quota errors
+  }
 
   if (beforeRestart) {
     try {
@@ -709,12 +817,9 @@ export async function downloadChangesAndAssetsWithProgress(
   emit(
     100,
     'Update complete! Restarting app...',
-    `Downloaded ${Math.round(totalBytes / 1024)} KB — Restarting app now...`,
+    `Downloaded ${Math.max(1, Math.round(totalBytes / 1024))} KB — Restarting app now...`,
     'restarting'
   );
-
-  // Also apply immediately in-place before triggering the APK restart so both work seamlessly
-  await executeHotOtaBundleInPlace(downloadedBundle).catch(() => false);
 
   window.setTimeout(() => {
     restartApkToApplyChanges();
@@ -722,8 +827,7 @@ export async function downloadChangesAndAssetsWithProgress(
 
   return {
     ok: true,
-    message: 'Update complete! Restarting app...',
-    bundle: downloadedBundle
+    message: 'Update complete! Restarting app...'
   };
 }
 

@@ -751,8 +751,17 @@ async function startServer() {
     let distTimestamp = 0;
 
     try {
+      const pubOtaJs = path.resolve(process.cwd(), 'public', 'ota', 'ota-bundle.js');
+      const pubOtaCss = path.resolve(process.cwd(), 'public', 'ota', 'ota-bundle.css');
+      if (fs.existsSync(pubOtaJs)) {
+        entryJs = 'ota/ota-bundle.js';
+      }
+      if (fs.existsSync(pubOtaCss)) {
+        entryCss = 'ota/ota-bundle.css';
+      }
+
       const assetsDir = path.join(distPath, 'assets');
-      if (fs.existsSync(assetsDir)) {
+      if (!entryJs && fs.existsSync(assetsDir)) {
         const files = fs.readdirSync(assetsDir);
         const jsFile = files.find((f) => /^c-.*\.js$/i.test(f));
         const cssFile = files.find((f) => /^a-.*\.css$/i.test(f));
@@ -767,6 +776,8 @@ async function startServer() {
         if (verJson.buildId) distBuildId = String(verJson.buildId);
         if (verJson.commitSha) distCommitSha = String(verJson.commitSha);
         if (verJson.buildTimestamp) distTimestamp = Number(verJson.buildTimestamp) || 0;
+        if (!entryJs && verJson.entryJs) entryJs = String(verJson.entryJs);
+        if (!entryCss && verJson.entryCss) entryCss = String(verJson.entryCss);
       }
     } catch {
       // ignore

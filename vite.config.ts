@@ -42,6 +42,22 @@ function stampVersionManifestPlugin(
   env: Record<string, string>,
   buildMeta: { buildId: string; sha: string; branch: string; githubRepo: string; liveUrl: string; timestamp: number }
 ): Plugin {
+  const getManifestPayload = (existing: Record<string, unknown>) => ({
+    ...existing,
+    version: (typeof existing.version === 'string' && existing.version) || '1.0.5',
+    buildId: buildMeta.buildId,
+    commitSha: buildMeta.sha,
+    buildTimestamp: buildMeta.timestamp,
+    branch: buildMeta.branch,
+    githubRepo: buildMeta.githubRepo,
+    liveUrl: buildMeta.liveUrl,
+    entryJs: 'ota/ota-bundle.js',
+    entryCss: 'ota/ota-bundle.css',
+    updatedAt: new Date(buildMeta.timestamp).toISOString(),
+    notes:
+      'Gameplay Landscape/Portrait toggle, Capture Camera Zoom ON/OFF toggle, and APK Live OTA Hot-Update'
+  });
+
   return {
     name: 'stamp-version-manifest',
     buildStart() {
@@ -55,22 +71,52 @@ function stampVersionManifestPlugin(
             existing = {};
           }
         }
-        const nextManifest = {
-          ...existing,
-          version: (typeof existing.version === 'string' && existing.version) || '1.0.5',
-          buildId: buildMeta.buildId,
-          commitSha: buildMeta.sha,
-          buildTimestamp: buildMeta.timestamp,
-          branch: buildMeta.branch,
-          githubRepo: buildMeta.githubRepo,
-          liveUrl: buildMeta.liveUrl,
-          updatedAt: new Date(buildMeta.timestamp).toISOString(),
-          notes:
-            'Gameplay Landscape/Portrait toggle, Capture Camera Zoom ON/OFF toggle, and APK Live OTA Hot-Update'
-        };
+        const nextManifest = getManifestPayload(existing);
         fs.writeFileSync(versionPath, JSON.stringify(nextManifest, null, 2) + '\n', 'utf8');
       } catch {
         // Non-fatal if filesystem is read-only
+      }
+    },
+    writeBundle(_options, bundle) {
+      try {
+        const otaDir = path.resolve(rootDir, 'public', 'ota');
+        fs.mkdirSync(otaDir, { recursive: true });
+
+        let jsCode = '';
+        let cssCode = '';
+
+        for (const [fileName, item] of Object.entries(bundle)) {
+          if (item.type === 'chunk' && (item.isEntry || fileName.endsWith('.js'))) {
+            if (!jsCode || item.isEntry) {
+              jsCode = item.code;
+            }
+          } else if (item.type === 'asset' && fileName.endsWith('.css')) {
+            cssCode = typeof item.source === 'string' ? item.source : Buffer.from(item.source).toString('utf8');
+          }
+        }
+
+        if (jsCode) {
+          fs.writeFileSync(path.join(otaDir, 'ota-bundle.js'), jsCode, 'utf8');
+        }
+        if (cssCode) {
+          fs.writeFileSync(path.join(otaDir, 'ota-bundle.css'), cssCode, 'utf8');
+        }
+
+        const versionPath = path.resolve(rootDir, 'public', 'version.json');
+        let existing: Record<string, unknown> = {};
+        if (fs.existsSync(versionPath)) {
+          try {
+            existing = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
+          } catch {
+            existing = {};
+          }
+        }
+        const nextManifest = getManifestPayload(existing);
+        const manifestStr = JSON.stringify(nextManifest, null, 2) + '\n';
+        fs.writeFileSync(versionPath, manifestStr, 'utf8');
+        fs.writeFileSync(path.join(otaDir, 'version.json'), manifestStr, 'utf8');
+      } catch {
+        // Non-fatal
       }
     }
   };
