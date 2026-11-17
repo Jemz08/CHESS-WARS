@@ -1279,6 +1279,51 @@ export default function App() {
     return () => document.removeEventListener('click', handleGlobalUiClick, true);
   }, []);
 
+  // Automatic Live Update Watcher for APK & Web Clients (polls /api/version & checks on foreground resume)
+  useEffect(() => {
+    let initialBuildId: string | null = null;
+    let isDisposed = false;
+
+    const checkLiveVersion = async () => {
+      try {
+        const res = await fetch(`/api/version?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const remoteBuildId = data?.buildId ? String(data.buildId) : null;
+        if (!remoteBuildId || isDisposed) return;
+
+        if (!initialBuildId) {
+          initialBuildId = remoteBuildId;
+          return;
+        }
+
+        if (remoteBuildId !== initialBuildId) {
+          // A new update has been published on the server -> auto-refresh when on menu or between matches
+          window.location.reload();
+        }
+      } catch {
+        // Ignore transient offline network errors
+      }
+    };
+
+    checkLiveVersion();
+    const intervalId = window.setInterval(checkLiveVersion, 25000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkLiveVersion();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', checkLiveVersion);
+
+    return () => {
+      isDisposed = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', checkLiveVersion);
+    };
+  }, []);
+
   // Listen to engine events for Gold bounties, Matchmaking, and 1-Phone Turn Switching
   useEffect(() => {
     const showRewardToast = (amount: number, label: string) => {

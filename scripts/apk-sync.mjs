@@ -30,11 +30,12 @@ try {
     run('npx cap add android');
   }
 
-  // 4. Sync dist/ assets and plugins into android/app/src/main/assets/public
-  console.log('[Wizard Chess APK Sync] Syncing web assets into Android Studio project (npx cap sync android)...');
+  // 4. Sync dist/ assets and live server.url config into android/app/src/main/assets
+  console.log('[Wizard Chess APK Sync] Syncing web assets & live auto-update config into Android Studio project (npx cap sync android)...');
   run('npx cap sync android');
 
-  console.log('\n✅ [Wizard Chess APK Sync] Success! In Android Studio, click File -> Sync Project with Gradle Files and press Run (▶).');
+  console.log('\n✅ [Wizard Chess APK Sync] Success! Live Auto-Update Mode is enabled via capacitor.config.json (server.url).');
+  console.log('   Once you build & install this APK one time, future updates published here will appear inside the app automatically!');
 } catch (err) {
   console.error('\n❌ [Wizard Chess APK Sync] Failed:', err?.message || err);
   process.exit(1);

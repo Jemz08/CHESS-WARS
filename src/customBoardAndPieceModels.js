@@ -373,6 +373,35 @@ function buildReaperScythe(scale = 1.0, shaftMat, bladeMat, trimMat, doubleHeade
   mainSpine.userData.excludeFromBounds = true;
   topBladeMount.add(mainSpine);
 
+  // Spectral Crescent Slash-Trail Ribbon along the Reaper Blade's Cutting Edge
+  const slashTrailGeo = getCachedGeo('halloween_scythe_slash_trail_v1', () =>
+    buildTaperedCurveGeo(
+      [
+        new THREE.Vector3(0.06, 0.04, 0.0),
+        new THREE.Vector3(0.24, 0.045, 0.02),
+        new THREE.Vector3(0.42, -0.06, 0.03),
+        new THREE.Vector3(0.50, -0.22, 0.01)
+      ],
+      0.012,
+      0.036,
+      16,
+      8
+    )
+  );
+  const slashTrailMat = new THREE.MeshBasicMaterial({
+    color: 0xff6d00,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const slashTrailMesh = new THREE.Mesh(slashTrailGeo, slashTrailMat);
+  slashTrailMesh.userData.isDragonFire = true;
+  slashTrailMesh.userData.excludeFromBounds = true;
+  slashTrailMesh.visible = false;
+  topBladeMount.add(slashTrailMesh);
+  scytheGroup.userData.slashTrail = slashTrailMesh;
+
   if (doubleHeaded) {
     const backBladeMount = new THREE.Group();
     backBladeMount.position.set(0.008, 0.66, 0.015);
@@ -583,6 +612,83 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
   baseTrim.position.y = 0.095;
   rig.add(baseTrim);
 
+  // Create a floating/articulated Wraith Body group above the grounded Crypt Pedestal
+  const wraithBody = new THREE.Group();
+  rig.add(wraithBody);
+  animParts.push({
+    mesh: wraithBody,
+    kind: 'wraithBody',
+    pieceType
+  });
+
+  // Helper that binds the Shoulder -> Elbow -> Wrist Arm AND the Scythe together on a Shoulder+Wrist rig
+  // so the arm and scythe slash horizontally and overhead as a unified limb!
+  const attachReaperScytheArmRig = (
+    parentGroup,
+    {
+      sideSign = 1,
+      shoulderPos,
+      elbowPos,
+      wristPos,
+      scytheScale,
+      shaftMat,
+      bladeMat,
+      trimMat,
+      doubleHeaded = false,
+      scytheRot = [0.20, -0.35, -0.18],
+      handRot = [0.18, -0.35, -0.18]
+    }
+  ) => {
+    const [sx, sy, sz] = shoulderPos;
+    const shoulderPivot = new THREE.Group();
+    shoulderPivot.position.set(sx, sy, sz);
+    parentGroup.add(shoulderPivot);
+
+    const localElbow = [elbowPos[0] - sx, elbowPos[1] - sy, elbowPos[2] - sz];
+    const localWrist = [wristPos[0] - sx, wristPos[1] - sy, wristPos[2] - sz];
+
+    const armMesh = buildReaperArmWithHand(
+      sideSign,
+      [0, 0, 0],
+      localElbow,
+      localWrist,
+      primaryMat,
+      goldTrimMat,
+      forgedSteelMat,
+      false,
+      handRot
+    );
+    shoulderPivot.add(armMesh);
+
+    const wristPivot = new THREE.Group();
+    wristPivot.position.set(localWrist[0], localWrist[1] - 0.015, localWrist[2] - 0.005);
+    wristPivot.rotation.set(scytheRot[0], scytheRot[1], scytheRot[2]);
+    shoulderPivot.add(wristPivot);
+
+    const scythe = buildReaperScythe(scytheScale, shaftMat, bladeMat, trimMat, doubleHeaded, true);
+    if (sideSign < 0) {
+      scythe.scale.x *= -1;
+    }
+    wristPivot.add(scythe);
+
+    animParts.push({
+      mesh: shoulderPivot,
+      wristMesh: wristPivot,
+      slashTrail: scythe.userData.slashTrail || null,
+      kind: 'reaperScythe',
+      side: sideSign,
+      baseX: sx,
+      baseY: sy,
+      baseZ: sz,
+      baseRotX: 0,
+      baseRotY: 0,
+      baseRotZ: 0,
+      wristBaseRotX: scytheRot[0],
+      wristBaseRotY: scytheRot[1],
+      wristBaseRotZ: scytheRot[2]
+    });
+  };
+
   if (pieceType === 'pawn') {
     // PAWN — LANTERN THRALL: Cloaked grave-watcher with Left & Right Arms + Clawed Hands holding a Hanging Lantern & Top-Bladed Harvest Scythe
     const cloakGeo = getCachedGeo('hollow_pawn_cloak', () =>
@@ -605,20 +711,22 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         }
       )
     );
-    rig.add(new THREE.Mesh(cloakGeo, primaryMat));
+    wraithBody.add(new THREE.Mesh(cloakGeo, primaryMat));
 
-    // Stationary Ribbed Jack-o'-Lantern Head (no bobbing or bubbly scaling!)
+    // Sentient Ribbed Jack-o'-Lantern Head + Witch Hat grouped for subtle eerie gaze
+    const pawnHeadGroup = new THREE.Group();
+    pawnHeadGroup.position.set(0, 0.65, 0);
+    wraithBody.add(pawnHeadGroup);
+
     const pumpkinHead = buildCarvedJackOLantern(0.098, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
-    pumpkinHead.position.set(0, 0.65, 0);
-    rig.add(pumpkinHead);
+    pawnHeadGroup.add(pumpkinHead);
 
-    // Witch/Grave-keeper pointed brimmed hat seated firmly on the Jack-o'-Lantern brow
     const brimGeo = getCachedGeo('hollow_pawn_hat_brim', () =>
       new THREE.ConeGeometry(0.155, 0.04, 20)
     );
     const hatBrim = new THREE.Mesh(brimGeo, primaryMat);
-    hatBrim.position.set(0, 0.725, 0);
-    rig.add(hatBrim);
+    hatBrim.position.set(0, 0.075, 0);
+    pawnHeadGroup.add(hatBrim);
 
     const hatTipGeo = getCachedGeo('hollow_pawn_hat_tip', () =>
       buildTaperedCurveGeo(
@@ -633,15 +741,21 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         10
       )
     );
-    rig.add(new THREE.Mesh(hatTipGeo, primaryMat));
+    const hatTipMesh = new THREE.Mesh(hatTipGeo, primaryMat);
+    hatTipMesh.position.y = -0.65;
+    pawnHeadGroup.add(hatTipMesh);
+    animParts.push({ mesh: pawnHeadGroup, kind: 'reaperHead', baseY: 0.65 });
 
-    // Left Arm & 5-Fingered Clawed Hand reaching forward to hold the Hanging Graveyard Lantern
-    rig.add(
+    // Left Arm & Clawed Hand + Swaying Graveyard Lantern
+    const leftLanternPivot = new THREE.Group();
+    leftLanternPivot.position.set(-0.10, 0.52, 0.0);
+    wraithBody.add(leftLanternPivot);
+    leftLanternPivot.add(
       buildReaperArmWithHand(
         -1,
-        [-0.10, 0.52, 0.0],
-        [-0.15, 0.46, 0.05],
-        [-0.15, 0.45, 0.11],
+        [0, 0, 0],
+        [-0.05, -0.06, 0.05],
+        [-0.05, -0.07, 0.11],
         primaryMat,
         goldTrimMat,
         forgedSteelMat,
@@ -649,44 +763,28 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         [0.2, 0.3, 0]
       )
     );
-
-    // Right Arm Sleeve connecting shoulder to the Harvest Scythe + Clawed Hand on the Scythe
-    rig.add(
-      buildReaperArmWithHand(
-        1,
-        [0.10, 0.52, 0.0],
-        [0.14, 0.44, 0.03],
-        [0.15, 0.39, 0.06],
-        primaryMat,
-        goldTrimMat,
-        forgedSteelMat,
-        false,
-        [0.15, -0.35, -0.2]
-      )
-    );
-
-    // Top-Bladed Harvest Scythe held in the right Clawed Hand
-    const sicklePivot = buildReaperScythe(0.66, primaryMat, forgedSteelMat, goldTrimMat, false, true);
-    sicklePivot.position.set(0.15, 0.38, 0.05);
-    sicklePivot.rotation.set(0.22, -0.35, -0.18);
-    rig.add(sicklePivot);
-    animParts.push({
-      mesh: sicklePivot,
-      kind: 'reaperScythe',
-      baseX: 0.15,
-      baseY: 0.38,
-      baseZ: 0.05,
-      baseRotX: 0.22,
-      baseRotY: -0.35,
-      baseRotZ: -0.18
-    });
-
-    // Actual 3D Hanging Graveyard Lantern (`lantern_hanging.gltf`) & Skull Candle (`skull_candle.gltf`)
-    mountHalloweenModel(rig, 'lantern_hanging', {
+    mountHalloweenModel(leftLanternPivot, 'lantern_hanging', {
       scale: 0.14,
-      position: [-0.15, 0.43, 0.11],
+      position: [-0.05, -0.09, 0.11],
       excludeFromBounds: true
     });
+    animParts.push({ mesh: leftLanternPivot, kind: 'lanternPendulum' });
+
+    // Unified Right Arm + Top-Bladed Harvest Scythe Rig
+    attachReaperScytheArmRig(wraithBody, {
+      sideSign: 1,
+      shoulderPos: [0.10, 0.52, 0.0],
+      elbowPos: [0.14, 0.44, 0.03],
+      wristPos: [0.15, 0.39, 0.06],
+      scytheScale: 0.68,
+      shaftMat: primaryMat,
+      bladeMat: forgedSteelMat,
+      trimMat: goldTrimMat,
+      doubleHeaded: false,
+      scytheRot: [0.22, -0.35, -0.18],
+      handRot: [0.15, -0.35, -0.2]
+    });
+
     mountHalloweenModel(rig, 'skull_candle', {
       scale: 0.11,
       position: [-0.13, 0.17, 0.14],
@@ -694,7 +792,7 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
       excludeFromBounds: true
     });
   } else if (pieceType === 'rook') {
-    // ROOK — HAUNTED CRYPT TOWER: Gothic mausoleum tower with Crypt Shrine, stationary Cursed Jack-o'-Lantern belfry & twin Wraith Guardian Arms wielding Top-Bladed Scythes
+    // ROOK — HAUNTED CRYPT TOWER: Gothic mausoleum tower with Crypt Shrine, Cursed Jack-o'-Lantern belfry & twin Wraith Guardian Arms wielding Top-Bladed Scythes
     mountHalloweenModel(rig, 'shrine_candles', {
       scale: 0.24,
       position: [0, 0.17, 0],
@@ -721,7 +819,7 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         }
       )
     );
-    rig.add(new THREE.Mesh(towerGeo, primaryMat));
+    wraithBody.add(new THREE.Mesh(towerGeo, primaryMat));
 
     // 6 Wrought-iron graveyard turret spikes around the battlement
     const spikeGeo = getCachedGeo('hollow_rook_spike', () =>
@@ -731,30 +829,31 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
       const ang = (i / 6) * Math.PI * 2;
       const sp = new THREE.Mesh(spikeGeo, forgedSteelMat);
       sp.position.set(Math.cos(ang) * 0.185, 0.82, Math.sin(ang) * 0.185);
-      rig.add(sp);
+      wraithBody.add(sp);
     }
 
-    // Twin Spectral Guardian Arms & Clawed Hands emerging from the Crypt Tower flanks
+    // Twin Spectral Guardian Arms & Clawed Hands emerging from the Crypt Tower flanks, each wielding a Reaper Scythe!
     for (const s of [-1, 1]) {
-      rig.add(
-        buildReaperArmWithHand(
-          s,
-          [s * 0.16, 0.54, 0.02],
-          [s * 0.22, 0.48, 0.08],
-          [s * 0.20, 0.46, 0.15],
-          primaryMat,
-          goldTrimMat,
-          forgedSteelMat,
-          false,
-          [0.1, s * -0.25, 0]
-        )
-      );
+      attachReaperScytheArmRig(wraithBody, {
+        sideSign: s,
+        shoulderPos: [s * 0.16, 0.54, 0.02],
+        elbowPos: [s * 0.22, 0.48, 0.08],
+        wristPos: [s * 0.20, 0.46, 0.15],
+        scytheScale: 0.64,
+        shaftMat: primaryMat,
+        bladeMat: forgedSteelMat,
+        trimMat: goldTrimMat,
+        doubleHeaded: false,
+        scytheRot: [0.20, s * -0.32, s * -0.16],
+        handRot: [0.1, s * -0.25, 0]
+      });
     }
 
-    // Stationary Cursed Jack-o'-Lantern Crown seated firmly on the Crypt Belfry (no bobbing)
+    // Sentient Cursed Jack-o'-Lantern Crown on the Crypt Belfry
     const cryptLantern = buildCarvedJackOLantern(0.125, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
     cryptLantern.position.set(0, 0.86, 0);
-    rig.add(cryptLantern);
+    wraithBody.add(cryptLantern);
+    animParts.push({ mesh: cryptLantern, kind: 'reaperHead', baseY: 0.86 });
 
     // Orbiting spectral ectoplasm halo ring around the turret
     const ectoRingGeo = getCachedGeo('hollow_rook_ecto_ring', () =>
@@ -763,7 +862,7 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
     const ectoRing = new THREE.Mesh(ectoRingGeo, forgedSteelMat);
     ectoRing.rotation.x = Math.PI / 2;
     ectoRing.position.y = 0.76;
-    rig.add(ectoRing);
+    wraithBody.add(ectoRing);
     animParts.push({ mesh: ectoRing, kind: 'orbitRing', baseY: 0.76, speed: 2.2 });
   } else if (pieceType === 'knight') {
     // =========================================================================
@@ -1005,11 +1104,13 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
     saddle.rotation.x = 0.45;
     rig.add(saddle);
 
+    // Animate Nightmare Warhorse Head subtly in idle/attack
+    animParts.push({ mesh: horseHeadGroup, kind: 'reaperHead', baseY: 0.79 });
+
     // =========================================================================
     // 7. THE HEADLESS HORSEMAN RIDER MOUNTED IN THE SADDLE
     // =========================================================================
-    const riderGroup = new THREE.Group();
-    rig.add(riderGroup);
+    const riderGroup = wraithBody;
 
     // A. Rider's Armored Legs, Knee-Cop Greaves & Spurred Boots in the Stirrups
     const bootGeo = getCachedGeo('hollow_rider_boot_v2', () => {
@@ -1133,14 +1234,18 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
     neckFlame.userData.isDragonFire = true;
     neckFlame.position.set(0, 0.89, -0.05);
     riderGroup.add(neckFlame);
+    animParts.push({ mesh: neckFlame, kind: 'soulFlame', baseY: 0.89 });
 
     // F. LEFT ARM, GAUNTLET & 5-FINGERED CLAWED HAND holding the Blazing Carved Jack-o'-Lantern Head aloft!
-    riderGroup.add(
+    const horsemanLeftArmPivot = new THREE.Group();
+    horsemanLeftArmPivot.position.set(-0.12, 0.78, -0.05);
+    riderGroup.add(horsemanLeftArmPivot);
+    horsemanLeftArmPivot.add(
       buildReaperArmWithHand(
         -1,
-        [-0.12, 0.78, -0.05],
-        [-0.18, 0.72, 0.01],
-        [-0.15, 0.76, 0.09],
+        [0, 0, 0],
+        [-0.06, -0.06, 0.06],
+        [-0.03, -0.02, 0.14],
         primaryMat,
         goldTrimMat,
         forgedSteelMat,
@@ -1149,40 +1254,25 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
       )
     );
 
-    // Stationary Carved Grinning Jack-o'-Lantern Head resting squarely in the Horseman's Left Clawed Hand!
     const horsemanPumpkin = buildCarvedJackOLantern(0.086, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
-    horsemanPumpkin.position.set(-0.15, 0.85, 0.10);
+    horsemanPumpkin.position.set(-0.03, 0.07, 0.15);
     horsemanPumpkin.rotation.y = 0.22;
-    riderGroup.add(horsemanPumpkin);
+    horsemanLeftArmPivot.add(horsemanPumpkin);
+    animParts.push({ mesh: horsemanLeftArmPivot, kind: 'lanternPendulum' });
 
     // G. RIGHT ARM, GAUNTLET & 5-FINGERED CLAWED HAND gripping the Horseman's Top-Bladed Reaper Scythe!
-    riderGroup.add(
-      buildReaperArmWithHand(
-        1,
-        [0.12, 0.78, -0.05],
-        [0.18, 0.68, 0.00],
-        [0.17, 0.62, 0.05],
-        primaryMat,
-        goldTrimMat,
-        forgedSteelMat,
-        false,
-        [0.2, -0.3, -0.2]
-      )
-    );
-
-    const horsemanScythe = buildReaperScythe(0.76, primaryMat, forgedSteelMat, goldTrimMat, false, true);
-    horsemanScythe.position.set(0.17, 0.60, 0.05);
-    horsemanScythe.rotation.set(0.24, -0.28, -0.18);
-    riderGroup.add(horsemanScythe);
-    animParts.push({
-      mesh: horsemanScythe,
-      kind: 'reaperScythe',
-      baseX: 0.17,
-      baseY: 0.60,
-      baseZ: 0.05,
-      baseRotX: 0.24,
-      baseRotY: -0.28,
-      baseRotZ: -0.18
+    attachReaperScytheArmRig(riderGroup, {
+      sideSign: 1,
+      shoulderPos: [0.12, 0.78, -0.05],
+      elbowPos: [0.18, 0.68, 0.00],
+      wristPos: [0.17, 0.62, 0.05],
+      scytheScale: 0.78,
+      shaftMat: primaryMat,
+      bladeMat: forgedSteelMat,
+      trimMat: goldTrimMat,
+      doubleHeaded: false,
+      scytheRot: [0.24, -0.28, -0.18],
+      handRot: [0.2, -0.3, -0.2]
     });
   } else if (pieceType === 'bishop') {
     // BISHOP — SOUL-HARVESTER WRAITH: Hooded wraith with Left & Right Arms + Clawed Hands, Soul Talisman & Top-Bladed Reaper Scythe
@@ -1207,9 +1297,13 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         }
       )
     );
-    rig.add(new THREE.Mesh(wraithRobeGeo, primaryMat));
+    wraithBody.add(new THREE.Mesh(wraithRobeGeo, primaryMat));
 
-    // Deep Void Hood Cavity + Glowing Ectoplasm Wraith Eyes
+    // Deep Void Hood Cavity + Glowing Ectoplasm Wraith Eyes + Mini Jack-o'-Lantern Reliquary Crown
+    const bishopHeadGroup = new THREE.Group();
+    bishopHeadGroup.position.set(0, 0.89, 0);
+    wraithBody.add(bishopHeadGroup);
+
     const hoodVoidGeo = getCachedGeo('hollow_bishop_hood_void', () =>
       new THREE.SphereGeometry(0.075, 14, 12)
     );
@@ -1217,29 +1311,32 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
       hoodVoidGeo,
       new THREE.MeshBasicMaterial({ color: 0x050308 })
     );
-    hoodVoid.position.set(0, 0.89, 0.045);
-    rig.add(hoodVoid);
+    hoodVoid.position.set(0, 0, 0.045);
+    bishopHeadGroup.add(hoodVoid);
 
     const wraithEyeGeo = getCachedGeo('hollow_wraith_eye', () => new THREE.OctahedronGeometry(0.018, 0));
     for (const s of [-1, 1]) {
       const eye = new THREE.Mesh(wraithEyeGeo, ectoGlowMat);
-      eye.position.set(s * 0.032, 0.90, 0.105);
+      eye.position.set(s * 0.032, 0.01, 0.105);
       eye.userData.isDragonFire = true;
-      rig.add(eye);
+      bishopHeadGroup.add(eye);
     }
 
-    // Stationary Mini Jack-o'-Lantern Reliquary Crown seated above the Wraith Cowl
     const bishopLantern = buildCarvedJackOLantern(0.068, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
-    bishopLantern.position.set(0, 1.06, 0);
-    rig.add(bishopLantern);
+    bishopLantern.position.set(0, 0.17, 0);
+    bishopHeadGroup.add(bishopLantern);
+    animParts.push({ mesh: bishopHeadGroup, kind: 'reaperHead', baseY: 0.89 });
 
-    // Left Arm & Splayed 5-Fingered Clawed Hand channeling a Soul-Lantern Orb
-    rig.add(
+    // Left Arm & Splayed 5-Fingered Clawed Hand channeling a Pulsing Soul-Lantern Orb
+    const bishopLeftArmPivot = new THREE.Group();
+    bishopLeftArmPivot.position.set(-0.13, 0.74, 0.0);
+    wraithBody.add(bishopLeftArmPivot);
+    bishopLeftArmPivot.add(
       buildReaperArmWithHand(
         -1,
-        [-0.13, 0.74, 0.0],
-        [-0.19, 0.62, 0.05],
-        [-0.15, 0.64, 0.14],
+        [0, 0, 0],
+        [-0.06, -0.12, 0.05],
+        [-0.02, -0.10, 0.14],
         primaryMat,
         goldTrimMat,
         forgedSteelMat,
@@ -1249,44 +1346,31 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
     );
 
     const soulOrb = new THREE.Mesh(
-      getCachedGeo('hollow_bishop_soul_orb_v2', () => new THREE.OctahedronGeometry(0.032, 1)),
+      getCachedGeo('hollow_bishop_soul_orb_v2', () => new THREE.OctahedronGeometry(0.036, 1)),
       ectoGlowMat
     );
     soulOrb.userData.isDragonFire = true;
-    soulOrb.position.set(-0.15, 0.69, 0.16);
-    rig.add(soulOrb);
+    soulOrb.position.set(-0.02, -0.05, 0.16);
+    bishopLeftArmPivot.add(soulOrb);
+    animParts.push({ mesh: bishopLeftArmPivot, kind: 'lanternPendulum' });
+    animParts.push({ mesh: soulOrb, kind: 'soulFlame', baseY: -0.05 });
 
-    // Right Arm & Clawed Hand gripping the Top-Bladed Soul-Harvester Scythe
-    rig.add(
-      buildReaperArmWithHand(
-        1,
-        [0.13, 0.74, 0.0],
-        [0.19, 0.60, 0.04],
-        [0.17, 0.50, 0.07],
-        primaryMat,
-        goldTrimMat,
-        forgedSteelMat,
-        false,
-        [0.18, -0.32, -0.15]
-      )
-    );
-
-    const bishopScythe = buildReaperScythe(0.85, goldTrimMat, forgedSteelMat, primaryMat, false, true);
-    bishopScythe.position.set(0.17, 0.48, 0.06);
-    bishopScythe.rotation.set(0.18, -0.32, -0.15);
-    rig.add(bishopScythe);
-    animParts.push({
-      mesh: bishopScythe,
-      kind: 'reaperScythe',
-      baseX: 0.17,
-      baseY: 0.48,
-      baseZ: 0.06,
-      baseRotX: 0.18,
-      baseRotY: -0.32,
-      baseRotZ: -0.15
+    // Unified Right Arm & Clawed Hand gripping the Top-Bladed Soul-Harvester Scythe
+    attachReaperScytheArmRig(wraithBody, {
+      sideSign: 1,
+      shoulderPos: [0.13, 0.74, 0.0],
+      elbowPos: [0.19, 0.60, 0.04],
+      wristPos: [0.17, 0.50, 0.07],
+      scytheScale: 0.86,
+      shaftMat: goldTrimMat,
+      bladeMat: forgedSteelMat,
+      trimMat: primaryMat,
+      doubleHeaded: false,
+      scytheRot: [0.18, -0.32, -0.15],
+      handRot: [0.18, -0.32, -0.15]
     });
   } else if (pieceType === 'queen') {
-    // QUEEN — BANSHEE SCYTHE EMPRESS: Spectral matriarch with stationary Carved Jack-o'-Lantern head, Left & Right Clawed Hands, bat-wing mantle & Top-Bladed Double War-Scythe
+    // QUEEN — BANSHEE SCYTHE EMPRESS: Spectral matriarch with Carved Jack-o'-Lantern head, Left & Right Clawed Hands, bat-wing mantle & Top-Bladed Double War-Scythe
     const gownGeo = getCachedGeo('hollow_queen_gown', () =>
       buildSculptedLathe(
         [
@@ -1308,20 +1392,24 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         }
       )
     );
-    rig.add(new THREE.Mesh(gownGeo, primaryMat));
+    wraithBody.add(new THREE.Mesh(gownGeo, primaryMat));
 
-    // Stationary Carved Empress Jack-o'-Lantern Head with Bat Coronet (no bobbing or bubbly scaling!)
+    // Sentient Carved Empress Jack-o'-Lantern Head with Bat Coronet
+    const queenHeadGroup = new THREE.Group();
+    queenHeadGroup.position.set(0, 1.02, 0);
+    wraithBody.add(queenHeadGroup);
+
     const empressPumpkin = buildCarvedJackOLantern(0.098, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
-    empressPumpkin.position.set(0, 1.02, 0);
-    rig.add(empressPumpkin);
+    queenHeadGroup.add(empressPumpkin);
 
     const coronetGeo = getCachedGeo('hollow_queen_coronet', () =>
       new THREE.TorusGeometry(0.088, 0.014, 10, 24)
     );
     const coronet = new THREE.Mesh(coronetGeo, forgedSteelMat);
     coronet.rotation.x = Math.PI / 2;
-    coronet.position.set(0, 1.10, 0);
-    rig.add(coronet);
+    coronet.position.set(0, 0.08, 0);
+    queenHeadGroup.add(coronet);
+    animParts.push({ mesh: queenHeadGroup, kind: 'reaperHead', baseY: 1.02 });
 
     // Pair of Bat-Wing Shadow Mantles on shoulders
     const wingGeo = getCachedGeo('hollow_queen_wing', () => {
@@ -1333,17 +1421,20 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
       const wing = new THREE.Mesh(wingGeo, goldTrimMat);
       wing.position.set(s * 0.18, 0.82, -0.06);
       wing.rotation.set(-0.22, 0, s * -0.58);
-      rig.add(wing);
+      wraithBody.add(wing);
       animParts.push({ mesh: wing, kind: 'wingPulse' });
     }
 
     // Left Arm & 5-Fingered Clawed Hand poised in a Banshee Spell-Weaving Gesture
-    rig.add(
+    const queenLeftArmPivot = new THREE.Group();
+    queenLeftArmPivot.position.set(-0.14, 0.80, 0.0);
+    wraithBody.add(queenLeftArmPivot);
+    queenLeftArmPivot.add(
       buildReaperArmWithHand(
         -1,
-        [-0.14, 0.80, 0.0],
-        [-0.21, 0.68, 0.05],
-        [-0.17, 0.70, 0.14],
+        [0, 0, 0],
+        [-0.07, -0.12, 0.05],
+        [-0.03, -0.10, 0.14],
         primaryMat,
         goldTrimMat,
         forgedSteelMat,
@@ -1351,38 +1442,24 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         [-0.4, 0.35, 0.25]
       )
     );
+    animParts.push({ mesh: queenLeftArmPivot, kind: 'lanternPendulum' });
 
-    // Right Arm & 5-Fingered Clawed Hand gripping the Twin-Headed Banshee War-Scythe
-    rig.add(
-      buildReaperArmWithHand(
-        1,
-        [0.14, 0.80, 0.0],
-        [0.21, 0.65, 0.04],
-        [0.19, 0.56, 0.08],
-        primaryMat,
-        goldTrimMat,
-        forgedSteelMat,
-        false,
-        [0.2, -0.35, -0.18]
-      )
-    );
-
-    const queenScythe = buildReaperScythe(0.96, goldTrimMat, forgedSteelMat, primaryMat, true, true);
-    queenScythe.position.set(0.19, 0.54, 0.07);
-    queenScythe.rotation.set(0.20, -0.35, -0.18);
-    rig.add(queenScythe);
-    animParts.push({
-      mesh: queenScythe,
-      kind: 'reaperScythe',
-      baseX: 0.19,
-      baseY: 0.54,
-      baseZ: 0.07,
-      baseRotX: 0.20,
-      baseRotY: -0.35,
-      baseRotZ: -0.18
+    // Unified Right Arm & 5-Fingered Clawed Hand gripping the Twin-Headed Banshee War-Scythe
+    attachReaperScytheArmRig(wraithBody, {
+      sideSign: 1,
+      shoulderPos: [0.14, 0.80, 0.0],
+      elbowPos: [0.21, 0.65, 0.04],
+      wristPos: [0.19, 0.56, 0.08],
+      scytheScale: 0.96,
+      shaftMat: goldTrimMat,
+      bladeMat: forgedSteelMat,
+      trimMat: primaryMat,
+      doubleHeaded: true,
+      scytheRot: [0.20, -0.35, -0.18],
+      handRot: [0.2, -0.35, -0.18]
     });
   } else {
-    // KING — PUMPKIN LORD SOVEREIGN: Towering dread monarch with stationary Carved Jack-o'-Lantern head, spiked crown, Left & Right Clawed Gauntlet Hands & Top-Bladed Great Scythe of Samhain
+    // KING — PUMPKIN LORD SOVEREIGN: Towering dread monarch with Carved Jack-o'-Lantern head, spiked crown, Left & Right Clawed Gauntlet Hands & Top-Bladed Great Scythe of Samhain
     const armorBodyGeo = getCachedGeo('hollow_king_body', () =>
       buildSculptedLathe(
         [
@@ -1404,7 +1481,7 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         }
       )
     );
-    rig.add(new THREE.Mesh(armorBodyGeo, primaryMat));
+    wraithBody.add(new THREE.Mesh(armorBodyGeo, primaryMat));
 
     // Spiked Pauldrons
     const pauldronGeo = getCachedGeo('hollow_king_pauldron', () =>
@@ -1414,13 +1491,16 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
       const pMesh = new THREE.Mesh(pauldronGeo, goldTrimMat);
       pMesh.position.set(s * 0.17, 0.86, 0);
       pMesh.rotation.z = s * -0.45;
-      rig.add(pMesh);
+      wraithBody.add(pMesh);
     }
 
-    // Stationary Sovereign Carved Jack-o'-Lantern Head + Spiked Samhain Iron Crown (zero wobble/bubbly scaling!)
+    // Sentient Sovereign Carved Jack-o'-Lantern Head + Spiked Samhain Iron Crown
+    const kingHeadGroup = new THREE.Group();
+    kingHeadGroup.position.set(0, 1.08, 0);
+    wraithBody.add(kingHeadGroup);
+
     const kingPumpkin = buildCarvedJackOLantern(0.112, goldTrimMat, pumpkinGlowMat, forgedSteelMat);
-    kingPumpkin.position.set(0, 1.08, 0);
-    rig.add(kingPumpkin);
+    kingHeadGroup.add(kingPumpkin);
 
     const crownSpikeGeo = getCachedGeo('hollow_king_crown_spike', () =>
       new THREE.ConeGeometry(0.022, 0.11, 6)
@@ -1428,17 +1508,21 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
     for (let i = 0; i < 8; i++) {
       const ang = (i / 8) * Math.PI * 2;
       const sp = new THREE.Mesh(crownSpikeGeo, forgedSteelMat);
-      sp.position.set(Math.cos(ang) * 0.092, 1.20, Math.sin(ang) * 0.092);
-      rig.add(sp);
+      sp.position.set(Math.cos(ang) * 0.092, 0.12, Math.sin(ang) * 0.092);
+      kingHeadGroup.add(sp);
     }
+    animParts.push({ mesh: kingHeadGroup, kind: 'reaperHead', baseY: 1.08 });
 
-    // Left Arm & 5-Fingered Clawed Gauntlet Hand holding a Cursed Jack-o'-Lantern Orb
-    rig.add(
+    // Left Arm & 5-Fingered Clawed Gauntlet Hand holding a Swaying Cursed Graveyard Lantern
+    const kingLeftArmPivot = new THREE.Group();
+    kingLeftArmPivot.position.set(-0.16, 0.84, 0.0);
+    wraithBody.add(kingLeftArmPivot);
+    kingLeftArmPivot.add(
       buildReaperArmWithHand(
         -1,
-        [-0.16, 0.84, 0.0],
-        [-0.23, 0.70, 0.05],
-        [-0.19, 0.68, 0.14],
+        [0, 0, 0],
+        [-0.07, -0.14, 0.05],
+        [-0.03, -0.16, 0.14],
         primaryMat,
         goldTrimMat,
         forgedSteelMat,
@@ -1446,40 +1530,26 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
         [-0.25, 0.3, 0.15]
       )
     );
-    mountHalloweenModel(rig, 'lantern_hanging', {
+    mountHalloweenModel(kingLeftArmPivot, 'lantern_hanging', {
       scale: 0.16,
-      position: [-0.19, 0.66, 0.15],
+      position: [-0.03, -0.18, 0.15],
       excludeFromBounds: true
     });
+    animParts.push({ mesh: kingLeftArmPivot, kind: 'lanternPendulum' });
 
-    // Right Arm & 5-Fingered Clawed Gauntlet Hand gripping the Top-Bladed Great Scythe of Samhain
-    rig.add(
-      buildReaperArmWithHand(
-        1,
-        [0.16, 0.84, 0.0],
-        [0.23, 0.68, 0.04],
-        [0.21, 0.60, 0.08],
-        primaryMat,
-        goldTrimMat,
-        forgedSteelMat,
-        false,
-        [0.22, -0.38, -0.16]
-      )
-    );
-
-    const kingScythe = buildReaperScythe(1.08, goldTrimMat, forgedSteelMat, primaryMat, true, true);
-    kingScythe.position.set(0.21, 0.58, 0.08);
-    kingScythe.rotation.set(0.22, -0.38, -0.16);
-    rig.add(kingScythe);
-    animParts.push({
-      mesh: kingScythe,
-      kind: 'reaperScythe',
-      baseX: 0.21,
-      baseY: 0.58,
-      baseZ: 0.08,
-      baseRotX: 0.22,
-      baseRotY: -0.38,
-      baseRotZ: -0.16
+    // Unified Right Arm & 5-Fingered Clawed Gauntlet Hand gripping the Top-Bladed Great Scythe of Samhain
+    attachReaperScytheArmRig(wraithBody, {
+      sideSign: 1,
+      shoulderPos: [0.16, 0.84, 0.0],
+      elbowPos: [0.23, 0.68, 0.04],
+      wristPos: [0.21, 0.60, 0.08],
+      scytheScale: 1.08,
+      shaftMat: goldTrimMat,
+      bladeMat: forgedSteelMat,
+      trimMat: primaryMat,
+      doubleHeaded: true,
+      scytheRot: [0.22, -0.38, -0.16],
+      handRot: [0.22, -0.38, -0.16]
     });
 
     // Actual 3D Skull Candles (`skull_candle.gltf`) & Triple Candles (`candle_triple.gltf`) on the Sovereign's crypt base
@@ -5082,57 +5152,201 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       const flap = Math.sin(elapsedTotal * flapFreq + phaseSeed) * flapAmp + atkIntensity * 0.26;
       part.mesh.scale.set(1 + flap, 1 + atkIntensity * 0.18, 1 - flap * 0.35);
     } else if (part.kind === 'pumpkinLantern') {
-      // Keep Jack-o'-Lantern heads 100% stationary (zero bobbing, twisting, or bubbly scaling)
       part.mesh.position.y = part.baseY;
       part.mesh.rotation.y = 0;
       part.mesh.scale.setScalar(1.0);
-    } else if (part.kind === 'reaperScythe') {
+    } else if (part.kind === 'wraithBody') {
+      if (isAttacking) {
+        part.mesh.position.set(0, 0, 0);
+        part.mesh.rotation.set(0, 0, 0);
+      } else {
+        // Lively spectral hover bob & predatory breathing poise above the grounded crypt pedestal
+        const floatY =
+          part.pieceType === 'knight'
+            ? Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.015
+            : Math.sin(elapsedTotal * 2.3 + phaseSeed) * 0.028 +
+              Math.cos(elapsedTotal * 1.15 + phaseSeed) * 0.01;
+        const swayX = Math.sin(elapsedTotal * 1.7 + phaseSeed) * 0.032;
+        const swayY = Math.cos(elapsedTotal * 1.35 + phaseSeed) * 0.075;
+        const swayZ = Math.sin(elapsedTotal * 2.05 + phaseSeed) * 0.026;
+        part.mesh.position.set(0, Math.max(-0.008, floatY), 0);
+        part.mesh.rotation.set(swayX, swayY, swayZ);
+      }
+    } else if (part.kind === 'reaperHead') {
       if (isAttacking) {
         const t = state.clipTime;
-        if (t < 0.28) {
-          const u = t / 0.28;
+        // Track the horizontal & overhead scythe slashes with an aggressive glare
+        const lookY = t < 0.50 ? Math.sin((t / 0.50) * Math.PI) * 0.24 : -0.12 * (1 - t);
+        const lookX = t >= 0.50 && t < 0.82 ? 0.18 * Math.sin(((t - 0.50) / 0.32) * Math.PI) : -0.08;
+        part.mesh.rotation.set(lookX, lookY, 0);
+      } else {
+        // Eerie, sentient Jack-o'-Lantern / Wraith head gaze scanning the board (zero bubbly scaling!)
+        const gazeY = Math.sin(elapsedTotal * 1.45 + phaseSeed) * 0.13;
+        const nodX = Math.cos(elapsedTotal * 2.1 + phaseSeed) * 0.048;
+        const tiltZ = Math.sin(elapsedTotal * 1.8 + phaseSeed * 1.3) * 0.035;
+        part.mesh.rotation.set(nodX, gazeY, tiltZ);
+      }
+    } else if (part.kind === 'lanternPendulum') {
+      if (isAttacking) {
+        const t = state.clipTime;
+        const swing = Math.sin(t * Math.PI * 2.0);
+        part.mesh.rotation.set(-0.22 * Math.abs(swing), 0.18 * swing, -0.15 * swing);
+      } else {
+        // Dynamic counter-sway on the lantern-holding / spell-casting left arm
+        const pendX = Math.sin(elapsedTotal * 2.5 + phaseSeed + 0.8) * 0.085;
+        const pendY = Math.cos(elapsedTotal * 1.9 + phaseSeed) * 0.065;
+        const pendZ = Math.sin(elapsedTotal * 2.2 + phaseSeed) * 0.075;
+        part.mesh.rotation.set(pendX, pendY, pendZ);
+      }
+    } else if (part.kind === 'soulFlame') {
+      const flicker = 1.0 + Math.sin(elapsedTotal * 11.5 + phaseSeed) * 0.18 + atkIntensity * 0.45;
+      part.mesh.scale.set(flicker, flicker * (1.0 + Math.cos(elapsedTotal * 15.0) * 0.14), flicker);
+      part.mesh.rotation.y += dt * (2.8 + atkIntensity * 6.0);
+    } else if (part.kind === 'reaperScythe') {
+      const side = part.side || 1;
+      const wrist = part.wristMesh;
+      const trail = part.slashTrail;
+      if (isAttacking) {
+        const t = state.clipTime;
+        if (trail) {
+          trail.visible = t >= 0.16 && t <= 0.86;
+          if (trail.material) {
+            trail.material.opacity =
+              t >= 0.18 && t <= 0.82 ? 0.55 + 0.42 * Math.sin(((t - 0.18) / 0.64) * Math.PI) : 0.15;
+          }
+        }
+        if (t < 0.20) {
+          // Phase 1: Predatory Wind-Up — Open arm & cock scythe wide behind the shoulder
+          const u = t / 0.20;
           const ease = u * u * (3 - 2 * u);
           part.mesh.position.set(
-            part.baseX + 0.06 * ease,
-            part.baseY + 0.18 * ease,
-            part.baseZ - 0.08 * ease
+            part.baseX + side * 0.04 * ease,
+            part.baseY + 0.06 * ease,
+            part.baseZ - 0.05 * ease
           );
           part.mesh.rotation.set(
-            part.baseRotX - 0.65 * ease,
-            part.baseRotY - 0.85 * ease,
-            part.baseRotZ - 0.55 * ease
+            -0.45 * ease,
+            side * 0.68 * ease,
+            side * -0.58 * ease
           );
-        } else if (t < 0.72) {
-          const u = (t - 0.28) / 0.44;
-          const slash = Math.sin(u * Math.PI);
+          if (wrist) {
+            wrist.rotation.set(
+              part.wristBaseRotX + 0.92 * ease,
+              part.wristBaseRotY + side * 0.75 * ease,
+              part.wristBaseRotZ + side * -0.42 * ease
+            );
+          }
+        } else if (t < 0.50) {
+          // Phase 2: STRIKE 1 — Wide Horizontal Reaping Slash across the front (+X to -X across +Z)!
+          const u = (t - 0.20) / 0.30;
           const sweep = u * u * (3 - 2 * u);
+          const arc = Math.sin(u * Math.PI);
           part.mesh.position.set(
-            part.baseX + 0.06 - 0.22 * sweep,
-            part.baseY + 0.18 * (1 - sweep) + 0.06 * slash,
-            part.baseZ + 0.24 * slash
+            part.baseX + side * (0.04 - 0.14 * sweep),
+            part.baseY + 0.06 * (1 - sweep) + 0.03 * arc,
+            part.baseZ - 0.05 + 0.22 * arc + 0.08 * sweep
           );
           part.mesh.rotation.set(
-            part.baseRotX - 0.65 + 1.55 * sweep,
-            part.baseRotY - 0.85 + 2.15 * sweep,
-            part.baseRotZ - 0.55 + 1.25 * sweep
+            -0.45 + 0.95 * sweep,
+            side * (0.68 - 1.72 * sweep),
+            side * (-0.58 + 1.38 * sweep)
           );
+          if (wrist) {
+            wrist.rotation.set(
+              part.wristBaseRotX + 0.92 + 0.22 * arc,
+              part.wristBaseRotY + side * (0.75 - 1.95 * sweep),
+              part.wristBaseRotZ + side * (-0.42 + 1.25 * sweep)
+            );
+          }
+        } else if (t < 0.62) {
+          // Phase 3: Chamber High Overhead for the Execution Cleave
+          const u = (t - 0.50) / 0.12;
+          const ease = u * u * (3 - 2 * u);
+          part.mesh.position.set(
+            part.baseX + side * (-0.10 + 0.08 * ease),
+            part.baseY + 0.14 * ease,
+            part.baseZ + 0.03 * (1 - ease)
+          );
+          part.mesh.rotation.set(
+            0.50 - 1.68 * ease,
+            side * (-1.04 + 0.88 * ease),
+            side * (0.80 - 0.62 * ease)
+          );
+          if (wrist) {
+            wrist.rotation.set(
+              part.wristBaseRotX + 0.92 - 1.35 * ease,
+              part.wristBaseRotY + side * (-1.20 + 0.95 * ease),
+              part.wristBaseRotZ + side * (0.83 - 0.65 * ease)
+            );
+          }
+        } else if (t < 0.84) {
+          // Phase 4: STRIKE 2 — Lethal Overhead Diagonal Execution Slash slamming down through the target!
+          const u = (t - 0.62) / 0.22;
+          const cleave = u * u * (3 - 2 * u);
+          const impactArc = Math.sin(u * Math.PI);
+          part.mesh.position.set(
+            part.baseX - side * 0.06 * cleave,
+            part.baseY + 0.14 * (1 - cleave) - 0.04 * cleave,
+            part.baseZ + 0.24 * impactArc + 0.10 * cleave
+          );
+          part.mesh.rotation.set(
+            -1.18 + 2.15 * cleave,
+            side * (-0.16 - 0.48 * cleave),
+            side * (0.18 + 0.45 * cleave)
+          );
+          if (wrist) {
+            wrist.rotation.set(
+              part.wristBaseRotX - 0.43 + 1.55 * cleave,
+              part.wristBaseRotY + side * (-0.25 - 0.35 * cleave),
+              part.wristBaseRotZ + side * (0.18 + 0.38 * cleave)
+            );
+          }
         } else {
-          const u = Math.min(1, (t - 0.72) / 0.28);
-          const ease = 1 - u;
+          // Phase 5: Smooth Poised Recovery back to Ready Stance
+          const u = Math.min(1, (t - 0.84) / 0.16);
+          const rem = 1 - u * u * (3 - 2 * u);
           part.mesh.position.set(
-            part.baseX - 0.16 * ease,
-            part.baseY,
-            part.baseZ + 0.08 * ease
+            part.baseX - side * 0.06 * rem,
+            part.baseY - 0.04 * rem,
+            part.baseZ + 0.10 * rem
           );
           part.mesh.rotation.set(
-            part.baseRotX + 0.90 * ease,
-            part.baseRotY + 1.30 * ease,
-            part.baseRotZ + 0.70 * ease
+            0.97 * rem,
+            side * -0.64 * rem,
+            side * 0.63 * rem
           );
+          if (wrist) {
+            wrist.rotation.set(
+              part.wristBaseRotX + 1.12 * rem,
+              part.wristBaseRotY + side * -0.60 * rem,
+              part.wristBaseRotZ + side * 0.56 * rem
+            );
+          }
         }
       } else {
-        part.mesh.position.set(part.baseX, part.baseY, part.baseZ);
-        part.mesh.rotation.set(part.baseRotX, part.baseRotY, part.baseRotZ);
+        if (trail) {
+          trail.visible = false;
+        }
+        // Lively combat-ready figure-8 scythe sway in idle & movement
+        const swayA = Math.sin(elapsedTotal * 2.3 + phaseSeed) * 0.11;
+        const swayB = Math.cos(elapsedTotal * 1.7 + phaseSeed) * 0.095;
+        part.mesh.position.set(
+          part.baseX,
+          part.baseY + Math.sin(elapsedTotal * 2.3 + phaseSeed) * 0.012,
+          part.baseZ
+        );
+        part.mesh.rotation.set(
+          part.baseRotX + swayA,
+          part.baseRotY + side * swayB,
+          part.baseRotZ + side * swayA * 0.6
+        );
+        if (wrist) {
+          wrist.rotation.set(
+            part.wristBaseRotX + swayB * 0.85,
+            part.wristBaseRotY - side * swayA * 0.9,
+            part.wristBaseRotZ + side * swayB * 0.5
+          );
+        }
       }
     } else if (part.kind === 'headNod') {
       if (isAttacking) {
@@ -5358,29 +5572,69 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       }
     } else if (arch === 'hollow_reapers') {
       // PATTERN 4 — HOLLOW JACK & WRAITH REAPERS:
-      // "SPECTRAL WRAITH LEVITATION, 360° REAPER SCYTHE SOUL-HARVEST CLEAVE & PUMPKIN HELLFIRE SURGE"
-      if (t < 0.28) {
-        const u = t / 0.28;
+      // "PREDATORY FORWARD LUNGE, WIDE HORIZONTAL REAPING SLASH & OVERHEAD DIAGONAL EXECUTION CLEAVE"
+      // (Reaper lunges forward and twists its shoulders into a horizontal crescent slash followed by
+      // an overhead execution chop — NEVER spinning 360° in circles!)
+      if (t < 0.20) {
+        // Phase 1: Wind-Up Coil — Draw torso back and to the right as the scythe cocks wide
+        const u = t / 0.20;
         const ease = u * u * (3 - 2 * u);
-        rig.position.set(0, 0.26 * powerMul * ease, 0.08 * ease);
-        rig.rotation.set(-0.08 * ease, -0.45 * ease, 0);
-        rig.scale.set(1 + 0.06 * ease, 1 + 0.09 * ease, 1 + 0.06 * ease);
-      } else if (t < 0.74) {
-        const u = (t - 0.28) / 0.46;
+        rig.position.set(0, 0.14 * powerMul * ease, -0.05 * ease);
+        rig.rotation.set(-0.14 * ease, -0.44 * ease, 0.06 * ease);
+        rig.scale.set(1 + 0.04 * ease, 1 + 0.06 * ease, 1 + 0.04 * ease);
+      } else if (t < 0.50) {
+        // Phase 2: Strike 1 — Lunge Forward & Whip Shoulders Left into the Wide Horizontal Scythe Slash
+        const u = (t - 0.20) / 0.30;
         const sweep = u * u * (3 - 2 * u);
-        const cleaveArc = Math.sin(u * Math.PI);
+        const slashArc = Math.sin(u * Math.PI);
         rig.position.set(
-          Math.sin(u * Math.PI * 2.0) * 0.05,
-          0.26 * powerMul + 0.06 * cleaveArc,
-          0.08 + 0.16 * cleaveArc
+          -0.04 * slashArc,
+          0.14 * powerMul + 0.04 * slashArc,
+          -0.05 + (0.26 * sweep + 0.08 * slashArc) * powerMul
         );
-        rig.rotation.set(0.12 * cleaveArc, -0.45 + sweep * (Math.PI * 2.0 + 0.45), -0.08 * cleaveArc);
-        rig.scale.set(1.08, 1.06, 1.08);
-      } else {
-        const u = Math.min(1, (t - 0.74) / 0.26);
+        rig.rotation.set(
+          -0.14 + 0.32 * sweep,
+          -0.44 + 0.96 * sweep,
+          0.06 - 0.16 * sweep
+        );
+        rig.scale.set(1.05, 1.06, 1.05);
+      } else if (t < 0.62) {
+        // Phase 3: Rise & Chamber High Overhead for the Second Slash
+        const u = (t - 0.50) / 0.12;
         const ease = u * u * (3 - 2 * u);
-        rig.position.set(0, 0.26 * powerMul * (1 - ease), 0.08 * (1 - ease));
-        rig.rotation.set(0, 0, 0);
+        rig.position.set(
+          0,
+          (0.14 + 0.12 * ease) * powerMul,
+          (0.21 - 0.08 * ease) * powerMul
+        );
+        rig.rotation.set(
+          0.18 - 0.36 * ease,
+          0.52 - 0.68 * ease,
+          -0.10 + 0.14 * ease
+        );
+        rig.scale.set(1.06, 1.08, 1.06);
+      } else if (t < 0.84) {
+        // Phase 4: Strike 2 — Slam Torso Forward into the Overhead Diagonal Execution Cleave
+        const u = (t - 0.62) / 0.22;
+        const cleave = u * u * (3 - 2 * u);
+        const slamArc = Math.sin(u * Math.PI);
+        rig.position.set(
+          0,
+          0.26 * powerMul * (1 - 0.65 * cleave),
+          (0.13 + 0.18 * slamArc + 0.08 * cleave) * powerMul
+        );
+        rig.rotation.set(
+          -0.18 + 0.46 * cleave,
+          -0.16 + 0.32 * cleave,
+          0.04 - 0.10 * cleave
+        );
+        rig.scale.set(1.06, 1.04, 1.06);
+      } else {
+        // Phase 5: Poised Spectral Recovery
+        const u = Math.min(1, (t - 0.84) / 0.16);
+        const rem = 1 - u * u * (3 - 2 * u);
+        rig.position.set(0, 0.09 * powerMul * rem, 0.21 * powerMul * rem);
+        rig.rotation.set(0.28 * rem, 0.16 * rem, -0.06 * rem);
         rig.scale.set(1, 1, 1);
       }
     } else {

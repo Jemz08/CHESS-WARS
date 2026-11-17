@@ -697,13 +697,64 @@ async function startServer() {
     });
   });
 
+  // --- Live Build Version Endpoint for APK / Web Auto-Update Detection ---
+  const serverBootTs = Date.now();
+  function computeLiveBuildVersion(): string {
+    try {
+      let maxMtime = serverBootTs;
+      const rootFiles = ['index.html', 'server.ts', 'package.json'];
+      for (const rf of rootFiles) {
+        const p = path.resolve(process.cwd(), rf);
+        if (fs.existsSync(p)) {
+          maxMtime = Math.max(maxMtime, Math.floor(fs.statSync(p).mtimeMs));
+        }
+      }
+      const srcDir = path.resolve(process.cwd(), 'src');
+      if (fs.existsSync(srcDir)) {
+        for (const entry of fs.readdirSync(srcDir)) {
+          const ep = path.join(srcDir, entry);
+          try {
+            const st = fs.statSync(ep);
+            if (st.isFile()) {
+              maxMtime = Math.max(maxMtime, Math.floor(st.mtimeMs));
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+      return String(maxMtime);
+    } catch {
+      return String(serverBootTs);
+    }
+  }
+
+  app.get('/api/version', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.json({
+      ok: true,
+      buildId: computeLiveBuildVersion()
+    });
+  });
+
   // --- Vite Middleware in Development / Static Build in Production ---
   const distPath = path.resolve(process.cwd(), 'dist');
   const isProd = process.env.NODE_ENV === 'production' && fs.existsSync(distPath);
 
   if (isProd) {
-    app.use(express.static(distPath));
+    app.use(
+      express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('index.html') || filePath.endsWith('manifest.json')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          }
+        }
+      })
+    );
     app.get('*all', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   } else {

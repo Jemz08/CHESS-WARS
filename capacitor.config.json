@@ -3,9 +3,19 @@
   "appName": "Wizard Chess: Gothic Sanctum",
   "webDir": "dist",
   "bundledWebRuntime": false,
-  "backgroundColor": "#07090e",
+  "backgroundColor": "#F5ECD9",
+  "server": {
+    "url": "https://ais-pre-64yibneopxihyh3rjs6f74-281552636048.asia-southeast1.run.app",
+    "cleartext": true,
+    "allowNavigation": [
+      "*.run.app",
+      "*.googleapis.com",
+      "*.firebaseapp.com",
+      "*.google.com"
+    ]
+  },
   "android": {
-    "backgroundColor": "#07090e",
+    "backgroundColor": "#F5ECD9",
     "allowMixedContent": true,
     "captureInput": true,
     "webContentsDebuggingEnabled": true
@@ -14,13 +24,13 @@
     "SplashScreen": {
       "launchShowDuration": 1800,
       "launchAutoHide": true,
-      "backgroundColor": "#07090e",
+      "backgroundColor": "#F5ECD9",
       "androidScaleType": "CENTER_CROP",
       "showSpinner": false
     },
     "StatusBar": {
-      "style": "DARK",
-      "backgroundColor": "#07090e",
+      "style": "LIGHT",
+      "backgroundColor": "#F5ECD9",
       "overlaysWebView": true
     }
   }
