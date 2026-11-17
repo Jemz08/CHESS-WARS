@@ -1735,8 +1735,18 @@ export default function App() {
     }
     document.body.classList.remove('cinematic-ui-hidden');
     setUiHidden(false);
-    const btnHide = document.getElementById('btn-hide-ui');
-    if (btnHide) btnHide.textContent = 'Hide UI [H]';
+  };
+
+  const handleToggleHideUI = () => {
+    const next = !uiHidden;
+    const eng = getEngine();
+    setMobileSheetOpen(false);
+    if (eng?.toggleUI) {
+      eng.toggleUI(next);
+    } else {
+      document.body.classList.toggle('cinematic-ui-hidden', next);
+    }
+    setUiHidden(next);
   };
 
   const handleToggleVoiceAnnouncer = () => {
@@ -2290,17 +2300,17 @@ export default function App() {
 
       <button
         type="button"
-        className={`hud-btn mobile-only-restore-ui ${uiHidden ? 'is-visible' : ''}`}
+        className={`hud-btn mobile-only-restore-ui ${uiHidden && activeDialog === 'none' ? 'is-visible' : ''}`}
         id="btn-mobile-show-ui"
         onClick={handleRestoreUI}
-        title="Restore HUD Controls (Shortcut: H)"
+        title="Restore In-Game HUD Controls (Shortcut: H)"
       >
-        Show UI [H]
+        <Eye3DPreviewVectorIcon size={15} />
+        <span>Show UI</span>
       </button>
 
       <div
         id="hud-top"
-        key={`hud-top-${hudEntranceEpoch}`}
         className={hasStartedGame && activeDialog === 'none' ? 'hud-entrance-active' : ''}
         data-orientation={hudViewport.orientation}
         data-aspect-profile={hudViewport.aspectProfile}
@@ -2354,6 +2364,16 @@ export default function App() {
             </button>
             <button
               type="button"
+              className="hud-btn hud-micro-btn hud-hide-ui-top-btn"
+              id="btn-top-hide-ui"
+              onClick={handleToggleHideUI}
+              title="Hide HUD for Clean 3D View (Shortcut: H)"
+            >
+              <Eye3DPreviewVectorIcon size={14} />
+              <span>Hide UI</span>
+            </button>
+            <button
+              type="button"
               className="hud-btn hud-micro-btn hud-surrender-btn"
               id="btn-hud-surrender-top"
               disabled={isGameOver}
@@ -2373,7 +2393,7 @@ export default function App() {
               aria-controls="hud-right"
               onClick={() => setMobileSheetOpen((prev) => !prev)}
             >
-              {mobileSheetOpen ? '✕' : '☰ Toggles'}
+              {mobileSheetOpen ? '✕ Close' : '☰ Toggles'}
             </button>
           </div>
         </div>
@@ -2651,11 +2671,12 @@ export default function App() {
           </button>
 
           <button
+            type="button"
             className="hud-btn"
             id="btn-hide-ui"
-            onClick={() => setMobileSheetOpen(false)}
+            onClick={handleToggleHideUI}
           >
-            Hide UI [H]
+            {uiHidden ? 'Show UI [H]' : 'Hide UI [H]'}
           </button>
 
           <button
@@ -5034,7 +5055,6 @@ export default function App() {
 
       <div
         id="hud-bottom"
-        key={`hud-bottom-${hudEntranceEpoch}`}
         className={hasStartedGame && activeDialog === 'none' ? 'hud-bottom-entrance-active' : ''}
         style={{ display: activeDialog !== 'none' ? 'none' : undefined }}
       >
