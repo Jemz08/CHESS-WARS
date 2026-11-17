@@ -64,8 +64,11 @@ import {
 } from './GameVectorIcons';
 import {
   registerGameServiceWorkerAndVersionWatcher,
+  getGitHubUpdateConfig,
+  saveGitHubUpdateConfig,
   usePWAInstall,
-  useOnlineStatus
+  useOnlineStatus,
+  type DetectedVersionUpdate
 } from './pwaRegistration';
 
 export type TimeControlCategory = 'bullet' | 'blitz' | 'rapid';
@@ -591,13 +594,17 @@ export default function App() {
   // Bounties Toast
   const [bountyToast, setBountyToast] = useState<{ id: number; amount: number; label: string } | null>(null);
 
-  // Service Worker & 'New Version Available' Toast State
+  // Service Worker, GitHub Auto-Update & 'New Version Available' Toast State
   const [newVersionToast, setNewVersionToast] = useState<{
     available: boolean;
     buildId: string;
+    details?: DetectedVersionUpdate;
   } | null>(null);
   const [isRefreshingVersion, setIsRefreshingVersion] = useState(false);
   const [versionCheckNotice, setVersionCheckNotice] = useState<string | null>(null);
+  const [githubRepoInput, setGithubRepoInput] = useState<string>(() => getGitHubUpdateConfig().githubRepo);
+  const [githubBranchInput, setGithubBranchInput] = useState<string>(() => getGitHubUpdateConfig().branch);
+  const [otaLiveUrlInput, setOtaLiveUrlInput] = useState<string>(() => getGitHubUpdateConfig().liveUrl);
   const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
   const swControllerRef = useRef<ReturnType<typeof registerGameServiceWorkerAndVersionWatcher> | null>(null);
   const { isInstallable, isInstalled, isIOS, install: installPWAApp } = usePWAInstall();
@@ -1297,16 +1304,25 @@ export default function App() {
     return () => document.removeEventListener('click', handleGlobalUiClick, true);
   }, []);
 
-  // Service Worker Registration + Live Version Watcher on Load & Foreground Resume
-  // Triggers the 'New Version Available' toast so the user can refresh game state without a manual APK update
+  // Service Worker Registration + GitHub & Live Version Watcher on Load & Foreground Resume
+  // Triggers the 'New Version Available' toast when GitHub or the live server has a new commit/build
   useEffect(() => {
-    const controller = registerGameServiceWorkerAndVersionWatcher((newBuildId) => {
+    const controller = registerGameServiceWorkerAndVersionWatcher((newBuildId, _prevBuildId, details) => {
       setNewVersionToast({
         available: true,
-        buildId: newBuildId
+        buildId: newBuildId,
+        details
       });
     });
     swControllerRef.current = controller;
+
+    // Sync state inputs if bundled version.json populated a default GitHub repo
+    const timer = window.setTimeout(() => {
+      const cfg = getGitHubUpdateConfig();
+      if (cfg.githubRepo) setGithubRepoInput((prev) => prev || cfg.githubRepo);
+      if (cfg.branch) setGithubBranchInput((prev) => prev || cfg.branch);
+      if (cfg.liveUrl) setOtaLiveUrlInput((prev) => prev || cfg.liveUrl);
+    }, 600);
 
     // Expose a helper on window.wizardChess so the toast can also be triggered/tested on demand
     (window as any).wizardChessTriggerVersionUpdateToast = (customBuildId?: string) => {
@@ -1317,6 +1333,7 @@ export default function App() {
     };
 
     return () => {
+      window.clearTimeout(timer);
       controller.dispose();
       swControllerRef.current = null;
     };
@@ -1327,6 +1344,7 @@ export default function App() {
     setIsRefreshingVersion(true);
     getEngine()?.playLobbyClickSfx?.('unlock');
     const targetBuildId = newVersionToast?.buildId || String(Date.now());
+    const details = newVersionToast?.details;
 
     const persistStateBeforeReload = () => {
       try {
@@ -1349,7 +1367,8 @@ export default function App() {
     if (swControllerRef.current) {
       await swControllerRef.current.applyUpdateAndRefreshState(
         targetBuildId,
-        persistStateBeforeReload
+        persistStateBeforeReload,
+        details
       );
     } else {
       persistStateBeforeReload();
@@ -1357,18 +1376,59 @@ export default function App() {
     }
   };
 
+  const handleSaveGitHubConfigAndCheck = async () => {
+    getEngine()?.playLobbyClickSfx?.('unlock');
+    const saved = saveGitHubUpdateConfig({
+      githubRepo: githubRepoInput,
+      branch: githubBranchInput || 'main',
+      liveUrl: otaLiveUrlInput
+    });
+    setGithubRepoInput(saved.githubRepo);
+    setGithubBranchInput(saved.branch);
+    setOtaLiveUrlInput(saved.liveUrl);
+
+    if (!saved.githubRepo && !saved.liveUrl) {
+      setVersionCheckNotice('Saved! Enter your GitHub repository (e.g. username/repo) to auto-detect GitHub updates.');
+      return;
+    }
+
+    setVersionCheckNotice(`Checking GitHub (${saved.githubRepo || 'live URL'}) for new commits...`);
+    const result = await swControllerRef.current?.checkForUpdatesNow();
+    if (result) {
+      setVersionCheckNotice(result.message);
+    }
+  };
+
   const handleManualCheckForUpdates = async () => {
     getEngine()?.playLobbyClickSfx?.('card');
-    setVersionCheckNotice('Checking server & Service Worker cache for new version...');
-    const foundNew = await swControllerRef.current?.checkForUpdatesNow();
-    if (foundNew) {
-      setVersionCheckNotice('New version detected! Ready to refresh.');
+    const saved = saveGitHubUpdateConfig({
+      githubRepo: githubRepoInput,
+      branch: githubBranchInput || 'main',
+      liveUrl: otaLiveUrlInput
+    });
+    setGithubRepoInput(saved.githubRepo);
+    setGithubBranchInput(saved.branch);
+    setOtaLiveUrlInput(saved.liveUrl);
+
+    setVersionCheckNotice(
+      saved.githubRepo
+        ? `Checking GitHub (${saved.githubRepo}@${saved.branch}) for new commits & releases...`
+        : 'Checking server & Service Worker cache for new version...'
+    );
+    const result = await swControllerRef.current?.checkForUpdatesNow();
+    if (result?.found) {
+      setVersionCheckNotice(result.message || 'New version detected! Ready to refresh.');
     } else {
-      setVersionCheckNotice('You are on the latest cached build — or tap below to preview the update toast.');
-      setNewVersionToast({
-        available: true,
-        buildId: String(Date.now())
-      });
+      setVersionCheckNotice(
+        result?.message ||
+          'You are on the latest build — or tap "Refresh Game" on the preview toast below to force a clean state reload.'
+      );
+      if (!saved.githubRepo) {
+        setNewVersionToast({
+          available: true,
+          buildId: String(Date.now())
+        });
+      }
     }
   };
 
@@ -4996,15 +5056,66 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Live App Updates, Service Worker Asset Cache & Install Section */}
+                {/* Live App Updates, GitHub Auto-Update Watcher & Asset Cache Section */}
                 <div className="sanctum-settings-section" style={{ marginTop: 14 }}>
                   <div className="sanctum-section-label">
                     <SparklesVectorIcon size={16} />
-                    <span>Live Over-The-Air Updates &amp; Asset Cache</span>
+                    <span>GitHub Auto-Update &amp; Live OTA Sync</span>
                   </div>
-                  <p className="sanctum-cloud-desc" style={{ marginBottom: 10 }}>
-                    3D models, audio SFX, and textures are cached locally via Service Worker. New updates stream automatically without needing a manual APK reinstall.
+                  <p className="sanctum-cloud-desc" style={{ marginBottom: 8 }}>
+                    Link your GitHub repository below so the APK &amp; game automatically detect every new commit or release pushed to GitHub.
                   </p>
+                  <div
+                    className="settings-profile-upload-card"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      marginBottom: 10
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <div style={{ flex: '2 1 180px', minWidth: 0 }}>
+                        <div className="settings-mini-label" style={{ marginBottom: 3 }}>
+                          GitHub Repo (owner/repo)
+                        </div>
+                        <input
+                          type="text"
+                          className="settings-name-input"
+                          style={{ width: '100%' }}
+                          placeholder="e.g. jamesalburo/wizard-chess"
+                          value={githubRepoInput}
+                          onChange={(e) => setGithubRepoInput(e.target.value)}
+                        />
+                      </div>
+                      <div style={{ flex: '1 1 80px', minWidth: 0 }}>
+                        <div className="settings-mini-label" style={{ marginBottom: 3 }}>
+                          Branch
+                        </div>
+                        <input
+                          type="text"
+                          className="settings-name-input"
+                          style={{ width: '100%' }}
+                          placeholder="main"
+                          value={githubBranchInput}
+                          onChange={(e) => setGithubBranchInput(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="settings-mini-label" style={{ marginBottom: 3 }}>
+                        Live OTA Game URL (GitHub Pages / Cloud Run — optional, auto-fills from repo)
+                      </div>
+                      <input
+                        type="url"
+                        className="settings-name-input"
+                        style={{ width: '100%' }}
+                        placeholder="https://your-username.github.io/your-repo/"
+                        value={otaLiveUrlInput}
+                        onChange={(e) => setOtaLiveUrlInput(e.target.value)}
+                      />
+                    </div>
+                  </div>
                   {versionCheckNotice && (
                     <div className="sanctum-sync-feedback synced" style={{ marginBottom: 10 }}>
                       <CloudCheckVectorIcon size={14} />
@@ -5012,6 +5123,14 @@ export default function App() {
                     </div>
                   )}
                   <div className="sanctum-cloud-btn-row">
+                    <button
+                      type="button"
+                      className="sanctum-action-btn sync-btn"
+                      id="btn-save-github-ota-config"
+                      onClick={handleSaveGitHubConfigAndCheck}
+                    >
+                      Save GitHub Repo &amp; Check
+                    </button>
                     <button
                       type="button"
                       className="sanctum-action-btn save-now-btn"
@@ -5190,7 +5309,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 'New Version Available' Toast (Service Worker / Over-The-Air State Refresh without manual APK update) */}
+      {/* 'New Version Available' Toast (GitHub Commit / Release & Service Worker Over-The-Air Refresh) */}
       {newVersionToast?.available && (
         <div
           className="cozy-version-update-toast"
@@ -5202,9 +5321,15 @@ export default function App() {
             <SparklesVectorIcon size={24} />
           </div>
           <div className="cozy-version-toast-body">
-            <div className="cozy-version-toast-title">New Version Available</div>
+            <div className="cozy-version-toast-title">
+              {newVersionToast.details?.source === 'github'
+                ? `New GitHub Update (#${newVersionToast.details.commitSha})`
+                : 'New Version Available'}
+            </div>
             <div className="cozy-version-toast-desc">
-              Updated game assets &amp; features are ready. Refresh to update your game state without a manual APK update.
+              {newVersionToast.details?.commitMessage
+                ? `${newVersionToast.details.commitMessage} — Tap Refresh Game to sync & load the latest update.`
+                : 'Updated game assets & features are ready. Refresh to update your game state without a manual APK update.'}
             </div>
           </div>
           <div className="cozy-version-toast-actions">
@@ -5215,8 +5340,19 @@ export default function App() {
               disabled={isRefreshingVersion}
               onClick={handleRefreshToNewVersion}
             >
-              {isRefreshingVersion ? 'Refreshing...' : 'Refresh Game'}
+              {isRefreshingVersion ? 'Updating...' : 'Refresh Game'}
             </button>
+            {newVersionToast.details?.apkDownloadUrl && (
+              <a
+                href={newVersionToast.details.apkDownloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="cozy-version-refresh-btn"
+                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+              >
+                Download APK
+              </a>
+            )}
             <button
               type="button"
               className="cozy-version-dismiss-btn"

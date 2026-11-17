@@ -1,0 +1,10 @@
+{
+  "version": "1.0.4",
+  "buildId": "build-20261117-ota",
+  "commitSha": "local-head",
+  "branch": "main",
+  "githubRepo": "",
+  "liveUrl": "",
+  "updatedAt": "2026-11-17T04:20:00.000Z",
+  "notes": "Compact HUD layout, high-contrast button typography, and GitHub OTA auto-update support"
+}

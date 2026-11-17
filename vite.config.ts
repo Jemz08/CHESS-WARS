@@ -1,6 +1,69 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import fs from 'fs';
+import { execSync } from 'child_process';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+
+function tryGit(cmd: string): string {
+  try {
+    return execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+function parseGitHubRepo(remoteUrl: string): string {
+  if (!remoteUrl) return '';
+  const match = remoteUrl.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
+  return match ? match[1] : '';
+}
+
+function stampVersionManifestPlugin(rootDir: string, env: Record<string, string>): Plugin {
+  return {
+    name: 'stamp-version-manifest',
+    buildStart() {
+      try {
+        const versionPath = path.resolve(rootDir, 'public', 'version.json');
+        let existing: Record<string, string> = {};
+        if (fs.existsSync(versionPath)) {
+          try {
+            existing = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
+          } catch {
+            existing = {};
+          }
+        }
+        const sha =
+          tryGit('git rev-parse --short=8 HEAD') ||
+          existing.commitSha ||
+          'local-head';
+        const branch =
+          env.VITE_GITHUB_BRANCH ||
+          tryGit('git rev-parse --abbrev-ref HEAD') ||
+          existing.branch ||
+          'main';
+        const detectedRepo =
+          env.VITE_GITHUB_REPO ||
+          parseGitHubRepo(tryGit('git remote get-url origin')) ||
+          existing.githubRepo ||
+          '';
+        const liveUrl = env.VITE_OTA_LIVE_URL || existing.liveUrl || '';
+        const nextManifest = {
+          ...existing,
+          version: existing.version || '1.0.4',
+          buildId: `build-${sha}-${Date.now()}`,
+          commitSha: sha,
+          branch,
+          githubRepo: detectedRepo,
+          liveUrl,
+          updatedAt: new Date().toISOString()
+        };
+        fs.writeFileSync(versionPath, JSON.stringify(nextManifest, null, 2) + '\n', 'utf8');
+      } catch {
+        // Non-fatal if filesystem is read-only
+      }
+    }
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const rootDir = path.resolve(import.meta.dirname);
@@ -42,7 +105,7 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: '0.0.0.0',
     },
-    plugins: [react()],
+    plugins: [react(), stampVersionManifestPlugin(rootDir, env)],
     resolve: {
       alias: {
         '@': path.resolve(rootDir, 'src'),
@@ -50,3 +113,4 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
+

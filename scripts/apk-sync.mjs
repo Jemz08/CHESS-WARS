@@ -7,9 +7,51 @@ function run(cmd) {
   execSync(cmd, { stdio: 'inherit' });
 }
 
+function tryExec(cmd) {
+  try {
+    return execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+function parseGitHubRepoFromRemote(remoteUrl) {
+  if (!remoteUrl) return '';
+  // Matches https://github.com/owner/repo.git or git@github.com:owner/repo.git
+  const match = remoteUrl.match(/github\.com[:/]([^/]+\/[^/.]+)(?:\.git)?$/i);
+  return match ? match[1] : '';
+}
+
 try {
   const rootDir = process.cwd();
   console.log(`[Wizard Chess APK Sync] Working directory: ${rootDir}`);
+
+  // 0. Stamp public/version.json with current git commit SHA & detected GitHub repository
+  const versionJsonPath = resolve(rootDir, 'public', 'version.json');
+  let existingVersion = {};
+  if (existsSync(versionJsonPath)) {
+    try {
+      existingVersion = JSON.parse(readFileSync(versionJsonPath, 'utf8'));
+    } catch {
+      existingVersion = {};
+    }
+  }
+  const gitSha = tryExec('git rev-parse --short=8 HEAD') || existingVersion.commitSha || `local-${Date.now()}`;
+  const gitBranch = tryExec('git rev-parse --abbrev-ref HEAD') || existingVersion.branch || 'main';
+  const gitRemoteUrl = tryExec('git remote get-url origin');
+  const detectedGithubRepo = parseGitHubRepoFromRemote(gitRemoteUrl) || existingVersion.githubRepo || '';
+  const stampedVersion = {
+    ...existingVersion,
+    version: existingVersion.version || '1.0.4',
+    buildId: `apk-${gitSha}-${Date.now()}`,
+    commitSha: gitSha,
+    branch: gitBranch,
+    githubRepo: detectedGithubRepo,
+    liveUrl: existingVersion.liveUrl || '',
+    updatedAt: new Date().toISOString()
+  };
+  writeFileSync(versionJsonPath, JSON.stringify(stampedVersion, null, 2) + '\n', 'utf8');
+  console.log(`[Wizard Chess APK Sync] Stamped public/version.json (buildId=${stampedVersion.buildId}, repo=${detectedGithubRepo || 'configure in Settings'})`);
 
   // 1. Ensure root capacitor.config.json does not contain a private preview server.url or external OAuth allowNavigation
   const rootCapConfigPath = resolve(rootDir, 'capacitor.config.json');
@@ -68,7 +110,7 @@ try {
   }
 
   console.log('\n✅ [Wizard Chess APK Sync] Success! Bundled assets are synced into android/app/src/main/assets/public.');
-  console.log('   Rebuild/Run the app in Android Studio Quail — the 404 Page Not Found error is now fixed.');
+  console.log('   Rebuild/Run the app in Android Studio Quail — GitHub & Live OTA auto-update detection is active.');
 } catch (err) {
   console.error('\n❌ [Wizard Chess APK Sync] Failed:', err?.message || err);
   process.exit(1);
