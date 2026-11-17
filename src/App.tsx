@@ -1475,21 +1475,12 @@ export default function App() {
     setGithubBranchInput(saved.branch);
     setOtaLiveUrlInput(saved.liveUrl);
 
-    setVersionCheckNotice(
-      saved.githubRepo
-        ? `Checking GitHub (${saved.githubRepo}@${saved.branch}) & Live OTA Server for updates...`
-        : 'Checking Live OTA Server & Service Worker for updates...'
-    );
+    setVersionCheckNotice('Checking for updates...');
     const result = await swControllerRef.current?.checkForUpdatesNow({ force: true });
     if (result?.found) {
-      setVersionCheckNotice(
-        result.message || 'New version detected! Tap "Download Changes & Restart APK" below.'
-      );
+      setVersionCheckNotice('Found an update! Tap "Update" below to download and restart the app.');
     } else {
-      setVersionCheckNotice(
-        result?.message ||
-          'Tap "Download Changes & Restart APK" below to download the latest assets and restart.'
-      );
+      setVersionCheckNotice('Found an update! Tap "Update" below to download and restart the app.');
     }
   };
 
@@ -1502,7 +1493,7 @@ export default function App() {
       branch: githubBranchInput || 'main',
       liveUrl: otaLiveUrlInput
     });
-    setVersionCheckNotice('Starting download of updated game code & 3D assets...');
+    setVersionCheckNotice('Downloading new version...');
 
     const persistStateBeforeReload = () => {
       try {
@@ -5349,13 +5340,16 @@ export default function App() {
                       onClick={handleForceApplyLatestUpdate}
                     >
                       {isRefreshingVersion
-                        ? `Downloading (${otaDownloadProgress?.percent ?? 0}%)...`
-                        : '⬇ Download Changes & Restart APK'}
+                        ? otaDownloadProgress?.percent === 100
+                          ? 'Restarting App...'
+                          : `Downloading (${otaDownloadProgress?.percent ?? 0}%)...`
+                        : 'Update'}
                     </button>
                     <button
                       type="button"
                       className="sanctum-action-btn save-now-btn"
                       id="btn-check-for-updates"
+                      disabled={isRefreshingVersion}
                       onClick={handleManualCheckForUpdates}
                     >
                       Check for Updates
@@ -5364,17 +5358,10 @@ export default function App() {
                       type="button"
                       className="sanctum-action-btn sync-btn"
                       id="btn-save-github-ota-config"
+                      disabled={isRefreshingVersion}
                       onClick={handleSaveGitHubConfigAndCheck}
                     >
-                      Save GitHub Repo
-                    </button>
-                    <button
-                      type="button"
-                      className="sanctum-action-btn save-now-btn"
-                      id="btn-restart-apk-now"
-                      onClick={() => restartApkToApplyChanges()}
-                    >
-                      ↻ Restart APK Now
+                      Save Repo
                     </button>
                     {!isInstalled && isInstallable && (
                       <button
@@ -5546,7 +5533,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 'New Version Available' Toast (GitHub Commit / Release & Service Worker Over-The-Air Refresh) */}
+      {/* 'Found an update' Toast -> Tap 'Update' -> Downloads new version -> Restarts the app */}
       {newVersionToast?.available && (
         <div
           className="cozy-version-update-toast"
@@ -5559,16 +5546,22 @@ export default function App() {
           </div>
           <div className="cozy-version-toast-body">
             <div className="cozy-version-toast-title">
-              {newVersionToast.details?.source === 'github'
-                ? `New GitHub Update (#${newVersionToast.details.commitSha})`
-                : 'New Game Update & Assets Ready'}
+              {isRefreshingVersion
+                ? otaDownloadProgress?.percent === 100
+                  ? 'Update Complete — Restarting App...'
+                  : `Downloading New Version (${otaDownloadProgress?.percent ?? 0}%)`
+                : 'Found an update'}
             </div>
             <div className="cozy-version-toast-desc">
               {otaDownloadProgress
-                ? `${otaDownloadProgress.stepLabel} (${otaDownloadProgress.percent}%)`
+                ? `${otaDownloadProgress.stepLabel}${
+                    otaDownloadProgress.downloadedBytes > 0
+                      ? ` • ${Math.round(otaDownloadProgress.downloadedBytes / 1024)} KB`
+                      : ''
+                  }`
                 : newVersionToast.details?.commitMessage
-                  ? `${newVersionToast.details.commitMessage} — Tap below to download changes & restart APK.`
-                  : 'Updated game code & 3D assets are ready. Tap below to download changes and automatically restart the APK.'}
+                  ? newVersionToast.details.commitMessage
+                  : 'Tap Update to download the new version and restart the app.'}
             </div>
             {otaDownloadProgress && (
               <div
@@ -5601,31 +5594,10 @@ export default function App() {
               onClick={handleRefreshToNewVersion}
             >
               {isRefreshingVersion
-                ? `Downloading ${otaDownloadProgress?.percent ?? 0}%...`
-                : '⬇ Download & Restart APK'}
-            </button>
-            {newVersionToast.details?.apkDownloadUrl && (
-              <a
-                href={newVersionToast.details.apkDownloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="cozy-version-refresh-btn"
-                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-              >
-                Download APK
-              </a>
-            )}
-            <button
-              type="button"
-              className="cozy-version-dismiss-btn"
-              id="btn-dismiss-new-version"
-              disabled={isRefreshingVersion}
-              onClick={() => {
-                getEngine()?.playLobbyClickSfx?.('close');
-                setNewVersionToast(null);
-              }}
-            >
-              Later
+                ? otaDownloadProgress?.percent === 100
+                  ? 'Restarting...'
+                  : `${otaDownloadProgress?.percent ?? 0}%`
+                : 'Update'}
             </button>
           </div>
         </div>

@@ -538,7 +538,7 @@ export async function downloadChangesAndAssetsWithProgress(
     });
   };
 
-  emit(8, 'Step 1/4: Connecting to Update Server...', 'Checking latest version manifest & commit metadata');
+  emit(10, 'Downloading new version...', 'Connecting to update server');
 
   const cfg = getGitHubUpdateConfig();
   const candidateServers = Array.from(
@@ -606,9 +606,9 @@ export async function downloadChangesAndAssetsWithProgress(
         if (!entryJs) continue;
 
         emit(
-          28,
-          'Step 2/4: Downloading Updated Game Engine & UI...',
-          `Fetching ${entryJs} from ${base}`
+          35,
+          'Downloading new version...',
+          `Fetching updated game bundle (${entryJs})`
         );
 
         const jsRes = await fetch(`${base}/${entryJs.replace(/^\/+/, '')}?t=${Date.now()}`, {
@@ -620,9 +620,9 @@ export async function downloadChangesAndAssetsWithProgress(
         totalBytes += jsText.length;
 
         emit(
-          62,
-          'Step 3/4: Downloading Updated HUD & Layout Styles...',
-          entryCss ? `Fetching ${entryCss} (${Math.round(totalBytes / 1024)} KB downloaded)` : 'Verifying stylesheet assets'
+          70,
+          'Downloading new version...',
+          `Downloaded ${Math.round(totalBytes / 1024)} KB`
         );
 
         let cssText = '';
@@ -639,11 +639,11 @@ export async function downloadChangesAndAssetsWithProgress(
           }
         }
 
-        // Step 4: Pre-fetch & cache core static assets into CacheStorage so offline/3D assets are fresh
+        // Pre-fetch & cache core static assets into CacheStorage so offline/3D assets are fresh
         emit(
-          84,
-          'Step 4/4: Caching 3D Assets & Saving Update to Device...',
-          `Saving ${Math.round(totalBytes / 1024)} KB update package to device storage`
+          90,
+          'Downloading new version...',
+          `Saving ${Math.round(totalBytes / 1024)} KB update to app storage`
         );
 
         if (typeof caches !== 'undefined') {
@@ -708,8 +708,8 @@ export async function downloadChangesAndAssetsWithProgress(
 
   emit(
     100,
-    'Download Complete (100%)! Restarting APK to Apply Changes...',
-    `Saved build ${downloadedBundle.buildId} (${Math.round(totalBytes / 1024)} KB) — Rebooting now...`,
+    'Update complete! Restarting app...',
+    `Downloaded ${Math.round(totalBytes / 1024)} KB — Restarting app now...`,
     'restarting'
   );
 
@@ -718,11 +718,11 @@ export async function downloadChangesAndAssetsWithProgress(
 
   window.setTimeout(() => {
     restartApkToApplyChanges();
-  }, 950);
+  }, 800);
 
   return {
     ok: true,
-    message: `Downloaded ${Math.round(totalBytes / 1024)} KB (${downloadedBundle.buildId})! Restarting APK to apply changes...`,
+    message: 'Update complete! Restarting app...',
     bundle: downloadedBundle
   };
 }
