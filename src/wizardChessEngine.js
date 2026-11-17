@@ -2089,19 +2089,55 @@ export function initWizardChess() {
       };
     }
 
+    let captureZoomEnabled = true;
+    try {
+      const savedCaptureZoom = window.localStorage?.getItem('wizard_chess_capture_zoom_enabled');
+      if (savedCaptureZoom !== null) {
+        captureZoomEnabled = savedCaptureZoom !== 'false';
+      }
+    } catch {}
+
+    let landscapeCameraMode = false;
+    try {
+      const savedOrient = window.localStorage?.getItem('wizard_chess_orientation_mode');
+      if (savedOrient === 'landscape') {
+        landscapeCameraMode = true;
+      }
+    } catch {}
+
     function setCameraForSide(color, immediate = false) {
       // White sits at +Z looking toward -Z (across the Obsidian Altar down the Cathedral Nave & Rose Window)
       // Black sits at -Z looking toward +Z (across the Obsidian Altar toward the South Narthex Royal Amber Triptych)
       const zSign = color === 'b' ? -1 : 1;
-      const desiredPos = new THREE.Vector3(0, 2.22, zSign * 2.72);
-      const desiredTarget = new THREE.Vector3(0, 0.85, zSign * -0.15);
+      const isWideLandscape = landscapeCameraMode || window.innerWidth > window.innerHeight * 1.15;
+      const desiredPos = isWideLandscape
+        ? new THREE.Vector3(0, 2.08, zSign * 2.42)
+        : new THREE.Vector3(0, 2.22, zSign * 2.72);
+      const desiredTarget = isWideLandscape
+        ? new THREE.Vector3(0, 0.82, zSign * -0.12)
+        : new THREE.Vector3(0, 0.85, zSign * -0.15);
       if (immediate) {
         activeCamTransition = null;
         camera.position.copy(desiredPos);
         orbitControls.target.copy(desiredTarget);
         flushOrbitControlsDamping();
       } else {
-        smoothCameraTo(desiredPos, desiredTarget, 0.8);
+        smoothCameraTo(desiredPos, desiredTarget, 0.65);
+      }
+    }
+
+    function setLandscapeCameraMode(enabled, immediate = false) {
+      landscapeCameraMode = Boolean(enabled);
+      const aspect = Math.max(0.4, window.innerWidth / Math.max(1, window.innerHeight));
+      if (landscapeCameraMode) {
+        camera.fov = aspect > 1.3 ? 38 : 42;
+      } else {
+        camera.fov = aspect < 0.85 ? 50 : 42;
+      }
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+      if (!isAnimatingMove) {
+        setCameraForSide(playerCamSide || playerColor || 'w', immediate);
       }
     }
 
@@ -3406,12 +3442,16 @@ export function initWizardChess() {
         );
       }
 
+      const useCaptureZoom = Boolean(isCapture && captureZoomEnabled);
+
       if (isCapture) {
-        activeDuelSavedCam = {
-          pos: savedCamPos.clone(),
-          target: savedTarget.clone()
-        };
-        orbitControls.enabled = false;
+        if (useCaptureZoom) {
+          activeDuelSavedCam = {
+            pos: savedCamPos.clone(),
+            target: savedTarget.clone()
+          };
+          orbitControls.enabled = false;
+        }
         cameraTelemetry.lastAttackSamples = [];
         cameraTelemetry.attackCount += 1;
         cameraTelemetry.maxStepDelta = 0;
@@ -3435,9 +3475,11 @@ export function initWizardChess() {
       const tContact = isCapture ? (tApproach + CONTACT_CLIP_TIME / atkProfile.timeScale) : stdMoveDuration;
       const tImpact = isCapture ? (tApproach + BLOW_CLIP_TIME / atkProfile.timeScale) : stdMoveDuration;
       const tStrikeDone = isCapture ? (tImpact + 0.48) : stdMoveDuration;
-      // Slower, distance-aware post-attack camera return (~1.30s - 1.60s instead of 0.64s)
+      // Slower, distance-aware post-attack camera return (~1.30s - 1.60s instead of 0.64s) when capture zoom is ON; quick 0.26s piece step-in when capture zoom is OFF
       const camReturnDist = savedCamPos.distanceTo(duelCamClose);
-      const returnDuration = isCapture ? Number((1.18 + Math.min(0.42, camReturnDist * 0.10)).toFixed(3)) : 0;
+      const returnDuration = isCapture
+        ? (useCaptureZoom ? Number((1.18 + Math.min(0.42, camReturnDist * 0.10)).toFixed(3)) : 0.26)
+        : 0;
       const totalDuration = isCapture ? (tStrikeDone + returnDuration) : stdMoveDuration;
 
       if (!isCapture) {
@@ -3512,10 +3554,12 @@ export function initWizardChess() {
           if (piece.color === 'w') capturedByWhite += 1;
           else capturedByBlack += 1;
           activeDuelSavedCam = null;
-          camera.position.copy(savedCamPos);
-          orbitControls.target.copy(savedTarget);
-          orbitControls.enabled = true;
-          orbitControls.update();
+          if (useCaptureZoom) {
+            camera.position.copy(savedCamPos);
+            orbitControls.target.copy(savedTarget);
+            orbitControls.enabled = true;
+            orbitControls.update();
+          }
         }
 
         currentTurn = currentTurn === 'w' ? 'b' : 'w';
@@ -3599,11 +3643,13 @@ export function initWizardChess() {
         // Capture Sequence with Continuous C-infinity Quadratic Bezier Camera & Zero-Freeze Piece Choreography
         let phaseName = 'approach';
         if (elapsed <= tStrikeDone) {
-          // Single unbroken C-infinity camera arc across both approach and strike (never stops at tApproach!)
-          const uActive = Math.min(1, elapsed / tStrikeDone);
-          const sActive = 0.38 * uActive + 0.62 * easeInOutCubic(uActive);
-          evalQuadraticBezier(camera.position, savedCamPos, duelCamMid, duelCamClose, sActive);
-          evalQuadraticBezier(orbitControls.target, savedTarget, duelTargetStart, duelTargetEnd, sActive);
+          if (useCaptureZoom) {
+            // Single unbroken C-infinity camera arc across both approach and strike (never stops at tApproach!)
+            const uActive = Math.min(1, elapsed / tStrikeDone);
+            const sActive = 0.38 * uActive + 0.62 * easeInOutCubic(uActive);
+            evalQuadraticBezier(camera.position, savedCamPos, duelCamMid, duelCamClose, sActive);
+            evalQuadraticBezier(orbitControls.target, savedTarget, duelTargetStart, duelTargetEnd, sActive);
+          }
 
           if (elapsed <= tApproach) {
             // Phase 1: Smooth Glide-In to Concrete Standoff Position
@@ -3776,8 +3822,8 @@ export function initWizardChess() {
               postStrikePiecePos.copy(piece.mesh.position);
             }
 
-            // Subtle damped perpendicular impact vibration right when the blow shatters the defender
-            if (shatterTriggered && elapsed >= impactActualTime && elapsed <= impactActualTime + 0.26) {
+            // Subtle damped perpendicular impact vibration right when the blow shatters the defender (only if capture camera zoom is enabled)
+            if (useCaptureZoom && shatterTriggered && elapsed >= impactActualTime && elapsed <= impactActualTime + 0.26) {
               const shakeProgress = (elapsed - impactActualTime) / 0.26;
               const decay = (1 - shakeProgress) * (1 - shakeProgress);
               const amp = 0.024 * decay;
@@ -3792,11 +3838,15 @@ export function initWizardChess() {
           const pieceAdvanceBlend = 0.35 * uReturn + 0.65 * easeRet;
 
           piece.mesh.position.lerpVectors(postStrikePiecePos, endPos, pieceAdvanceBlend);
-          camera.position.lerpVectors(duelCamClose, savedCamPos, easeRet);
-          orbitControls.target.lerpVectors(duelTargetEnd, savedTarget, easeRet);
+          if (useCaptureZoom) {
+            camera.position.lerpVectors(duelCamClose, savedCamPos, easeRet);
+            orbitControls.target.lerpVectors(duelTargetEnd, savedTarget, easeRet);
+          }
         }
 
-        camera.lookAt(orbitControls.target);
+        if (useCaptureZoom) {
+          camera.lookAt(orbitControls.target);
+        }
 
         const stepDelta = camera.position.distanceTo(prevCamPos);
         const pieceStepDelta = piece.mesh.position.distanceTo(prevPiecePos);
@@ -7398,6 +7448,17 @@ export function initWizardChess() {
       setPassAutoFlip: (v) => {
         passAutoFlip = Boolean(v);
       },
+      setCaptureZoomEnabled: (enabled) => {
+        captureZoomEnabled = Boolean(enabled);
+        try {
+          window.localStorage?.setItem('wizard_chess_capture_zoom_enabled', captureZoomEnabled ? 'true' : 'false');
+        } catch {}
+      },
+      getCaptureZoomEnabled: () => captureZoomEnabled,
+      setLandscapeCameraMode: (enabled, immediate = false) => {
+        setLandscapeCameraMode(enabled, immediate);
+      },
+      getLandscapeCameraMode: () => landscapeCameraMode,
       flipPassCameraNow: () => {
         setCameraForSide(currentTurn, false);
       },
@@ -7624,6 +7685,8 @@ export function initWizardChess() {
         gameOver,
         inCheck: isKingInCheck(currentTurn, boardState),
         voiceEnabled,
+        captureZoomEnabled,
+        landscapeCameraMode,
         sfxEnabled: sfxVfxManager.getSfxEnabled(),
         activeWorldScenery: currentWorldSceneryId,
         checkmateState: { ...checkmateState },

@@ -235,6 +235,10 @@ interface WizardChessAPI {
   setBotDifficulty?: (diff: 'easy' | 'medium' | 'hard') => void;
   setTimeControl?: (presetOrCategory: string, resetClocks?: boolean) => void;
   setPassAutoFlip?: (autoFlip: boolean) => void;
+  setCaptureZoomEnabled?: (enabled: boolean) => void;
+  getCaptureZoomEnabled?: () => boolean;
+  setLandscapeCameraMode?: (enabled: boolean, immediate?: boolean) => void;
+  getLandscapeCameraMode?: () => boolean;
   flipPassCameraNow?: () => void;
   setLobbyPaused?: (paused: boolean) => void;
   setCameraPreset?: (preset: string) => void;
@@ -643,7 +647,30 @@ export default function App() {
   const showcaseSceneryObj =
     WORLD_SCENERIES.find((w) => w.id === showcaseSceneryId) || equippedSceneryObj;
 
-  function requestAppFullscreenPortrait() {
+  const [orientationMode, setOrientationModeState] = useState<'portrait' | 'landscape'>(() => {
+    try {
+      const saved = localStorage.getItem('wizard_chess_orientation_mode');
+      if (saved === 'landscape' || saved === 'portrait') return saved;
+    } catch {}
+    return 'portrait';
+  });
+
+  const [captureZoomEnabled, setCaptureZoomEnabledState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('wizard_chess_capture_zoom_enabled') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  function applyScreenOrientationMode(targetMode: 'portrait' | 'landscape') {
+    setOrientationModeState(targetMode);
+    try {
+      localStorage.setItem('wizard_chess_orientation_mode', targetMode);
+    } catch {}
+    document.documentElement.dataset.landscapeMode = targetMode === 'landscape' ? 'true' : 'false';
+    getEngine()?.setLandscapeCameraMode?.(targetMode === 'landscape', true);
+
     try {
       const docEl = document.documentElement as any;
       if (!document.fullscreenElement) {
@@ -653,15 +680,42 @@ export default function App() {
           docEl.webkitRequestFullscreen();
         }
       }
-    } catch (e) {}
+    } catch {}
 
     try {
-      if (window.screen && (window.screen as any).orientation && (window.screen as any).orientation.lock) {
-        (window.screen as any).orientation.lock('portrait-primary').catch(() => {
-          (window.screen as any).orientation.lock('portrait').catch(() => {});
-        });
+      const scrOrient = (window.screen as any)?.orientation;
+      if (scrOrient && typeof scrOrient.lock === 'function') {
+        if (targetMode === 'landscape') {
+          scrOrient.lock('landscape-primary').catch(() => {
+            scrOrient.lock('landscape').catch(() => {});
+          });
+        } else {
+          scrOrient.lock('portrait-primary').catch(() => {
+            scrOrient.lock('portrait').catch(() => {});
+          });
+        }
       }
-    } catch (e) {}
+    } catch {}
+  }
+
+  function handleToggleLandscapeMode() {
+    getEngine()?.playLobbyClickSfx?.('tab');
+    const nextMode = orientationMode === 'landscape' ? 'portrait' : 'landscape';
+    applyScreenOrientationMode(nextMode);
+  }
+
+  function handleToggleCaptureZoom() {
+    getEngine()?.playLobbyClickSfx?.('tab');
+    const next = !captureZoomEnabled;
+    setCaptureZoomEnabledState(next);
+    try {
+      localStorage.setItem('wizard_chess_capture_zoom_enabled', next ? 'true' : 'false');
+    } catch {}
+    getEngine()?.setCaptureZoomEnabled?.(next);
+  }
+
+  function requestAppFullscreenPortrait() {
+    applyScreenOrientationMode(orientationMode);
   }
 
   const [graphicsQuality, setGraphicsQualityState] = useState<'auto' | 'lite' | 'balanced' | 'ultra'>(() => {
@@ -1242,12 +1296,15 @@ export default function App() {
       eng.applyPieceArchetype?.(pArch);
       eng.applyBoardSkin?.(bSkin);
       eng.applyWorldScenery?.(wScenery);
+      eng.setCaptureZoomEnabled?.(captureZoomEnabled);
+      eng.setLandscapeCameraMode?.(orientationMode === 'landscape', true);
+      document.documentElement.dataset.landscapeMode = orientationMode === 'landscape' ? 'true' : 'false';
     };
 
     applyEquippedSkins();
     window.addEventListener('wizardchess:ready', applyEquippedSkins);
     return () => window.removeEventListener('wizardchess:ready', applyEquippedSkins);
-  }, [economy.activePieceType, economy.activePieceSkin, economy.activeBoardSkin, economy.activeScenery]);
+  }, [economy.activePieceType, economy.activePieceSkin, economy.activeBoardSkin, economy.activeScenery, captureZoomEnabled, orientationMode]);
 
   // Sync Lobby Music active state & Pause Background 3D Game whenever in Lobby
   useEffect(() => {
@@ -2415,6 +2472,24 @@ export default function App() {
             </button>
             <button
               type="button"
+              className={`hud-btn hud-micro-btn ${orientationMode === 'landscape' ? 'active' : ''}`}
+              id="btn-top-landscape-toggle"
+              onClick={handleToggleLandscapeMode}
+              title="Toggle Gameplay Landscape / Portrait Orientation"
+            >
+              <span>{orientationMode === 'landscape' ? 'Landscape' : 'Portrait'}</span>
+            </button>
+            <button
+              type="button"
+              className={`hud-btn hud-micro-btn ${captureZoomEnabled ? 'active' : ''}`}
+              id="btn-top-capture-zoom-toggle"
+              onClick={handleToggleCaptureZoom}
+              title="Toggle Camera Zoom When Eating an Enemy Piece (Piece Attack Animation Stays ON)"
+            >
+              <span>{captureZoomEnabled ? 'Zoom: ON' : 'Zoom: OFF'}</span>
+            </button>
+            <button
+              type="button"
               className={`hud-btn hud-micro-btn ${sfxEnabled ? 'active' : ''}`}
               onClick={handleToggleSfx}
               title="Toggle Sound Effects"
@@ -2699,6 +2774,28 @@ export default function App() {
             title="Ultra Mode: 1.5x DPR, full shaders, soft shadows & weather"
           >
             Ultra
+          </button>
+
+          <div className="mobile-sheet-section-label">Gameplay Orientation &amp; Camera Zoom</div>
+
+          <button
+            type="button"
+            className={`hud-btn ${orientationMode === 'landscape' ? 'active' : ''}`}
+            id="btn-drawer-landscape-toggle"
+            onClick={handleToggleLandscapeMode}
+            title="Switch Gameplay Between Landscape and Portrait Mode"
+          >
+            {orientationMode === 'landscape' ? 'View: Landscape' : 'View: Portrait'}
+          </button>
+
+          <button
+            type="button"
+            className={`hud-btn ${captureZoomEnabled ? 'active' : ''}`}
+            id="btn-drawer-capture-zoom-toggle"
+            onClick={handleToggleCaptureZoom}
+            title="Turn OFF Only the Camera Zooming When Eating an Enemy Piece"
+          >
+            {captureZoomEnabled ? 'Kill Zoom: ON' : 'Kill Zoom: OFF'}
           </button>
 
           <div className="mobile-sheet-section-label">Quick Audio &amp; HUD</div>
@@ -4960,6 +5057,32 @@ export default function App() {
                       type="checkbox"
                       checked={voiceEnabled}
                       onChange={handleToggleVoiceAnnouncer}
+                    />
+                  </label>
+
+                  {/* Gameplay Landscape Orientation */}
+                  <label className="settings-toggle-row">
+                    <div>
+                      <span className="settings-toggle-title">Gameplay Landscape Orientation</span>
+                      <span className="settings-toggle-sub">Switch between widescreen Landscape and vertical Portrait view</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={orientationMode === 'landscape'}
+                      onChange={handleToggleLandscapeMode}
+                    />
+                  </label>
+
+                  {/* Camera Zoom When Eating an Enemy Piece */}
+                  <label className="settings-toggle-row">
+                    <div>
+                      <span className="settings-toggle-title">Capture Camera Zoom (Eating Enemy Piece)</span>
+                      <span className="settings-toggle-sub">Turn OFF only the camera zooming when eating a piece (3D attack &amp; shatter animations stay ON)</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={captureZoomEnabled}
+                      onChange={handleToggleCaptureZoom}
                     />
                   </label>
                 </div>
