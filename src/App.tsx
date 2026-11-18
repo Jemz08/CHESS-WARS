@@ -2780,45 +2780,39 @@ export default function App() {
             <CozyFlagSurrenderVectorIcon size={13} /> Surrender
           </button>
 
-          <div className="mobile-sheet-section-label">
-            Graphics Quality ({liveFps} FPS · WASM {wasmEvalMs}ms)
-          </div>
+          <div className="mobile-sheet-section-label">Graphics Quality</div>
 
           <button
             type="button"
             className={`hud-btn ${graphicsQuality === 'auto' ? 'active' : ''}`}
             id="btn-quality-auto"
             onClick={() => handleSelectGraphicsQuality('auto')}
-            title={`Adaptive FPS Scaling (Currently active: ${effectiveQuality.toUpperCase()})`}
           >
-            Auto ({effectiveQuality.toUpperCase()})
+            AUTO
           </button>
           <button
             type="button"
             className={`hud-btn ${graphicsQuality === 'lite' ? 'active' : ''}`}
             id="btn-quality-lite"
             onClick={() => handleSelectGraphicsQuality('lite')}
-            title="Lite Mode: Fastest 3D FPS, 1.0x DPR, single-pass rendering"
           >
-            Lite (Fast)
+            LITE
           </button>
           <button
             type="button"
             className={`hud-btn ${graphicsQuality === 'balanced' ? 'active' : ''}`}
             id="btn-quality-balanced"
             onClick={() => handleSelectGraphicsQuality('balanced')}
-            title="Balanced Mode: 1.25x DPR, on-demand shadows & cel outlines"
           >
-            Balanced
+            BALANCE
           </button>
           <button
             type="button"
             className={`hud-btn ${graphicsQuality === 'ultra' ? 'active' : ''}`}
             id="btn-quality-ultra"
             onClick={() => handleSelectGraphicsQuality('ultra')}
-            title="Ultra Mode: 1.5x DPR, full shaders, soft shadows & weather"
           >
-            Ultra
+            ULTRA
           </button>
 
           <div className="mobile-sheet-section-label">Gameplay Orientation &amp; Camera Zoom</div>
@@ -4999,21 +4993,16 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SECTION 2: 3D GRAPHICS QUALITY & RUST/WASM PERFORMANCE ENGINE */}
+              {/* SECTION 2: GRAPHICS QUALITY */}
               <div className="settings-section" id="settings-performance-section">
-                <h3 className="settings-section-title">
-                  3D Graphics Quality &amp; Rust/WASM Engine
-                </h3>
-                <p className="settings-section-sub">
-                  Off-thread WebAssembly tactical AI engine ({wasmEvalMs}ms move eval) paired with adaptive WebGL resolution &amp; shader scaling ({liveFps} FPS).
-                </p>
-                <div className="rank-ladder-pills" role="group" aria-label="3D Graphics Quality Preset">
+                <h3 className="settings-section-title">Graphics Quality</h3>
+                <div className="rank-ladder-pills" role="group" aria-label="Graphics Quality">
                   {(
                     [
-                      { id: 'auto', name: 'Auto (Adaptive)', tag: `${effectiveQuality.toUpperCase()}` },
-                      { id: 'lite', name: 'Lite (Fastest)', tag: '1.0x DPR' },
-                      { id: 'balanced', name: 'Balanced', tag: '1.25x DPR' },
-                      { id: 'ultra', name: 'Ultra', tag: '1.5x DPR' }
+                      { id: 'auto', name: 'AUTO' },
+                      { id: 'lite', name: 'LITE' },
+                      { id: 'balanced', name: 'BALANCE' },
+                      { id: 'ultra', name: 'ULTRA' }
                     ] as const
                   ).map((q) => {
                     const isSelected = graphicsQuality === q.id;
@@ -5025,7 +5014,6 @@ export default function App() {
                         onClick={() => handleSelectGraphicsQuality(q.id)}
                       >
                         <span className="chip-name">{q.name}</span>
-                        <span className="chip-req">{isSelected ? 'ACTIVE' : q.tag}</span>
                       </button>
                     );
                   })}
@@ -5224,66 +5212,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Live App Updates, GitHub Auto-Update Watcher & Asset Cache Section */}
+                {/* App Update Controls (Only Update & Check Update) */}
                 <div className="sanctum-settings-section" style={{ marginTop: 14 }}>
-                  <div className="sanctum-section-label">
-                    <SparklesVectorIcon size={16} />
-                    <span>GitHub Auto-Update &amp; Live OTA Sync</span>
-                  </div>
-                  <p className="sanctum-cloud-desc" style={{ marginBottom: 8 }}>
-                    Link your GitHub repository below so the APK &amp; game automatically detect every new commit or release pushed to GitHub.
-                  </p>
-                  <div
-                    className="settings-profile-upload-card"
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 6,
-                      marginBottom: 10
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      <div style={{ flex: '2 1 180px', minWidth: 0 }}>
-                        <div className="settings-mini-label" style={{ marginBottom: 3 }}>
-                          GitHub Repo (owner/repo)
-                        </div>
-                        <input
-                          type="text"
-                          className="settings-name-input"
-                          style={{ width: '100%' }}
-                          placeholder="e.g. jamesalburo/wizard-chess"
-                          value={githubRepoInput}
-                          onChange={(e) => setGithubRepoInput(e.target.value)}
-                        />
-                      </div>
-                      <div style={{ flex: '1 1 80px', minWidth: 0 }}>
-                        <div className="settings-mini-label" style={{ marginBottom: 3 }}>
-                          Branch
-                        </div>
-                        <input
-                          type="text"
-                          className="settings-name-input"
-                          style={{ width: '100%' }}
-                          placeholder="main"
-                          value={githubBranchInput}
-                          onChange={(e) => setGithubBranchInput(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="settings-mini-label" style={{ marginBottom: 3 }}>
-                        Live OTA Game URL (GitHub Pages / Cloud Run — optional, auto-fills from repo)
-                      </div>
-                      <input
-                        type="url"
-                        className="settings-name-input"
-                        style={{ width: '100%' }}
-                        placeholder="https://your-username.github.io/your-repo/"
-                        value={otaLiveUrlInput}
-                        onChange={(e) => setOtaLiveUrlInput(e.target.value)}
-                      />
-                    </div>
-                  </div>
                   {otaDownloadProgress && (
                     <div
                       className="settings-profile-upload-card"
@@ -5362,43 +5292,9 @@ export default function App() {
                       disabled={isRefreshingVersion}
                       onClick={handleManualCheckForUpdates}
                     >
-                      Check for Updates
+                      Check Update
                     </button>
-                    <button
-                      type="button"
-                      className="sanctum-action-btn sync-btn"
-                      id="btn-save-github-ota-config"
-                      disabled={isRefreshingVersion}
-                      onClick={handleSaveGitHubConfigAndCheck}
-                    >
-                      Save Repo
-                    </button>
-                    {!isInstalled && isInstallable && (
-                      <button
-                        type="button"
-                        className="sanctum-action-btn load-save-btn"
-                        id="btn-install-pwa-app"
-                        onClick={() => installPWAApp()}
-                      >
-                        Install App to Device
-                      </button>
-                    )}
-                    {!isInstalled && !isInstallable && isIOS && (
-                      <button
-                        type="button"
-                        className="sanctum-action-btn load-save-btn"
-                        id="btn-install-ios-guide"
-                        onClick={() => setShowIOSInstallGuide((v) => !v)}
-                      >
-                        Install on iPhone / iPad
-                      </button>
-                    )}
                   </div>
-                  {showIOSInstallGuide && (
-                    <p className="sanctum-cloud-desc" style={{ marginTop: 8 }}>
-                      Tap <strong>Share</strong> in Safari and choose <strong>Add to Home Screen</strong> to install Wizard Chess as a standalone app.
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
