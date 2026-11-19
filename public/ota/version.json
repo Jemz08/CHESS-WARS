@@ -1,12 +1,12 @@
 {
   "version": "1.0.5",
-  "buildId": "build-local-head-1794961813898",
+  "buildId": "build-local-head-1795094697568",
   "commitSha": "local-head",
-  "buildTimestamp": 1794961813898,
+  "buildTimestamp": 1795094697568,
   "branch": "main",
   "githubRepo": "",
   "liveUrl": "https://ais-pre-64yibneopxihyh3rjs6f74-281552636048.asia-southeast1.run.app",
-  "updatedAt": "2026-11-18T00:30:13.898Z",
+  "updatedAt": "2026-11-19T13:24:57.568Z",
   "notes": "Gameplay Landscape/Portrait toggle, Capture Camera Zoom ON/OFF toggle, and APK Live OTA Hot-Update",
   "entryJs": "ota/ota-bundle.js",
   "entryCss": "ota/ota-bundle.css"

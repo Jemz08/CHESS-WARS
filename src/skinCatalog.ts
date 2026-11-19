@@ -1,5 +1,5 @@
 export interface PieceArchetype {
-  id: 'gothic_warriors' | 'classic_staunton' | 'toon_classic' | 'arcane_cyber' | 'dragon_elemental' | 'hollow_reapers';
+  id: 'gothic_warriors' | 'classic_staunton' | 'toon_classic' | 'arcane_cyber' | 'dragon_elemental' | 'hollow_reapers' | 'xmas_snow';
   name: string;
   subtitle: string;
   badge: string;
@@ -44,7 +44,7 @@ export interface BoardSkin {
   name: string;
   subtitle: string;
   environmentLabel: string;
-  archType: 'gothic' | 'wood_table' | 'toon_table' | 'runic_pedestal' | 'crystal_sanctum' | 'lava_forge' | 'haunted_crypt';
+  archType: 'gothic' | 'wood_table' | 'toon_table' | 'runic_pedestal' | 'crystal_sanctum' | 'lava_forge' | 'haunted_crypt' | 'winter_hearth';
   isCartoon?: boolean;
   price: number;
   lightSqHex: string;
@@ -69,7 +69,7 @@ export interface BoardSkin {
 }
 
 export interface WorldScenery {
-  id: 'gothic_cathedral' | 'toon_sky_kingdom' | 'celestial_observatory' | 'dragon_sky_citadel' | 'volcanic_titan_forge' | 'haunted_blood_graveyard';
+  id: 'gothic_cathedral' | 'toon_sky_kingdom' | 'celestial_observatory' | 'dragon_sky_citadel' | 'volcanic_titan_forge' | 'haunted_blood_graveyard' | 'winter_aurora_village';
   name: string;
   subtitle: string;
   badge: string;
@@ -150,6 +150,16 @@ export const PIECE_ARCHETYPES: PieceArchetype[] = [
     strikeStyle: 'Horizontal & Overhead Scythe-Slash Cleave + Spectral Soul-Harvest Surge',
     shatterStyle: 'Carved Pumpkin Detonation, Ectoplasm Soul-Flames & Swirling Bats',
     flashColorHex: '#ff6d00'
+  },
+  {
+    id: 'xmas_snow',
+    name: 'North Pole Snow Court',
+    subtitle: 'Festive sculpted Santa Claus King, Snow Queen Empress, Snowy Pine Star Rook, Holiday Reindeer Knight & Snowman Wizards',
+    badge: 'Christmas Event',
+    price: 280,
+    strikeStyle: 'Blizzard Sleigh-Charge & Crystalline Frost-Nova Smash',
+    shatterStyle: 'Spinning Snowflake Crystals, Holiday Starbursts & Swirling Flurries',
+    flashColorHex: '#38bdf8'
   }
 ];
 
@@ -561,6 +571,34 @@ export const PIECE_SKINS: PieceSkin[] = [
     bladeMetalness: 0.96,
     bladeEmissiveHex: '#4cc9f0',
     bladeEmissiveIntensity: 1.95
+  },
+  {
+    id: 'frost_aurora_xmas',
+    name: 'North Pole Frost & Aurora',
+    subtitle: 'Christmas Event Finish: Frosted snow-alabaster & starlight gold vs midnight evergreen-slate & glacier aurora-cyan glow',
+    badge: '❄ Christmas Event',
+    isGlowing: true,
+    price: 180,
+    whiteHex: '#f1f7ff',
+    whiteRoughness: 0.22,
+    whiteMetalness: 0.28,
+    whiteEmissiveHex: '#7dd3fc',
+    whiteEmissiveIntensity: 0.28,
+    blackHex: '#142636',
+    blackRoughness: 0.22,
+    blackMetalness: 0.56,
+    blackEmissiveHex: '#0284c7',
+    blackEmissiveIntensity: 0.30,
+    trimHex: '#f5c344',
+    trimRoughness: 0.14,
+    trimMetalness: 0.92,
+    trimEmissiveHex: '#fbbf24',
+    trimEmissiveIntensity: 1.15,
+    bladeHex: '#38bdf8',
+    bladeRoughness: 0.12,
+    bladeMetalness: 0.90,
+    bladeEmissiveHex: '#38bdf8',
+    bladeEmissiveIntensity: 1.65
   }
 ];
 
@@ -747,6 +785,32 @@ export const BOARD_SKINS: BoardSkin[] = [
     brazierMidRGB: [1.0, 0.45, 0.04],
     brazierTipRGB: [0.62, 0.12, 0.88],
     brazierLightHex: '#ff6d00'
+  },
+  {
+    id: 'frost_hearth_altar',
+    name: 'Frosted Pine & Hearth Altar',
+    subtitle: 'Glacial snow-marble & deep winter-pine tiles framed by cedar-gold rails, holiday wreaths & warm glowing snow-lantern posts',
+    environmentLabel: 'Christmas Eve Hearth & Polar Lanterns',
+    archType: 'winter_hearth',
+    price: 200,
+    lightSqHex: '#edf6ff',
+    lightRoughness: 0.22,
+    lightMetalness: 0.14,
+    darkSqHex: '#173245',
+    darkRoughness: 0.24,
+    darkMetalness: 0.28,
+    borderHex: '#4f311b',
+    accentHex: '#38bdf8',
+    wallLookIndex: 2,
+    floorLookIndex: 2,
+    fogHex: '#0b1830',
+    sideWindowHex: '#38bdf8',
+    northWindowHex: '#2dd4bf',
+    southWindowHex: '#ffb703',
+    brazierBaseRGB: [1.0, 0.94, 0.72],
+    brazierMidRGB: [1.0, 0.68, 0.18],
+    brazierTipRGB: [0.22, 0.82, 0.98],
+    brazierLightHex: '#ffbe42'
   }
 ];
 
@@ -871,6 +935,26 @@ export const WORLD_SCENERIES: WorldScenery[] = [
     keyLightIntensity: 2.72,
     rimLightHex: '#00e676',
     rimLightIntensity: 1.22
+  },
+  {
+    id: 'winter_aurora_village',
+    name: 'Christmas Eve Aurora Wonderland',
+    subtitle: 'Starry winter valley under shimmering Northern Lights with snowy pine forests, frozen waterfall, ice arches, wood shelters & drifting snowfall',
+    badge: 'Christmas Realm',
+    price: 260,
+    skyPreviewGradient: 'linear-gradient(180deg, #060d24 0%, #102a52 38%, #1d6f7a 68%, #9be7ff 100%)',
+    accentHex: '#38bdf8',
+    landmarksLabel: 'Snowy Evergreen Groves, Frozen Waterfall, Ice Arches, Wood Shelters & Cozy Hearth Lanterns',
+    weatherLabel: 'Northern Lights Aurora Ribbons & Drifting 3D Snowfall',
+    fogHex: '#0b1933',
+    fogDensity: 0.0044,
+    hemiSkyHex: '#bfe6ff',
+    hemiGroundHex: '#182b45',
+    hemiIntensity: 0.92,
+    keyLightHex: '#eef8ff',
+    keyLightIntensity: 2.82,
+    rimLightHex: '#2dd4bf',
+    rimLightIntensity: 1.25
   }
 ];
 

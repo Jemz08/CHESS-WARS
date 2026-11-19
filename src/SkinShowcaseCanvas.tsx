@@ -43,6 +43,10 @@ import {
   getInfernoWorldMaterials
 } from './infernoWorldAssetLoader.js';
 import {
+  mountWinterModel,
+  preloadWinter3DAssets
+} from './winterWorldAssetLoader.js';
+import {
   configureGlowingPieceBodyMaterial,
   attachPieceBodyOutline,
   createShowcaseGlowPedestalAura,
@@ -98,6 +102,12 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
       grad.addColorStop(0.72, '#5c1124');
       grad.addColorStop(0.90, '#c2410c');
       grad.addColorStop(1.0, '#0f0517');
+    } else if (scenery.id === 'winter_aurora_village') {
+      grad.addColorStop(0.0, '#04091a');
+      grad.addColorStop(0.32, '#0a1f3d');
+      grad.addColorStop(0.60, '#0d4a5a');
+      grad.addColorStop(0.82, '#1c6d75');
+      grad.addColorStop(1.0, '#0c1c30');
     } else {
       grad.addColorStop(0.0, '#fff7e6');
       grad.addColorStop(0.45, '#f2dfc2');
@@ -106,6 +116,17 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
     }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (scenery.id === 'winter_aurora_village') {
+      // Shimmering emerald & cyan Northern Lights Aurora bands painted onto the showcase sky
+      const auroraGrad = ctx.createLinearGradient(0, canvas.height * 0.14, canvas.width, canvas.height * 0.56);
+      auroraGrad.addColorStop(0.0, 'rgba(16, 240, 165, 0.0)');
+      auroraGrad.addColorStop(0.35, 'rgba(16, 240, 165, 0.34)');
+      auroraGrad.addColorStop(0.65, 'rgba(56, 189, 248, 0.30)');
+      auroraGrad.addColorStop(1.0, 'rgba(168, 85, 247, 0.0)');
+      ctx.fillStyle = auroraGrad;
+      ctx.fillRect(0, canvas.height * 0.12, canvas.width, canvas.height * 0.42);
+    }
 
     if (scenery.id === 'toon_sky_kingdom') {
       // Warm comic ink wainscoting lines across the parlor backdrop
@@ -118,7 +139,8 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
         ctx.stroke();
       }
     } else {
-      const starCount = scenery.id === 'celestial_observatory' ? 240 : 120;
+      const starCount =
+        scenery.id === 'celestial_observatory' || scenery.id === 'winter_aurora_village' ? 240 : 120;
       for (let i = 0; i < starCount; i++) {
         const x = Math.random() * canvas.width;
         const y = Math.random() * (canvas.height * 0.82);
@@ -126,8 +148,8 @@ function createScenerySkyDomeTexture(scenery: WorldScenery): THREE.CanvasTexture
         ctx.fillStyle =
           scenery.id === 'volcanic_titan_forge' || scenery.id === 'haunted_blood_graveyard'
             ? `rgba(255, 145, 35, ${0.4 + Math.random() * 0.6})`
-            : scenery.id === 'celestial_observatory'
-              ? `rgba(180, 255, 245, ${0.35 + Math.random() * 0.65})`
+            : scenery.id === 'celestial_observatory' || scenery.id === 'winter_aurora_village'
+              ? `rgba(186, 245, 255, ${0.42 + Math.random() * 0.58})`
               : `rgba(255, 244, 214, ${0.2 + Math.random() * 0.5})`;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -1544,6 +1566,105 @@ export default function SkinShowcaseCanvas({
           subjectGroup.add(floatNode);
           st.floatingNodes.push({ mesh: floatNode, baseY, phase: i * 1.05 });
         }
+      } else if (scenery.id === 'winter_aurora_village') {
+        preloadWinter3DAssets();
+        // Bright Winter Full Moon & Shimmering Aurora Halo + Actual 3D Low Poly Winter Nature Pack Diorama
+        const winterMoon = new THREE.Mesh(
+          new THREE.SphereGeometry(0.46, 24, 18),
+          new THREE.MeshBasicMaterial({ color: 0xe0f2fe })
+        );
+        winterMoon.position.set(-0.25, 0.96, -1.65);
+        subjectGroup.add(winterMoon);
+
+        const auroraMat = new THREE.MeshStandardMaterial({
+          color: 0x34d399,
+          emissive: 0x10b981,
+          emissiveIntensity: 1.05,
+          roughness: 0.2
+        });
+        const auroraRing = new THREE.Mesh(new THREE.TorusGeometry(1.48, 0.032, 12, 48), auroraMat);
+        auroraRing.rotation.x = Math.PI / 2;
+        auroraRing.position.y = -0.18;
+        subjectGroup.add(auroraRing);
+
+        // North Frozen Waterfall Hero Landmark
+        mountWinterModel(islandGroup, 'HERO_02_FrozenWaterfall', {
+          position: [0.0, 0.0, -0.78],
+          rotation: [0, 0, 0],
+          scale: 0.13
+        });
+
+        // Cozy Snowy Wood Shelter & Crackling Campfire on left rim
+        mountWinterModel(islandGroup, 'PROP_12_WoodShelterSnowy', {
+          position: [-0.68, 0.0, -0.35],
+          rotation: [0, 0.68, 0],
+          scale: 0.14
+        });
+        mountWinterModel(islandGroup, 'PROP_09_CampfireRingSnowy', {
+          position: [-0.52, 0.0, 0.28],
+          scale: 0.16
+        });
+        const cfFlame = new THREE.Mesh(
+          new THREE.ConeGeometry(0.065, 0.16, 7),
+          new THREE.MeshBasicMaterial({ color: 0xff8c00 })
+        );
+        cfFlame.position.set(-0.52, 0.09, 0.28);
+        islandGroup.add(cfFlame);
+
+        // Frozen Ice Arch & Snowy Pine Grove on right rim
+        mountWinterModel(islandGroup, 'HERO_04_LargeIceArch', {
+          position: [0.72, 0.0, -0.25],
+          rotation: [0, -0.65, 0],
+          scale: 0.11
+        });
+        mountWinterModel(islandGroup, 'TREE_03_PineSmallSnowy', {
+          position: [0.68, 0.0, 0.44],
+          rotation: [0, 0.4, 0],
+          scale: 0.14
+        });
+        mountWinterModel(islandGroup, 'TREE_07_PineSparse', {
+          position: [-0.72, 0.0, 0.56],
+          rotation: [0, -0.3, 0],
+          scale: 0.095
+        });
+
+        // Glowing Winter Lantern Posts & Frost Clusters framing the front
+        for (const sx of [-1, 1]) {
+          mountWinterModel(islandGroup, 'PROP_10_LanternPost', {
+            position: [sx * 0.46, 0.0, 0.78],
+            rotation: [0, sx > 0 ? Math.PI : 0, 0],
+            scale: 0.18
+          });
+          const orb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.045, 10, 8),
+            new THREE.MeshBasicMaterial({ color: 0xffe082 })
+          );
+          orb.position.set(sx * 0.41, 0.39, 0.78);
+          islandGroup.add(orb);
+
+          mountWinterModel(islandGroup, 'FROST_01_ClusterSmall', {
+            position: [sx * 0.85, 0.0, 0.15],
+            scale: 0.16
+          });
+        }
+
+        // Floating Golden Star Crystals orbiting the snowy showcase island
+        const starGeo = new THREE.OctahedronGeometry(0.085, 0);
+        const goldStarMat = new THREE.MeshStandardMaterial({
+          color: 0xf5c344,
+          emissive: 0xf59e0b,
+          emissiveIntensity: 0.95,
+          roughness: 0.18,
+          metalness: 0.88
+        });
+        for (let i = 0; i < 6; i++) {
+          const ang = (i / 6) * Math.PI * 2;
+          const star = new THREE.Mesh(starGeo, i % 2 === 0 ? goldStarMat : auroraMat);
+          const baseY = 0.42 + (i % 2) * 0.16;
+          star.position.set(Math.cos(ang) * 1.42, baseY, Math.sin(ang) * 1.42);
+          subjectGroup.add(star);
+          st.floatingNodes.push({ mesh: star, baseY, phase: i * 1.05 });
+        }
       } else {
         const pillarGeo = new THREE.CylinderGeometry(0.065, 0.08, 0.72, 16);
         for (const sx of [-1, 1]) {
@@ -1652,7 +1773,7 @@ export default function SkinShowcaseCanvas({
     const styleIdx =
       archId === 'classic_staunton' || archId === 'toon_classic'
         ? 1
-        : archId === 'arcane_cyber'
+        : archId === 'arcane_cyber' || archId === 'xmas_snow'
           ? 2
           : archId === 'dragon_elemental' || archId === 'hollow_reapers'
             ? 3
@@ -1666,7 +1787,9 @@ export default function SkinShowcaseCanvas({
             ? 0xff2a55
             : archId === 'hollow_reapers'
               ? 0xff6d00
-              : 0xff6b35;
+              : archId === 'xmas_snow'
+                ? 0x38bdf8
+                : 0xff6b35;
     const secondaryHex =
       archId === 'classic_staunton' || archId === 'toon_classic'
         ? 0xe09f3e
@@ -1676,7 +1799,9 @@ export default function SkinShowcaseCanvas({
             ? 0xff9e00
             : archId === 'hollow_reapers'
               ? 0x00e676
-              : 0xd4af37;
+              : archId === 'xmas_snow'
+                ? 0xf5c344
+                : 0xd4af37;
     const coreHex = archId === 'hollow_reapers' ? 0xffe066 : 0xffffff;
 
     // Shared Unity URP / ShaderGraph Shader VFX Layers on the Showcase Pedestal:
@@ -1693,7 +1818,7 @@ export default function SkinShowcaseCanvas({
     fresnelSphere.position.y = 0.65;
     vfxGroup.add(fresnelSphere);
 
-    // C. Unity Shuriken Scrolling Noise Slash Ribbon Shader (for melee Gothic Warriors & Hollow Reapers Scythe)
+    // C. Unity Shuriken Scrolling Noise Slash Ribbon Shader (for melee Gothic Warriors, Hollow Reapers & Xmas Frost-Nova)
     const slashRibbonMat = createUnitySlashRibbonShaderMaterial(primaryHex, secondaryHex, coreHex);
     const slashRibbonMesh = new THREE.Mesh(
       new THREE.RingGeometry(0.45, 0.85, 32, 2, -Math.PI * 0.55, Math.PI * 1.1),
@@ -1701,7 +1826,8 @@ export default function SkinShowcaseCanvas({
     );
     slashRibbonMesh.position.set(0, 0.72, 0.35);
     slashRibbonMesh.rotation.set(0.38, 0, 0.32);
-    slashRibbonMesh.visible = archId === 'gothic_warriors' || archId === 'hollow_reapers';
+    slashRibbonMesh.visible =
+      archId === 'gothic_warriors' || archId === 'hollow_reapers' || archId === 'xmas_snow';
     vfxGroup.add(slashRibbonMesh);
 
     // D. Unity Soft-Particle Star-Flare Billboards
@@ -2136,6 +2262,86 @@ export default function SkinShowcaseCanvas({
           const flap = hs.isGhost ? 1.0 : 1.0 + Math.sin(t * 25.0 + hs.ang) * 0.22;
           hs.sprite.scale.set(hs.baseScale * flap * fade, hs.baseScale * fade, 1);
           hs.mat.opacity = 0.96 * fade;
+        }
+        if (p >= 1) {
+          disposeHierarchy(vfxGroup);
+          vfxGroup.clear();
+          return false;
+        }
+        return true;
+      });
+    } else if (archId === 'xmas_snow') {
+      // NORTH POLE SNOW COURT (XMAS):
+      // Blizzard Frost-Nova Ribbons + Erupting 3D Winter Frost Clusters + Swirling Starlight Snowflakes
+      preloadWinter3DAssets();
+      const frostWaves: Array<{ mesh: THREE.Mesh; mat: THREE.ShaderMaterial; speed: number; scaleMul: number }> = [];
+      const waveCfgs = [
+        { tiltX: 0.42, tiltZ: 0.38, scaleMul: 1.12, speed: 12.0, pHex: 0x38bdf8, sHex: 0xf5c344 },
+        { tiltX: -0.42, tiltZ: -0.38, scaleMul: 1.04, speed: -13.5, pHex: 0xbae6fd, sHex: 0x38bdf8 }
+      ];
+      for (const wc of waveCfgs) {
+        const wMat = createUnitySlashRibbonShaderMaterial(wc.pHex, wc.sHex, 0xffffff);
+        const wMesh = new THREE.Mesh(
+          new THREE.RingGeometry(0.42, 0.88, 32, 2, -Math.PI * 0.55, Math.PI * 1.1),
+          wMat
+        );
+        wMesh.position.set(0, 0.72, 0.38);
+        wMesh.rotation.set(wc.tiltX, 0, wc.tiltZ);
+        vfxGroup.add(wMesh);
+        frostWaves.push({ mesh: wMesh, mat: wMat, speed: wc.speed, scaleMul: wc.scaleMul });
+      }
+
+      const eruptingIce: Array<{ group: THREE.Group; peakY: number }> = [];
+      const iceKeys = ['FROST_01_ClusterSmall', 'ICE_12_BrokenIceCluster', 'FROST_03_ClusterLarge'];
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const propHolder = new THREE.Group();
+        propHolder.position.set(Math.cos(ang) * 0.54, -0.15, Math.sin(ang) * 0.54);
+        propHolder.rotation.y = -ang + Math.PI / 2;
+        mountWinterModel(propHolder, iceKeys[i % iceKeys.length], {
+          scale: 0.13,
+          castShadow: false,
+          receiveShadow: false
+        });
+        vfxGroup.add(propHolder);
+        eruptingIce.push({ group: propHolder, peakY: 0.14 + (i % 2) * 0.06 });
+      }
+
+      const snowShards: Array<{ mesh: THREE.Mesh; ang: number; vy: number }> = [];
+      const shardGeo = new THREE.OctahedronGeometry(0.055, 0);
+      const cyanShardMat = new THREE.MeshBasicMaterial({ color: 0x7dd3fc });
+      const goldShardMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
+      for (let i = 0; i < 16; i++) {
+        const ang = (i / 16) * Math.PI * 2;
+        const m = new THREE.Mesh(shardGeo, i % 3 === 0 ? goldShardMat : cyanShardMat);
+        m.position.set(Math.cos(ang) * 0.42, 0.25 + (i % 3) * 0.16, Math.sin(ang) * 0.42);
+        vfxGroup.add(m);
+        snowShards.push({ mesh: m, ang, vy: 0.72 + (i % 4) * 0.22 });
+      }
+
+      let t = 0;
+      st.activeVfxUpdaters.push((dt) => {
+        t += dt;
+        const p = Math.min(1, t / 1.25);
+        const spireEnv = p < 0.28 ? p / 0.28 : Math.max(0, 1 - (p - 0.28) / 0.72);
+        for (const ei of eruptingIce) {
+          ei.group.position.y = -0.15 + spireEnv * ei.peakY;
+          ei.group.scale.setScalar(Math.max(0.01, spireEnv));
+        }
+        for (const fw of frostWaves) {
+          fw.mat.uniforms.uTime.value = t;
+          fw.mat.uniforms.uProgress.value = Math.min(1, p * 1.25);
+          fw.mesh.scale.setScalar((0.75 + p * 1.18) * fw.scaleMul);
+          fw.mesh.rotation.z += dt * fw.speed;
+        }
+        for (const ss of snowShards) {
+          const curAng = ss.ang + t * 4.2;
+          const rad = 0.42 + p * 0.72;
+          ss.mesh.position.x = Math.cos(curAng) * rad;
+          ss.mesh.position.z = Math.sin(curAng) * rad;
+          ss.mesh.position.y += ss.vy * dt;
+          ss.mesh.rotation.y += dt * 7.5;
+          ss.mesh.scale.setScalar(Math.max(0.04, 1 - p));
         }
         if (p >= 1) {
           disposeHierarchy(vfxGroup);

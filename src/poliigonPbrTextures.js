@@ -635,6 +635,12 @@ export function resolvePiecePoliigonPresets(skinId = 'classic_stone', archetypeI
     trimPreset = 'pumpkin_carved_bark';
     bladePreset = 'ice_glacial_crystal';
     normalScaleVal = 0.92;
+  } else if (skinId === 'frost_aurora_xmas') {
+    whitePreset = 'marble_calacatta';
+    blackPreset = 'ice_glacial_crystal';
+    trimPreset = 'metal_gold_hammered';
+    bladePreset = 'ice_glacial_crystal';
+    normalScaleVal = 0.72;
   } else {
     // 'classic_stone'
     whitePreset = 'travertine_limestone';
@@ -661,6 +667,10 @@ export function resolvePiecePoliigonPresets(skinId = 'classic_stone', archetypeI
     whitePreset = 'pumpkin_carved_bark';
     blackPreset = 'volcanic_basalt_cracked';
     normalScaleVal = 0.92;
+  } else if (archetypeId === 'xmas_snow' && skinId === 'classic_stone') {
+    whitePreset = 'marble_calacatta';
+    blackPreset = 'ice_glacial_crystal';
+    normalScaleVal = 0.65;
   } else if (archetypeId === 'toon_classic' || skinId === 'toon_cel_ink') {
     whitePreset = 'marble_calacatta';
     blackPreset = 'marble_nero_marquina';
@@ -746,6 +756,16 @@ export function resolveBoardPoliigonPresets(boardSkinId = 'obsidian_sanctum', ar
       accentPreset: 'pumpkin_carved_bark',
       normalScaleVal: 0.96,
       repeatSq: 1.35,
+      repeatBorder: 2.5
+    };
+  } else if (boardSkinId === 'frost_hearth_altar' || archType === 'winter_hearth') {
+    res = {
+      lightPreset: 'ice_glacial_crystal',
+      darkPreset: 'marble_nero_marquina',
+      borderPreset: 'wood_fine_dark',
+      accentPreset: 'ice_glacial_crystal',
+      normalScaleVal: 0.78,
+      repeatSq: 1.25,
       repeatBorder: 2.5
     };
   } else {

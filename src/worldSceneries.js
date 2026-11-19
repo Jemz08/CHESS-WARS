@@ -18,6 +18,7 @@ import {
   preloadInfernoWorld3DAssets,
   getInfernoWorldMaterials
 } from './infernoWorldAssetLoader.js';
+import { mountWinterModel, preloadWinter3DAssets } from './winterWorldAssetLoader.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -264,6 +265,74 @@ function createSkyDomeMaterial() {
           return;
         }
 
+        if (uMode == 5) {
+          // ------------------------------------------------------------------
+          // MODE 5: CHRISTMAS EVE AURORA WONDERLAND (Starry Night, Moon & Northern Lights)
+          // ------------------------------------------------------------------
+          vec3 zenithPolar = vec3(0.014, 0.028, 0.095);
+          vec3 midPolar = vec3(0.038, 0.095, 0.22);
+          vec3 horizonFrost = vec3(0.14, 0.28, 0.42);
+
+          vec3 skyCol = mix(horizonFrost, midPolar, smoothstep(-0.04, 0.34, y));
+          skyCol = mix(skyCol, zenithPolar, smoothstep(0.30, 0.88, up));
+
+          // Bright Crystalline Winter Full Moon with Frosty Silver-Cyan Halo
+          vec3 moonDir = normalize(vec3(-0.34, 0.36, -0.87));
+          float moonDot = max(0.0, dot(dir, moonDir));
+          float moonHalo = pow(moonDot, 8.0);
+          float moonDisk = smoothstep(0.990, 0.9935, moonDot);
+          float moonDetail = fbm(dir * 20.0);
+          vec3 moonSurface = mix(vec3(0.84, 0.92, 1.0), vec3(1.0, 0.99, 0.94), smoothstep(0.32, 0.72, moonDetail));
+          skyCol += vec3(0.45, 0.78, 1.0) * moonHalo * 0.55;
+          skyCol = mix(skyCol, moonSurface * 1.15, moonDisk);
+
+          // Sweeping Animated Northern Lights (Aurora Borealis) Curtains
+          vec3 aCoord1 = vec3(dir.x * 3.8 + uTime * 0.045, dir.y * 1.4, dir.z * 3.2 - uTime * 0.032);
+          float aNoise1 = fbm(aCoord1);
+          float aNoise2 = fbm(aCoord1 * 1.9 + vec3(aNoise1 * 1.35, 0.0, -uTime * 0.025));
+
+          float curtainWave1 = sin(dir.x * 7.2 + dir.z * 4.6 + uTime * 0.48 + aNoise1 * 5.2);
+          float curtainWave2 = sin(dir.x * 4.8 - dir.z * 6.4 - uTime * 0.36 + aNoise2 * 4.5);
+
+          float altMask = smoothstep(0.08, 0.34, up) * (1.0 - smoothstep(0.58, 0.94, up));
+          float band1 = smoothstep(0.38, 0.94, curtainWave1) * altMask;
+          float band2 = smoothstep(0.46, 0.96, curtainWave2) * altMask;
+
+          vec3 auroraEmerald = vec3(0.08, 0.96, 0.64);
+          vec3 auroraCyan = vec3(0.16, 0.78, 1.0);
+          vec3 auroraViolet = vec3(0.64, 0.28, 0.98);
+
+          vec3 auroraCol1 = mix(auroraEmerald, auroraCyan, smoothstep(0.25, 0.75, aNoise2));
+          vec3 auroraCol2 = mix(auroraCyan, auroraViolet, smoothstep(0.30, 0.80, up));
+          skyCol += auroraCol1 * band1 * 0.58;
+          skyCol += auroraCol2 * band2 * 0.40;
+
+          // Crisp Multi-Layer Twinkling Christmas Eve Starfield
+          float sCell1 = hash3(floor(dir * 270.0));
+          float s1 = smoothstep(0.992, 0.9994, sCell1);
+          float tw1 = 0.65 + 0.35 * sin(uTime * 3.2 + sCell1 * 62.8);
+
+          float sCell2 = hash3(floor(dir * 125.0 + 13.7));
+          float s2 = smoothstep(0.995, 0.9997, sCell2);
+          float tw2 = 0.72 + 0.28 * cos(uTime * 2.1 + sCell2 * 91.4);
+
+          vec3 starTint = mix(vec3(0.86, 0.95, 1.0), vec3(1.0, 0.90, 0.62), fract(sCell1 * 19.1));
+          skyCol += starTint * (s1 * tw1 * 1.45 + s2 * tw2 * 2.15) * (1.0 - moonDisk) * smoothstep(0.02, 0.25, y);
+
+          // Radiant Bethlehem North Star high above the northern waterfall vista
+          vec3 northStarDir = normalize(vec3(0.08, 0.44, -0.89));
+          float nsDot = max(0.0, dot(dir, northStarDir));
+          float nsGlow = pow(nsDot, 42.0) * 1.4 + smoothstep(0.9990, 0.9999, nsDot) * 2.8;
+          skyCol += vec3(1.0, 0.94, 0.72) * nsGlow;
+
+          // Soft frosty horizon mist glow
+          float horMist = exp(-abs(y + 0.01) * 7.2);
+          skyCol += vec3(0.22, 0.52, 0.70) * horMist * 0.34;
+
+          gl_FragColor = vec4(skyCol, 1.0);
+          return;
+        }
+
         // --------------------------------------------------------------------
         // MODE 2: VOLCANIC TITAN FORGE (Smoldering Caldera & Ash Storm Sky)
         // --------------------------------------------------------------------
@@ -443,6 +512,28 @@ function createHorizonSeaMaterial() {
           col = mix(col, comicInk, clamp(inkLine1 * 0.92 + inkLine2 * 0.75, 0.0, 0.95));
 
           float alpha = radialMask * smoothstep(0.20, 0.45, crest) * 0.95;
+          gl_FragColor = vec4(col, alpha);
+          return;
+        }
+
+        if (uMode == 5) {
+          // Mode 5: Moonlit Endless Snowfield & Frozen Glacial Ice Reflections
+          vec2 snowUv = vLocalPos.xz * 0.065;
+          float d1 = fbm2(snowUv);
+          float d2 = fbm2(snowUv * 2.3 + vec2(3.7, -2.1));
+          float sparkle = smoothstep(0.94, 0.995, hash2(floor(vLocalPos.xz * 3.8))) * (0.6 + 0.4 * sin(uTime * 3.6 + r));
+
+          vec3 snowShadow = vec3(0.14, 0.24, 0.38);
+          vec3 snowMid = vec3(0.56, 0.72, 0.86);
+          vec3 snowMoonlit = vec3(0.84, 0.93, 1.0);
+          vec3 auroraReflect = vec3(0.14, 0.86, 0.74);
+
+          vec3 col = mix(snowShadow, snowMid, smoothstep(0.22, 0.62, d1));
+          col = mix(col, snowMoonlit, smoothstep(0.56, 0.88, d1 * 0.6 + d2 * 0.4));
+          col += auroraReflect * smoothstep(0.52, 0.88, d2) * 0.16;
+          col += vec3(0.92, 0.98, 1.0) * sparkle * 0.55;
+
+          float alpha = radialMask * 0.96;
           gl_FragColor = vec4(col, alpha);
           return;
         }
@@ -2016,7 +2107,343 @@ function buildToonSkyKingdomGroup() {
 }
 
 // ============================================================================
-// GPU Particle Weather System (Stardust, Sun-Motes/Mist, Volcanic Embers)
+// Realm 6 Builder: Christmas Eve Aurora Wonderland (Cenji's Low Poly Winter Nature Pack)
+// 33 curated 3D .glb assets from /public/assets/winter/ arranged in an open starry valley
+// ============================================================================
+function buildWinterAuroraVillageGroup() {
+  preloadWinter3DAssets();
+
+  const group = new THREE.Group();
+  group.name = 'Realm_WinterAuroraVillage';
+
+  const snowGroundMat = new THREE.MeshStandardMaterial({
+    color: 0xdbeafe,
+    roughness: 0.76,
+    metalness: 0.05
+  });
+  const frozenStoneMat = new THREE.MeshStandardMaterial({
+    color: 0x334e68,
+    roughness: 0.52,
+    metalness: 0.14
+  });
+  const frostRingMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.65,
+    roughness: 0.22,
+    metalness: 0.55
+  });
+  const warmGoldRingMat = new THREE.MeshStandardMaterial({
+    color: 0xf5c344,
+    emissive: 0xd97706,
+    emissiveIntensity: 0.55,
+    roughness: 0.22,
+    metalness: 0.82
+  });
+  const lanternBulbMat = new THREE.MeshBasicMaterial({ color: 0xffe082 });
+  const campfireOuterMat = new THREE.MeshBasicMaterial({ color: 0xff6d00 });
+  const campfireCoreMat = new THREE.MeshBasicMaterial({ color: 0xfff3b0 });
+
+  // 1. Snow-Blanketed Valley Clearing Courtyard (flush beneath the Chessboard Altar at y <= 0, zero Z-fighting)
+  const snowMeadow = new THREE.Mesh(new THREE.CylinderGeometry(28.0, 36.0, 1.4, 48), snowGroundMat);
+  snowMeadow.position.set(0, -0.74, 0);
+  snowMeadow.receiveShadow = true;
+  group.add(snowMeadow);
+
+  const innerStoneCourtyard = new THREE.Mesh(new THREE.CylinderGeometry(8.8, 9.4, 0.08, 36), frozenStoneMat);
+  innerStoneCourtyard.position.set(0, -0.05, 0);
+  innerStoneCourtyard.receiveShadow = true;
+  group.add(innerStoneCourtyard);
+
+  // Festive Gold & Glacier-Cyan Inlay Rings framing the chess altar courtyard
+  const goldCourtyardRing = new THREE.Mesh(new THREE.TorusGeometry(5.15, 0.052, 10, 64), warmGoldRingMat);
+  goldCourtyardRing.rotation.x = Math.PI / 2;
+  goldCourtyardRing.position.y = 0.008;
+  group.add(goldCourtyardRing);
+
+  const iceCourtyardRing = new THREE.Mesh(new THREE.TorusGeometry(8.65, 0.062, 10, 64), frostRingMat);
+  iceCourtyardRing.rotation.x = Math.PI / 2;
+  iceCourtyardRing.position.y = 0.006;
+  group.add(iceCourtyardRing);
+
+  const campfireFlames = [];
+  const glowingLanterns = [];
+  const floatingWinterStars = [];
+
+  // Helper to spawn a cozy burning campfire using `PROP_09_CampfireRingSnowy` + animated flames
+  const spawnCampfire = (x, z, scale = 0.95) => {
+    const cfGroup = new THREE.Group();
+    cfGroup.position.set(x, -0.02, z);
+    mountWinterModel(cfGroup, 'PROP_09_CampfireRingSnowy', { scale, position: [0, 0, 0] });
+
+    const outerFlame = new THREE.Mesh(new THREE.ConeGeometry(0.32 * scale, 0.85 * scale, 7), campfireOuterMat);
+    outerFlame.position.set(0, 0.42 * scale, 0);
+    cfGroup.add(outerFlame);
+
+    const innerFlame = new THREE.Mesh(new THREE.ConeGeometry(0.18 * scale, 0.58 * scale, 7), campfireCoreMat);
+    innerFlame.position.set(0, 0.34 * scale, 0);
+    cfGroup.add(innerFlame);
+
+    campfireFlames.push({
+      outer: outerFlame,
+      inner: innerFlame,
+      phase: x * 0.7 + z * 0.5
+    });
+    group.add(cfGroup);
+  };
+
+  // Helper to spawn a snowy lantern post (`PROP_10_LanternPost`) with warm glowing lantern bulb
+  const spawnLanternPost = (x, z, rotY = 0, scale = 1.05) => {
+    const lpGroup = new THREE.Group();
+    lpGroup.position.set(x, -0.02, z);
+    lpGroup.rotation.y = rotY;
+    mountWinterModel(lpGroup, 'PROP_10_LanternPost', { scale, position: [0, 0, 0] });
+
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16 * scale, 12, 10), lanternBulbMat);
+    bulb.position.set(0.28 * scale, 2.15 * scale, 0);
+    lpGroup.add(bulb);
+    glowingLanterns.push({ mesh: bulb, phase: x * 0.6 + z * 0.9 });
+    group.add(lpGroup);
+  };
+
+  // 2. Inner Cozy Christmas Village Perimeter (R = 9.5m..13.2m — keeping South +Z camera approach wide open!)
+  //    - 6 Warm Lantern Posts lining the courtyard edge
+  const lanternCoords = [
+    [-6.6, -7.2, 0.65],
+    [6.6, -7.2, Math.PI - 0.65],
+    [-9.8, -0.8, 0.0],
+    [9.8, -0.8, Math.PI],
+    [-7.8, 6.2, -0.55],
+    [7.8, 6.2, Math.PI + 0.55]
+  ];
+  for (const [lx, lz, lRot] of lanternCoords) {
+    spawnLanternPost(lx, lz, lRot, 1.08);
+  }
+
+  //    - Northwest Cozy Hearth Camp (Wood Shelter, Crackling Campfire, Firewood Stack, Bench, Stump)
+  mountWinterModel(group, 'PROP_12_WoodShelterSnowy', {
+    scale: 1.15,
+    position: [-10.8, -0.02, -8.2],
+    rotationY: 0.72
+  });
+  spawnCampfire(-8.6, -6.2, 0.95);
+  mountWinterModel(group, 'PROP_11_FirewoodStackSnowy', {
+    scale: 1.05,
+    position: [-12.0, -0.02, -5.8],
+    rotationY: 0.4
+  });
+  mountWinterModel(group, 'PROP_08_WinterBench', {
+    scale: 1.05,
+    position: [-9.8, -0.02, -4.3],
+    rotationY: 1.15
+  });
+  mountWinterModel(group, 'LOG_01_SnowyStump', {
+    scale: 1.0,
+    position: [-7.2, -0.02, -4.8]
+  });
+
+  //    - Northeast Cozy Lodge Camp (Second Wood Shelter, Campfire, Winter Signpost, Fallen Log, Bench)
+  mountWinterModel(group, 'PROP_12_WoodShelterSnowy', {
+    scale: 1.15,
+    position: [11.0, -0.02, -7.8],
+    rotationY: -0.78
+  });
+  spawnCampfire(8.8, -5.8, 0.95);
+  mountWinterModel(group, 'PROP_04_WinterSignpost', {
+    scale: 1.1,
+    position: [6.8, -0.02, -9.2],
+    rotationY: -0.45
+  });
+  mountWinterModel(group, 'PROP_11_FirewoodStackSnowy', {
+    scale: 1.0,
+    position: [12.4, -0.02, -5.2],
+    rotationY: -0.5
+  });
+  mountWinterModel(group, 'LOG_02_FallenLogSnowy', {
+    scale: 1.0,
+    position: [9.4, -0.02, -3.2],
+    rotationY: 0.85
+  });
+
+  //    - East & West Frozen Ice Ponds, Snowy Wooden Footbridges & Crystalline Frost Clusters
+  mountWinterModel(group, 'ICE_01_PondSmall', {
+    scale: 1.35,
+    position: [12.2, -0.01, 2.2],
+    rotationY: 0.3
+  });
+  mountWinterModel(group, 'PROP_06_WoodFootbridgeSnowy', {
+    scale: 0.95,
+    position: [12.0, -0.02, 2.2],
+    rotationY: Math.PI * 0.42
+  });
+  mountWinterModel(group, 'ICE_12_BrokenIceCluster', {
+    scale: 1.1,
+    position: [10.4, -0.02, 4.6],
+    rotationY: 0.5
+  });
+
+  mountWinterModel(group, 'ICE_01_PondSmall', {
+    scale: 1.25,
+    position: [-12.4, -0.01, 2.6],
+    rotationY: -0.45
+  });
+  mountWinterModel(group, 'PROP_06_WoodFootbridgeSnowy', {
+    scale: 0.92,
+    position: [-12.2, -0.02, 2.6],
+    rotationY: -Math.PI * 0.38
+  });
+  mountWinterModel(group, 'FROST_03_ClusterLarge', {
+    scale: 1.15,
+    position: [-10.2, -0.02, 5.2],
+    rotationY: 0.8
+  });
+
+  //    - Snowy Fence Segments & Frost Crystals along Courtyard Flanks
+  const fencePlacements = [
+    [-9.2, 7.6, 0.55],
+    [-6.0, 9.4, 0.25],
+    [6.0, 9.4, -0.25],
+    [9.2, 7.6, -0.55],
+    [-3.4, -10.4, 0.08],
+    [3.4, -10.4, -0.08]
+  ];
+  for (const [fx, fz, fRot] of fencePlacements) {
+    mountWinterModel(group, 'PROP_01_FenceStraightSnowy', {
+      scale: 0.95,
+      position: [fx, -0.02, fz],
+      rotationY: fRot
+    });
+  }
+
+  // 3. Mid-Ring Snowy Evergreen Pine Groves, Snowbanks, Boulders & Frosted Shrubs (R = 13.5m..22m)
+  const treePool = [
+    'TREE_07_PineSparse',
+    'TREE_03_PineSmallSnowy',
+    'TREE_08_PineYoung',
+    'TREE_07_PineSparse',
+    'TREE_16_TwistedWinter',
+    'TREE_03_PineSmallSnowy',
+    'TREE_13_BareLarge',
+    'TREE_17_DeadSnowy'
+  ];
+
+  for (let i = 0; i < 22; i++) {
+    const ang = (i / 22) * Math.PI * 2 + 0.14;
+    // Keep a gentle sightline corridor on the direct south (+Z) camera side so tall trees never block the camera
+    const isFrontCorridor = Math.sin(ang) > 0.78 && Math.abs(Math.cos(ang)) < 0.42;
+    const rad = isFrontCorridor ? 21.5 : 13.8 + (i % 4) * 2.15;
+    const tx = Math.cos(ang) * rad;
+    const tz = Math.sin(ang) * rad;
+    const modelName = isFrontCorridor ? 'TREE_08_PineYoung' : treePool[i % treePool.length];
+    const tScale = isFrontCorridor ? 0.88 : 0.95 + (i % 3) * 0.22;
+
+    mountWinterModel(group, modelName, {
+      scale: tScale,
+      position: [tx, -0.05, tz],
+      rotationY: i * 1.15
+    });
+
+    // Scatter snowbanks, frost clusters, frosted shrubs & boulders beneath the pines
+    if (i % 2 === 0) {
+      mountWinterModel(group, i % 4 === 0 ? 'SNOW_12_SnowbankLarge' : 'SNOW_14_WindSweptDrift', {
+        scale: 0.95 + (i % 3) * 0.18,
+        position: [tx * 0.86, -0.04, tz * 0.86],
+        rotationY: -ang + Math.PI / 2
+      });
+    } else {
+      mountWinterModel(group, i % 3 === 0 ? 'FROST_01_ClusterSmall' : 'PLANT_08_FrostedShrub', {
+        scale: 1.05,
+        position: [tx * 0.84, -0.03, tz * 0.84],
+        rotationY: i * 0.85
+      });
+    }
+
+    if (i % 3 === 0) {
+      mountWinterModel(group, i % 6 === 0 ? 'ROCK_09_SnowyFormation' : 'ROCK_06_FrostedBoulder', {
+        scale: 1.05 + (i % 2) * 0.25,
+        position: [tx * 1.12, -0.08, tz * 1.12],
+        rotationY: i * 0.9
+      });
+    }
+  }
+
+  // 4. Outer Alpine Valley Perimeter: 4 Hero Winter Landmarks + Snowy Cliffs & Hills (R = 23m..33m)
+  //    - North Hero Vista (-Z, directly behind the board for dramatic backdrop!): Giant Frozen Waterfall
+  mountWinterModel(group, 'HERO_02_FrozenWaterfall', {
+    scale: 1.85,
+    position: [0, -0.15, -24.5],
+    rotationY: 0
+  });
+  mountWinterModel(group, 'ROCK_15_IcyCliffFormation', {
+    scale: 1.75,
+    position: [-12.5, -0.2, -23.0],
+    rotationY: 0.45
+  });
+  mountWinterModel(group, 'ROCK_15_IcyCliffFormation', {
+    scale: 1.75,
+    position: [12.5, -0.2, -23.0],
+    rotationY: -0.45
+  });
+
+  //    - West Hero Vista (-X): Colossal Frozen Ice Arch
+  mountWinterModel(group, 'HERO_04_LargeIceArch', {
+    scale: 1.65,
+    position: [-23.5, -0.15, -3.5],
+    rotationY: Math.PI * 0.48
+  });
+
+  //    - East Hero Vista (+X): Frozen Cave Entrance & Frozen Rock Arch
+  mountWinterModel(group, 'HERO_03_FrozenCaveEntrance', {
+    scale: 1.65,
+    position: [23.8, -0.15, -4.2],
+    rotationY: -Math.PI * 0.52
+  });
+  mountWinterModel(group, 'ROCK_14_FrozenRockArch', {
+    scale: 1.55,
+    position: [20.5, -0.15, 11.5],
+    rotationY: -Math.PI * 0.72
+  });
+
+  //    - 10 Surrounding Alpine Snow Hills & Cliffs closing the horizon naturally (open starry sky above!)
+  const cliffPool = ['ROCK_12_CliffLarge', 'SNOW_16_HillMedium', 'ROCK_11_CliffMedium', 'SNOW_16_HillMedium'];
+  for (let c = 0; c < 10; c++) {
+    const ang = (c / 10) * Math.PI * 2 + 0.31;
+    const dist = 28.5 + (c % 2) * 3.8;
+    mountWinterModel(group, cliffPool[c % cliffPool.length], {
+      scale: 1.65 + (c % 3) * 0.35,
+      position: [Math.cos(ang) * dist, -0.25, Math.sin(ang) * dist],
+      rotationY: -ang + Math.PI / 2
+    });
+  }
+
+  // 5. Floating Golden Christmas Star-Motes & Frost Diamonds drifting around the village
+  const starMoteGeo = new THREE.OctahedronGeometry(0.14, 0);
+  for (let i = 0; i < 12; i++) {
+    const ang = (i / 12) * Math.PI * 2;
+    const rad = 7.4 + (i % 3) * 2.2;
+    const baseY = 2.6 + (i % 4) * 0.85;
+    const mote = new THREE.Mesh(starMoteGeo, i % 2 === 0 ? warmGoldRingMat : frostRingMat);
+    mote.position.set(Math.cos(ang) * rad, baseY, Math.sin(ang) * rad);
+    group.add(mote);
+    floatingWinterStars.push({
+      mesh: mote,
+      baseY,
+      speed: 1.35 + (i % 3) * 0.25,
+      phase: i * 0.65
+    });
+  }
+
+  group.userData = {
+    campfireFlames,
+    glowingLanterns,
+    floatingWinterStars
+  };
+
+  return group;
+}
+
+// ============================================================================
+// GPU Particle Weather System (Stardust, Sun-Motes/Mist, Volcanic Embers, Snowfall)
 // ============================================================================
 function createWeatherParticleSystem() {
   const count = 420;
@@ -2076,13 +2503,15 @@ export function createWorldSceneryManager(scene) {
   const titanForgeGroup = buildVolcanicTitanForgeGroup();
   const hauntedGraveyardGroup = buildHauntedBloodGraveyardGroup();
   const toonKingdomGroup = buildToonSkyKingdomGroup();
+  const winterAuroraGroup = buildWinterAuroraVillageGroup();
 
   rootGroup.add(
     celestialGroup,
     dragonCitadelGroup,
     titanForgeGroup,
     hauntedGraveyardGroup,
-    toonKingdomGroup
+    toonKingdomGroup,
+    winterAuroraGroup
   );
 
   const weather = createWeatherParticleSystem();
@@ -2110,6 +2539,7 @@ export function createWorldSceneryManager(scene) {
     titanForgeGroup.visible = id === 'volcanic_titan_forge';
     hauntedGraveyardGroup.visible = id === 'haunted_blood_graveyard';
     toonKingdomGroup.visible = id === 'toon_sky_kingdom';
+    winterAuroraGroup.visible = id === 'winter_aurora_village';
 
     if (id === 'celestial_observatory') {
       skyDomeMat.uniforms.uMode.value = 0;
@@ -2136,6 +2566,11 @@ export function createWorldSceneryManager(scene) {
       horizonSeaMat.uniforms.uMode.value = 4;
       weather.mat.color.setHex(0xffbe0b);
       weather.mat.size = 0.14;
+    } else if (id === 'winter_aurora_village') {
+      skyDomeMat.uniforms.uMode.value = 5;
+      horizonSeaMat.uniforms.uMode.value = 5;
+      weather.mat.color.setHex(0xeef8ff);
+      weather.mat.size = 0.21;
     }
   }
 
@@ -2287,17 +2722,50 @@ export function createWorldSceneryManager(scene) {
       }
     }
 
+    // 3c. Animate Christmas Eve Aurora Wonderland (Crackling Campfires, Lantern Shimmer & Floating Star-Motes)
+    if (winterAuroraGroup.visible) {
+      const { campfireFlames, glowingLanterns, floatingWinterStars } = winterAuroraGroup.userData;
+      if (campfireFlames) {
+        for (const cf of campfireFlames) {
+          const flick = 0.88 + 0.24 * Math.sin(elapsedTotal * 11.5 + cf.phase) + 0.10 * Math.cos(elapsedTotal * 19.0 + cf.phase);
+          cf.outer.scale.set(0.92 + 0.12 * Math.sin(elapsedTotal * 8.0 + cf.phase), flick, 0.92 + 0.12 * Math.cos(elapsedTotal * 8.0 + cf.phase));
+          cf.inner.scale.set(1.0, 0.85 + 0.28 * Math.cos(elapsedTotal * 14.0 + cf.phase), 1.0);
+        }
+      }
+      if (glowingLanterns) {
+        for (const gl of glowingLanterns) {
+          const pulse = 0.92 + 0.14 * Math.sin(elapsedTotal * 3.8 + gl.phase);
+          gl.mesh.scale.setScalar(pulse);
+        }
+      }
+      if (floatingWinterStars) {
+        for (const fs of floatingWinterStars) {
+          fs.mesh.position.y = fs.baseY + Math.sin(elapsedTotal * fs.speed + fs.phase) * 0.24;
+          fs.mesh.rotation.y += dt * 1.15;
+        }
+      }
+    }
+
     // 4. Animate Particle Weather
     const posArr = weather.positions;
     const phaseArr = weather.phases;
     const isVolcanic = activeSceneryId === 'volcanic_titan_forge';
     const isSkyCitadel = activeSceneryId === 'dragon_sky_citadel';
     const isGraveyard = activeSceneryId === 'haunted_blood_graveyard';
+    const isWinterSnow = activeSceneryId === 'winter_aurora_village';
 
     for (let i = 0; i < weather.count; i++) {
       const idx = i * 3;
       const ph = phaseArr[i];
-      if (isVolcanic || isGraveyard) {
+      if (isWinterSnow) {
+        // Gentle downward-drifting 3D Christmas Eve snowfall with swirling winter breeze
+        posArr[idx + 1] -= dt * (1.28 + (i % 5) * 0.24);
+        posArr[idx] += Math.sin(elapsedTotal * 1.15 + ph) * dt * 0.62;
+        posArr[idx + 2] += Math.cos(elapsedTotal * 0.95 + ph * 1.3) * dt * 0.52;
+        if (posArr[idx + 1] < -1.2) {
+          posArr[idx + 1] = 13.8 + (i % 4) * 0.4;
+        }
+      } else if (isVolcanic || isGraveyard) {
         // Rising volcanic embers or floating Halloween Jack-o'-Lantern cinders
         posArr[idx + 1] += dt * (1.35 + (i % 5) * 0.22);
         posArr[idx] += Math.sin(elapsedTotal * 2.0 + ph) * dt * 0.42;

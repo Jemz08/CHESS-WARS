@@ -1933,7 +1933,6 @@ export function initWizardChess() {
         )
       );
 
-      document.getElementById('loading-overlay')?.classList.add('hidden');
       sfxVfxManager.playLoadingCompleteSfx?.();
       sfxVfxManager.setLobbyMusicActive?.(true);
     }
@@ -8384,6 +8383,7 @@ export function initWizardChess() {
       renderer.shadowMap.needsUpdate = true;
       renderMainScene();
       window.dispatchEvent(new CustomEvent('wizardchess:ready'));
+      document.getElementById('loading-overlay')?.classList.add('hidden');
       if (navigator.webdriver) {
         window.wizardChess.stepBy(0.9, 15);
       }

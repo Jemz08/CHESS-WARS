@@ -534,7 +534,7 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 #loading-overlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 99999 !important;
   background:
     radial-gradient(ellipse at 50% 35%, rgba(212, 175, 55, 0.14) 0%, rgba(16, 21, 32, 0.94) 48%, #04060a 100%);
   display: flex;
@@ -7114,6 +7114,7 @@ body.cinematic-ui-hidden .mobile-only-restore-ui {
 
 /* 2. Sunlit Cozy Parchment Loading Screen */
 #loading-overlay {
+  z-index: 99999 !important;
   background:
     radial-gradient(circle at 50% 24%, rgba(255, 232, 168, 0.72) 0%, rgba(248, 236, 212, 0.4) 48%, transparent 75%),
     linear-gradient(180deg, #fffdf7 0%, #f7ebd3 52%, #ecd8b4 100%) !important;
@@ -8340,57 +8341,104 @@ button,
   text-shadow: 0 1px 2px rgba(45, 5, 5, 0.75) !important;
 }
 
-/* 4. ULTRA-COMPACT IN-GAME TOP HUD BAR — Fits 100% Within Screen on All Devices */
+/* 4. GRID-ALIGNED ULTRA-COMPACT IN-GAME TOP HUD BAR — Zero Trailing Whitespace */
 #hud-top {
   top: max(6px, env(safe-area-inset-top, 6px)) !important;
   left: max(8px, env(safe-area-inset-left, 8px)) !important;
   right: max(8px, env(safe-area-inset-right, 8px)) !important;
   width: auto !important;
   max-width: calc(100vw - 16px) !important;
-  gap: 4px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 5px !important;
   box-sizing: border-box !important;
 }
 
 .hud-top-main-row {
-  display: flex !important;
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
   align-items: center !important;
-  justify-content: space-between !important;
-  flex-wrap: wrap !important;
-  gap: 4px 6px !important;
+  gap: 6px !important;
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
 }
 
 #hud-left {
-  display: flex !important;
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
   align-items: center !important;
-  flex-wrap: wrap !important;
-  gap: 4px !important;
+  gap: 5px !important;
+  width: auto !important;
   max-width: 100% !important;
   min-width: 0 !important;
 }
 
 .hud-compact-actions {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  flex-wrap: wrap !important;
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
   gap: 4px !important;
+  width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
   pointer-events: auto !important;
 }
 
+.hud-compact-actions > * {
+  width: 100% !important;
+  min-width: 0 !important;
+  justify-content: center !important;
+}
+
 .hud-top-sub-row,
 #hud-sub-bar {
-  display: flex !important;
-  align-items: center !important;
-  flex-wrap: wrap !important;
-  gap: 4px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
+  align-items: stretch !important;
+  gap: 5px !important;
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
+}
+
+/* Portrait & Compact Widths: Switch to Full-Span 4-Col Actions Grid (Span 2 on Toggles = 8/8 Cells Filled) */
+@media (max-width: 920px) and (orientation: portrait), (max-width: 720px) {
+  .hud-top-main-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 4px !important;
+  }
+
+  #hud-left {
+    width: 100% !important;
+  }
+
+  .hud-compact-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+  }
+
+  #btn-mobile-controls.mobile-controls-trigger {
+    grid-column: span 2 !important;
+  }
+}
+
+@media (max-width: 440px) {
+  .hud-top-sub-row,
+  #hud-sub-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+  }
+
+  #hud-chess-clock-bar.hud-chess-clock-bar {
+    grid-column: 1 / -1 !important;
+  }
+
+  #gold-wallet-badge.gold-wallet-btn,
+  #check-indicator-badge.check-indicator-badge {
+    width: 100% !important;
+    justify-content: center !important;
+  }
 }
 
 /* Prevent HUD entrance animations from clipping button borders or shadows */
@@ -8400,19 +8448,22 @@ button,
   overflow: visible !important;
 }
 
-/* Compact In-Game HUD Buttons */
+/* Compact In-Game HUD Buttons — Strict Single Line */
 .hud-btn,
 .hud-micro-btn,
 #btn-mobile-controls.mobile-controls-trigger {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   height: auto !important;
-  min-height: 28px !important;
-  padding: 4px 8px !important;
+  min-height: 29px !important;
+  padding: 4px 6px !important;
   gap: 4px !important;
   border-radius: 8px !important;
   background: linear-gradient(180deg, #fffefb 0%, #f3e0be 100%) !important;
   border: 1.5px solid #b5843e !important;
   font-family: 'Cinzel', 'Georgia', serif !important;
-  font-size: clamp(0.6rem, 1.5vw, 0.68rem) !important;
+  font-size: clamp(0.58rem, 1.4vw, 0.67rem) !important;
   font-weight: 800 !important;
   letter-spacing: 0.02em !important;
   box-shadow:
@@ -8420,7 +8471,17 @@ button,
     0 4px 8px rgba(92, 58, 24, 0.15),
     inset 0 1px 0 #ffffff !important;
   white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   max-width: 100% !important;
+}
+
+.hud-btn span,
+.hud-micro-btn span {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-width: 0 !important;
 }
 
 .hud-btn .icon,
@@ -8627,21 +8688,28 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   padding: 3px 8px !important;
 }
 
-/* 7. Compact Status Pill, Chess Clock Bar, Gold Wallet & Check Alert Badge */
+/* 7. Grid-Aligned Status Pill, Chess Clock Bar, Gold Wallet & Check Alert Badge */
 .status-pill {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
   height: auto !important;
-  min-height: 28px !important;
+  min-height: 29px !important;
   padding: 4px 9px !important;
   gap: 6px !important;
   border-radius: 8px !important;
   background: linear-gradient(180deg, #fffefb 0%, #f4e4c6 100%) !important;
   border: 1.5px solid #b5843e !important;
   max-width: 100% !important;
+  white-space: nowrap !important;
 }
 
 .status-pill #turn-text {
-  font-size: clamp(0.62rem, 1.6vw, 0.72rem) !important;
+  font-size: clamp(0.6rem, 1.5vw, 0.7rem) !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .status-pill .mode-badge {
@@ -8649,32 +8717,41 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   border: 1px solid #965e0d !important;
   font-size: 0.56rem !important;
   font-weight: 800 !important;
-  padding: 2px 5px !important;
+  padding: 2px 6px !important;
   border-radius: 5px !important;
+  white-space: nowrap !important;
 }
 
 .gold-wallet-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   height: auto !important;
-  min-height: 26px !important;
-  padding: 3px 8px !important;
+  min-height: 28px !important;
+  padding: 3px 10px !important;
   gap: 4px !important;
   border-radius: 8px !important;
   background: linear-gradient(180deg, #fff6d1 0%, #f2c968 100%) !important;
   border: 1.5px solid #965e0d !important;
   font-size: 0.64rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
 
 .check-indicator-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   height: auto !important;
-  min-height: 26px !important;
-  padding: 3px 8px !important;
+  min-height: 28px !important;
+  padding: 3px 10px !important;
   gap: 4px !important;
   border-radius: 8px !important;
   background: linear-gradient(180deg, #fffefb 0%, #f3e2c3 100%) !important;
   border: 1.5px solid #b5843e !important;
   font-size: 0.6rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
 
 .check-indicator-badge.active {
@@ -8683,62 +8760,119 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
 }
 
 .hud-chess-clock-bar {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) !important;
+  align-items: center !important;
   height: auto !important;
-  min-height: 26px !important;
+  min-height: 28px !important;
   padding: 3px 6px !important;
-  gap: 4px !important;
+  gap: 5px !important;
   border-radius: 8px !important;
   background: linear-gradient(180deg, #fffefb 0%, #f4e4c6 100%) !important;
   border: 1.5px solid #b5843e !important;
   box-shadow: 0 2px 0 #8c6230, 0 4px 10px rgba(92, 58, 24, 0.14) !important;
+  width: 100% !important;
   max-width: 100% !important;
-  flex-wrap: wrap !important;
+  box-sizing: border-box !important;
 }
 
-.chess-clock-pill {
-  padding: 2px 6px !important;
-  gap: 4px !important;
-  min-height: 20px !important;
-}
-
-.chess-clock-pill .clock-side-label {
-  font-size: 0.56rem !important;
-  color: #3d230a !important;
-  -webkit-text-fill-color: #3d230a !important;
-  font-weight: 800 !important;
-}
-
-.chess-clock-pill .clock-time {
-  font-size: 0.68rem !important;
-  color: #1e0f02 !important;
-  -webkit-text-fill-color: #1e0f02 !important;
-  font-weight: 800 !important;
+.clock-side-readout {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
 }
 
 .clock-mode-tag-btn {
-  padding: 2px 7px !important;
-  min-height: 20px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  padding: 2px 8px !important;
+  min-height: 22px !important;
   border-radius: 6px !important;
   background: linear-gradient(180deg, #ffe799 0%, #e5a829 100%) !important;
   border: 1px solid #8f580a !important;
   font-size: 0.58rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
 
-/* Bottom HUD Pills Compact Fit */
+/* Grid-Aligned Bottom HUD Pills — Strict Single Line & Zero Empty Trailing Pills */
 #hud-bottom {
   bottom: max(6px, env(safe-area-inset-bottom, 6px)) !important;
-  left: 8px !important;
-  right: 8px !important;
+  left: max(8px, env(safe-area-inset-left, 8px)) !important;
+  right: max(8px, env(safe-area-inset-right, 8px)) !important;
+  width: auto !important;
   max-width: calc(100vw - 16px) !important;
-  gap: 4px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 6px !important;
 }
 
-.captured-pill,
+#hud-bottom:not(.has-pass-flip):has(.captured-pill:empty) {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#hud-bottom.has-pass-flip {
+  grid-template-columns: minmax(0, 1fr) auto auto !important;
+}
+
+#hud-bottom.has-pass-flip:has(.captured-pill:empty) {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+}
+
 .hint-pill {
-  padding: 3px 10px !important;
-  font-size: 0.64rem !important;
+  padding: 4px 10px !important;
+  font-size: 0.62rem !important;
   max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.captured-pill {
+  padding: 4px 10px !important;
+  font-size: 0.64rem !important;
+  white-space: nowrap !important;
+}
+
+.captured-pill:empty {
+  display: none !important;
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+  #hud-bottom {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 4px !important;
+  }
+  #hud-bottom.has-pass-flip {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+  .captured-pill {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  #hud-top {
+    gap: 3px !important;
+  }
+  .hud-btn,
+  .hud-micro-btn,
+  #btn-mobile-controls.mobile-controls-trigger,
+  .hud-lobby-back-btn,
+  .status-pill,
+  .gold-wallet-btn,
+  .check-indicator-badge,
+  .hud-chess-clock-bar {
+    min-height: 25px !important;
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+  }
 }
 
 /* 8. Compact Modal Containers, Headers & Gateway Cards — Never Overflow Screen */
@@ -8874,38 +9008,64 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   box-shadow: 0 2px 0 #78350f !important;
 }
 
-/* 9. Primary, Secondary & Checkmate Modal Action Buttons — Compact & Fit Screen */
+/* 9. Primary, Secondary & Checkmate Modal Action Buttons — Glowing Gold & Single-Line */
 .arena-primary-btn,
 .checkmate-btn:not(.secondary) {
-  min-height: 38px !important;
+  min-height: 40px !important;
   height: auto !important;
-  padding: 8px 14px !important;
+  padding: 9px 18px !important;
   border-radius: 10px !important;
-  background: linear-gradient(180deg, #ffe694 0%, #e5a829 100%) !important;
-  border: 2px solid #8f580a !important;
-  font-size: 0.76rem !important;
+  background: linear-gradient(180deg, #ffeb99 0%, #f3b229 55%, #cf7e08 100%) !important;
+  border: 2px solid #8c5206 !important;
+  font-family: 'Cinzel', 'Georgia', serif !important;
+  font-size: 0.78rem !important;
   font-weight: 800 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
   box-shadow:
     0 3px 0 #6b3f04,
-    0 6px 14px rgba(110, 68, 12, 0.2),
-    inset 0 1px 0 #fff9db !important;
-  white-space: normal !important;
+    0 0 18px rgba(245, 178, 35, 0.42),
+    inset 0 1px 0 #fffbeb !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   text-align: center !important;
   max-width: 100% !important;
+  transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s ease !important;
+}
+
+.arena-primary-btn:hover:not(:disabled),
+.checkmate-btn:not(.secondary):hover:not(:disabled) {
+  transform: translateY(-1px) !important;
+  box-shadow:
+    0 4px 0 #6b3f04,
+    0 0 24px rgba(250, 195, 55, 0.65),
+    inset 0 1px 0 #ffffff !important;
+}
+
+.arena-primary-btn:active:not(:disabled),
+.checkmate-btn:not(.secondary):active:not(:disabled) {
+  transform: translateY(2px) !important;
+  box-shadow:
+    0 1px 0 #6b3f04,
+    0 0 12px rgba(245, 178, 35, 0.4) !important;
 }
 
 .arena-secondary-btn,
 .checkmate-btn.secondary {
   min-height: 34px !important;
   height: auto !important;
-  padding: 7px 12px !important;
+  padding: 7px 14px !important;
   border-radius: 9px !important;
   background: linear-gradient(180deg, #fffefb 0%, #f2dfc0 100%) !important;
   border: 1.5px solid #b5843e !important;
+  font-family: 'Cinzel', 'Georgia', serif !important;
   font-size: 0.7rem !important;
   font-weight: 800 !important;
   box-shadow: 0 2px 0 #8a5e29, inset 0 1px 0 #ffffff !important;
-  white-space: normal !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   text-align: center !important;
   max-width: 100% !important;
 }
@@ -8919,13 +9079,14 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   max-width: 100% !important;
 }
 
-/* 10. Segmented Tabs, Time Controls, Difficulty & Side Picker Cards — Compact & Clear */
+/* 10. Segmented Tabs, Time Controls, Difficulty & Side Picker Cards — Compact & Never Wrap Words */
 .sanctum-tab-bar.segmented-tabs {
   display: grid !important;
   gap: 6px !important;
   padding: 5px !important;
   overflow: visible !important;
   max-width: 100% !important;
+  flex-shrink: 0 !important;
 }
 
 .sanctum-tab-bar.arena-mode-tabs {
@@ -8936,18 +9097,9 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
 }
 
-@media (max-width: 640px) {
-  .sanctum-tab-bar.arena-mode-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
+@media (max-width: 480px) {
   .sanctum-tab-bar.armory-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-}
-
-@media (max-width: 440px) {
-  .sanctum-tab-bar.arena-mode-tabs {
-    grid-template-columns: 1fr !important;
   }
 }
 
@@ -8955,29 +9107,139 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   min-height: 32px !important;
   height: auto !important;
   padding: 5px 8px !important;
-  gap: 4px !important;
+  gap: 5px !important;
   border-radius: 8px !important;
   background: linear-gradient(180deg, #fffdf9 0%, #f1dfc1 100%) !important;
   border: 1.5px solid #b5843e !important;
-  font-size: 0.66rem !important;
+  font-size: clamp(0.6rem, 1.8vw, 0.7rem) !important;
   font-weight: 800 !important;
-  white-space: normal !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   text-align: center !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .sanctum-tab-btn.active {
   background: linear-gradient(180deg, #ffe799 0%, #e6aa2c 100%) !important;
   border-color: #8f580a !important;
-  box-shadow: 0 2px 0 #6e4205, inset 0 1px 0 #fff9db !important;
+  box-shadow: 0 2px 0 #6e4205, 0 0 12px rgba(235, 175, 45, 0.35), inset 0 1px 0 #fff9db !important;
 }
 
-/* Play Modal Cards (Bullet / Blitz / Rapid, Difficulty, Side Picker) */
-.time-category-tabs,
-.difficulty-grid,
-.side-picker-row,
+/* Compact Play Modal Cards (Loadout Strip, Bullet / Blitz / Rapid, Difficulty, Side Picker) */
+.sanctum-modal-card.compact-play-modal {
+  max-width: min(720px, calc(100vw - 16px)) !important;
+  height: auto !important;
+  max-height: calc(100dvh - 16px) !important;
+}
+
+.sanctum-modal-card.armory-modal-card,
+.sanctum-modal-card.leaderboard-modal,
+.sanctum-modal-card.settings-modal {
+  height: auto !important;
+  max-height: calc(100dvh - 16px) !important;
+}
+
+.sanctum-modal-header.compact-modal-header {
+  padding-bottom: 8px !important;
+  margin-bottom: 8px !important;
+  border-bottom: 1.5px solid rgba(181, 132, 62, 0.38) !important;
+}
+
+.sanctum-loadout-ledger.compact-loadout-strip {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  padding: 6px !important;
+  margin-bottom: 0 !important;
+}
+
+@media (max-width: 560px) {
+  .sanctum-loadout-ledger.compact-loadout-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+.compact-loadout-strip .loadout-ledger-slot {
+  padding: 5px 8px !important;
+  gap: 1px !important;
+  min-width: 0 !important;
+  border-radius: 8px !important;
+}
+
+.compact-loadout-strip .ledger-slot-label {
+  font-size: 0.54rem !important;
+  letter-spacing: 0.06em !important;
+  white-space: nowrap !important;
+}
+
+.compact-loadout-strip .ledger-slot-value {
+  font-size: 0.66rem !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.arena-modal-scroll-body {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 9px !important;
+  padding-right: 2px !important;
+}
+
+.arena-tab-section-stack {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.time-control-cards-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  max-width: 100% !important;
+}
+
+@media (max-width: 520px) {
+  .time-control-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.time-preset-pills-row {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+
+.time-preset-pills-row .time-preset-pill-btn {
+  min-width: 0 !important;
+  flex: 1 1 0 !important;
+  padding: 4px 4px !important;
+  font-size: 0.62rem !important;
+}
+
+.difficulty-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  max-width: 100% !important;
+}
+
+.side-picker-row {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+  max-width: 100% !important;
+}
+
 .matchmaking-pref-pills,
 .time-preset-pills {
-  gap: 6px !important;
+  gap: 5px !important;
   max-width: 100% !important;
 }
 
@@ -8985,11 +9247,37 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
 .time-mode-card,
 .difficulty-card,
 .side-picker-btn {
-  padding: 8px 10px !important;
+  padding: 7px 9px !important;
   min-height: 0 !important;
-  border-radius: 10px !important;
+  border-radius: 9px !important;
   background: linear-gradient(180deg, #fffefb 0%, #f4e4c7 100%) !important;
   border: 1.5px solid #b88a48 !important;
+}
+
+.time-mode-card {
+  gap: 6px !important;
+}
+
+.time-mode-icon-badge {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.difficulty-card.compact-diff-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  gap: 2px !important;
+  padding: 7px 6px !important;
+}
+
+.side-picker-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
 }
 
 .time-category-tab.selected,
@@ -8998,7 +9286,7 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
 .side-picker-btn.selected {
   background: linear-gradient(180deg, #ffe799 0%, #eab034 100%) !important;
   border: 2px solid #8f580a !important;
-  box-shadow: 0 2.5px 0 #6e4205, inset 0 1px 0 #fff9db !important;
+  box-shadow: 0 2.5px 0 #6e4205, 0 0 12px rgba(234, 176, 52, 0.35), inset 0 1px 0 #fff9db !important;
 }
 
 /* 11. Armory Cards, 3D Showcase Strip & Poliigon PBR Studio Buttons */
@@ -9021,6 +9309,7 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   border: 1.5px solid #b5843e !important;
   font-size: 0.62rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
 
 .showcase-toggle-btn.active,
@@ -9052,6 +9341,8 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   font-size: 0.65rem !important;
   font-weight: 800 !important;
   white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .live-preview-btn,
@@ -9104,6 +9395,7 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   border: 1.5px solid #8f580a !important;
   font-size: 0.62rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
 
 .poliigon-pbr-reset-btn {
@@ -9114,6 +9406,7 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   border: 1.5px solid #b91c1c !important;
   font-size: 0.62rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
 
 .poliigon-target-slot-btn,
@@ -9124,6 +9417,7 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   min-height: 26px !important;
   font-size: 0.62rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
 
 .poliigon-target-slot-btn.active,
@@ -9177,7 +9471,7 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
 
 .rank-ladder-pills {
   display: grid !important;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   gap: 6px !important;
   max-width: 100% !important;
 }
@@ -9209,6 +9503,9 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   font-weight: 800 !important;
   letter-spacing: 0.02em !important;
   max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .upload-photo-btn,
@@ -9263,6 +9560,9 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   border: 1.5px solid #b5843e !important;
   font-size: 0.64rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .lb-filter-chip.active,
@@ -9275,10 +9575,11 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
 .rank-tier-chip.chip-obsidian.selected,
 .crest-picker-btn.selected,
 .matchmaking-pref-btn.selected,
-.time-preset-pill-btn.selected {
+.time-preset-pill-btn.selected,
+.time-preset-pill-btn.active {
   background: linear-gradient(180deg, #ffe799 0%, #e5a829 100%) !important;
   border: 1.5px solid #8f580a !important;
-  box-shadow: 0 2px 0 #6e4205, inset 0 1px 0 #fff9db !important;
+  box-shadow: 0 2px 0 #6e4205, 0 0 10px rgba(235, 175, 45, 0.3), inset 0 1px 0 #fff9db !important;
 }
 
 /* Surrender Confirmation Modal Buttons */
@@ -9291,6 +9592,7 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   border: 1.5px solid #7f1d1d !important;
   font-size: 0.72rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
 
 .surrender-cancel-btn {
@@ -9302,4 +9604,533 @@ body.cinematic-ui-hidden #btn-mobile-show-ui.mobile-only-restore-ui,
   border: 1.5px solid #b5843e !important;
   font-size: 0.72rem !important;
   font-weight: 800 !important;
+  white-space: nowrap !important;
 }
+
+/* ============================================================================
+ * 13. FLOATING ARCADE MAIN LOBBY (UNOBSTRUCTED 3D BOARD + GLOWING GOLD DOCK)
+ * ============================================================================ */
+
+@keyframes arcaneGoldSweep {
+  0% {
+    transform: translateX(-140%) skewX(-20deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.55;
+  }
+  55% {
+    transform: translateX(220%) skewX(-20deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(220%) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+.arcade-gateway-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9400 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding:
+    max(10px, env(safe-area-inset-top, 10px))
+    max(10px, env(safe-area-inset-right, 10px))
+    max(12px, env(safe-area-inset-bottom, 12px))
+    max(10px, env(safe-area-inset-left, 10px)) !important;
+  pointer-events: none !important;
+  background:
+    linear-gradient(180deg, rgba(16, 9, 3, 0.42) 0%, rgba(16, 9, 3, 0) 20%, rgba(16, 9, 3, 0) 74%, rgba(16, 9, 3, 0.56) 100%) !important;
+  box-sizing: border-box !important;
+}
+
+.arcade-top-bar {
+  pointer-events: auto !important;
+  width: min(920px, 100%) !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 8px 12px !important;
+  padding: 8px 12px !important;
+  border-radius: 14px !important;
+  background: linear-gradient(180deg, rgba(255, 251, 240, 0.96) 0%, rgba(244, 223, 180, 0.95) 100%) !important;
+  border: 2px solid #b57b24 !important;
+  box-shadow:
+    0 4px 0 #7b4e10,
+    0 12px 28px rgba(24, 12, 2, 0.42),
+    0 0 18px rgba(245, 180, 35, 0.25),
+    inset 0 1px 0 #ffffff !important;
+  box-sizing: border-box !important;
+}
+
+.arcade-commander-group {
+  display: grid !important;
+  grid-template-columns: 44px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+.arcade-portrait-btn {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.arcade-identity-col {
+  display: grid !important;
+  grid-template-rows: auto auto !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+
+.arcade-title-line {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+}
+
+.arcade-brand-title {
+  margin: 0 !important;
+  font-size: clamp(0.9rem, 2.4vw, 1.12rem) !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+  letter-spacing: 0.02em !important;
+  color: #1e0f02 !important;
+  -webkit-text-fill-color: #1e0f02 !important;
+}
+
+.arcade-rank-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 2px 7px !important;
+  border-radius: 999px !important;
+  border: 1.5px solid #965e0d !important;
+  background: linear-gradient(180deg, #fff9e6 0%, #f2d488 100%) !important;
+  color: #1e0f02 !important;
+  -webkit-text-fill-color: #1e0f02 !important;
+  font-size: 0.6rem !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+.arcade-progress-row {
+  display: grid !important;
+  grid-template-columns: auto minmax(44px, 110px) auto !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-width: 0 !important;
+}
+
+.arcade-commander-name {
+  font-size: 0.66rem !important;
+  font-weight: 800 !important;
+  color: #3d230a !important;
+  -webkit-text-fill-color: #3d230a !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 120px !important;
+}
+
+.arcade-xp-track {
+  width: 100% !important;
+  height: 7px !important;
+  border-radius: 999px !important;
+  background: rgba(110, 66, 10, 0.2) !important;
+  border: 1px solid rgba(138, 86, 20, 0.45) !important;
+  overflow: hidden !important;
+}
+
+.arcade-xp-fill {
+  height: 100% !important;
+  border-radius: 999px !important;
+  transition: width 0.35s ease !important;
+}
+
+.arcade-xp-label {
+  font-size: 0.58rem !important;
+  font-weight: 800 !important;
+  color: #5c3812 !important;
+  -webkit-text-fill-color: #5c3812 !important;
+  white-space: nowrap !important;
+}
+
+.arcade-metrics-row {
+  display: grid !important;
+  grid-auto-flow: column !important;
+  grid-auto-columns: max-content !important;
+  align-items: stretch !important;
+  gap: 6px !important;
+}
+
+.arcade-metric-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  min-height: 29px !important;
+  padding: 4px 9px !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, #fffefb 0%, #f2e0be 100%) !important;
+  border: 1.5px solid #b5843e !important;
+  color: #1e0f02 !important;
+  -webkit-text-fill-color: #1e0f02 !important;
+  font-size: 0.64rem !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  box-shadow: 0 2px 0 #8a5e29, inset 0 1px 0 #ffffff !important;
+}
+
+.arcade-metric-pill.gold-pill {
+  background: linear-gradient(180deg, #fff5cc 0%, #f4c85b 100%) !important;
+  border-color: #965e0d !important;
+  cursor: pointer !important;
+}
+
+.arcade-metric-pill.streak-pill.is-hot-streak,
+.arcade-metric-pill.streak-pill.is-active-streak {
+  background: linear-gradient(180deg, #fff0d1 0%, #f7be63 100%) !important;
+  border-color: #b45309 !important;
+}
+
+.arcade-resume-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 720px) and (orientation: portrait), (max-width: 640px) {
+  .arcade-top-bar {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 6px !important;
+    padding: 7px 9px !important;
+  }
+  .arcade-metrics-row {
+    width: 100% !important;
+    grid-auto-flow: row !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+  }
+  .arcade-metrics-row.has-resume {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+  .arcade-metric-pill,
+  .arcade-resume-btn {
+    width: 100% !important;
+    padding: 4px 5px !important;
+    font-size: 0.6rem !important;
+  }
+}
+
+@media (max-width: 440px) {
+  .arcade-metrics-row.has-resume {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Bottom Floating Arcane Command Dock — Pure Responsive Grid Alignment */
+.arcade-bottom-dock {
+  pointer-events: auto !important;
+  width: min(920px, 100%) !important;
+  display: grid !important;
+  grid-template-columns: minmax(220px, 1.15fr) minmax(0, 2fr) !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  padding: 9px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(180deg, rgba(255, 250, 238, 0.96) 0%, rgba(242, 217, 168, 0.96) 100%) !important;
+  border: 2px solid #b87d24 !important;
+  box-shadow:
+    0 5px 0 #7a4b0b,
+    0 16px 36px rgba(18, 9, 2, 0.52),
+    0 0 26px rgba(245, 180, 35, 0.32),
+    inset 0 1px 0 #ffffff !important;
+  box-sizing: border-box !important;
+}
+
+.arcade-play-hero-btn {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 58px !important;
+  display: grid !important;
+  grid-template-columns: 38px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 9px 14px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(180deg, #ffef9f 0%, #f5b62b 52%, #cf8008 100%) !important;
+  border: 2px solid #8c5206 !important;
+  box-shadow:
+    0 4px 0 #6e3e03,
+    0 0 24px rgba(245, 180, 35, 0.52),
+    inset 0 1.5px 0 #ffffff !important;
+  cursor: pointer !important;
+  overflow: hidden !important;
+  transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s ease !important;
+}
+
+.arcade-play-hero-btn:hover {
+  transform: translateY(-1.5px) !important;
+  box-shadow:
+    0 5.5px 0 #6e3e03,
+    0 0 30px rgba(255, 200, 58, 0.72),
+    inset 0 1.5px 0 #ffffff !important;
+}
+
+.arcade-play-hero-btn:active {
+  transform: translateY(2px) !important;
+  box-shadow:
+    0 2px 0 #6e3e03,
+    0 0 16px rgba(245, 180, 35, 0.45) !important;
+}
+
+.arcade-play-sheen {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: 45% !important;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent) !important;
+  animation: arcaneGoldSweep 4.2s ease-in-out infinite !important;
+  pointer-events: none !important;
+}
+
+.arcade-play-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 10px !important;
+  background: rgba(255, 252, 236, 0.55) !important;
+  border: 1.5px solid #9e620a !important;
+  flex-shrink: 0 !important;
+}
+
+.arcade-play-text {
+  display: grid !important;
+  grid-template-rows: auto auto !important;
+  justify-items: start !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+  text-align: left !important;
+}
+
+.arcade-play-title {
+  font-family: 'Cinzel', 'Georgia', serif !important;
+  font-size: clamp(0.95rem, 2.5vw, 1.18rem) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.06em !important;
+  color: #1e0f02 !important;
+  -webkit-text-fill-color: #1e0f02 !important;
+  white-space: nowrap !important;
+}
+
+.arcade-play-sub {
+  font-size: 0.64rem !important;
+  font-weight: 800 !important;
+  color: #3d2105 !important;
+  -webkit-text-fill-color: #3d2105 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+.arcade-play-arrow {
+  font-size: 0.95rem !important;
+  font-weight: 900 !important;
+  color: #1e0f02 !important;
+  -webkit-text-fill-color: #1e0f02 !important;
+}
+
+.arcade-quick-dock-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 7px !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+@media (max-width: 740px) and (orientation: portrait), (max-width: 600px) {
+  .arcade-bottom-dock {
+    width: min(620px, 100%) !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 7px !important;
+    padding: 8px !important;
+  }
+  .arcade-play-hero-btn {
+    min-height: 52px !important;
+    padding: 8px 14px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .arcade-quick-dock-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .arcade-gateway-overlay {
+    padding:
+      max(6px, env(safe-area-inset-top, 6px))
+      max(10px, env(safe-area-inset-right, 10px))
+      max(6px, env(safe-area-inset-bottom, 6px))
+      max(10px, env(safe-area-inset-left, 10px)) !important;
+  }
+  .arcade-top-bar {
+    padding: 6px 10px !important;
+    gap: 6px 10px !important;
+  }
+  .arcade-portrait-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+  }
+  .arcade-commander-group {
+    grid-template-columns: 36px minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+  .arcade-bottom-dock {
+    padding: 6px !important;
+    gap: 6px !important;
+  }
+  .arcade-play-hero-btn {
+    min-height: 48px !important;
+    padding: 6px 12px !important;
+  }
+  .arcade-dock-tile {
+    min-height: 52px !important;
+    padding: 5px 6px !important;
+  }
+}
+
+.arcade-dock-tile {
+  display: grid !important;
+  grid-template-rows: 22px auto 1fr !important;
+  justify-items: center !important;
+  align-items: center !important;
+  align-content: center !important;
+  text-align: center !important;
+  gap: 3px !important;
+  padding: 7px 6px !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 64px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(180deg, #fffefb 0%, #f3dfba 100%) !important;
+  border: 1.5px solid #b5843e !important;
+  box-shadow:
+    0 2.5px 0 #8a5e29,
+    0 4px 10px rgba(42, 22, 4, 0.14),
+    inset 0 1px 0 #ffffff !important;
+  transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease !important;
+}
+
+.arcade-dock-tile:hover {
+  transform: translateY(-1.5px) !important;
+  border-color: #965e0d !important;
+  background: linear-gradient(180deg, #ffffff 0%, #fae7be 100%) !important;
+}
+
+.arcade-dock-tile:active {
+  transform: translateY(1.5px) !important;
+}
+
+.arcade-dock-tile .gateway-card-title {
+  font-family: 'Cinzel', 'Georgia', serif !important;
+  font-size: clamp(0.66rem, 1.7vw, 0.74rem) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+.arcade-tile-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+}
+
+.arcade-tile-meta {
+  font-size: 0.58rem !important;
+  font-weight: 700 !important;
+  color: #4a2d12 !important;
+  -webkit-text-fill-color: #4a2d12 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+.arcade-cloud-tile {
+  display: grid !important;
+  grid-template-rows: 1fr auto !important;
+  align-items: stretch !important;
+  padding: 6px !important;
+  gap: 4px !important;
+}
+
+.arcade-cloud-head-btn {
+  display: grid !important;
+  grid-template-rows: 22px auto !important;
+  justify-items: center !important;
+  align-items: center !important;
+  gap: 3px !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  width: 100% !important;
+}
+
+.arcade-cloud-pills {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  align-items: center !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+
+.arcade-cloud-pills .gateway-load-save-btn,
+.arcade-cloud-pills .gateway-sync-save-btn {
+  width: 100% !important;
+  min-height: 23px !important;
+  padding: 2px 4px !important;
+  font-size: 0.58rem !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Tabular numerals across dynamic game counters */
+.clock-side-digits,
+.gold-wallet-amount,
+.leaderboard-table td,
+.rank-win-num,
+.rank-streak-num {
+  font-variant-numeric: tabular-nums !important;
+}
+

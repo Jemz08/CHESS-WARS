@@ -525,6 +525,7 @@ export default function App() {
   const [sfxEnabled, setSfxEnabled] = useState(true);
   const [lobbyMusicEnabled, setLobbyMusicEnabled] = useState(true);
   const [uiHidden, setUiHidden] = useState(false);
+  const [isEngineLoading, setIsEngineLoading] = useState(true);
   const [hasStartedGame, setHasStartedGame] = useState(false);
   const [hudViewport, setHudViewport] = useState<{
     orientation: 'portrait' | 'landscape';
@@ -1325,6 +1326,24 @@ export default function App() {
     window.addEventListener('wizardchess:ready', syncLobbyState);
     return () => window.removeEventListener('wizardchess:ready', syncLobbyState);
   }, [activeDialog, hasStartedGame]);
+
+  // Strict boot sequence: keep Lobby hidden until 3D engine loading completes
+  useEffect(() => {
+    const finishLoading = () => {
+      setIsEngineLoading(false);
+    };
+    const loadingEl = document.getElementById('loading-overlay');
+    if (loadingEl?.classList.contains('hidden')) {
+      setIsEngineLoading(false);
+      return;
+    }
+    window.addEventListener('wizardchess:ready', finishLoading);
+    const fallbackTimer = window.setTimeout(finishLoading, 12000);
+    return () => {
+      window.removeEventListener('wizardchess:ready', finishLoading);
+      window.clearTimeout(fallbackTimer);
+    };
+  }, []);
 
   // Delegated Mixkit UI Click SFX for all Lobby, Armory, and HUD controls
   useEffect(() => {
@@ -2492,7 +2511,7 @@ export default function App() {
                 setHasStartedGame(false);
                 setActiveDialog('gateway');
               }}
-              title="Quit Match & Return to Sanctum Lobby"
+              title="Quit Match & Return to Lobby"
             >
               <CozyReturnArrowVectorIcon size={14} />
               <span>Lobby</span>
@@ -2529,9 +2548,9 @@ export default function App() {
               className={`hud-btn hud-micro-btn ${captureZoomEnabled ? 'active' : ''}`}
               id="btn-top-capture-zoom-toggle"
               onClick={handleToggleCaptureZoom}
-              title="Toggle Camera Zoom When Eating an Enemy Piece (Piece Attack Animation Stays ON)"
+              title="Toggle Camera Zoom When Eating an Enemy Piece"
             >
-              <span>{captureZoomEnabled ? 'Zoom: ON' : 'Zoom: OFF'}</span>
+              <span>{captureZoomEnabled ? 'Zoom On' : 'Zoom Off'}</span>
             </button>
             <button
               type="button"
@@ -2578,7 +2597,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Second Row Below: Live Dual Chess Clock Bar, Gold Treasury & Check Alert */}
+        {/* Second Row Below: Grid-Aligned Live Chess Clock, Gold Wallet & Check Status */}
         <div className="hud-group hud-top-sub-row" id="hud-sub-bar">
           <div
             className={`hud-chess-clock-bar mode-${timeControlCategory}`}
@@ -2594,7 +2613,7 @@ export default function App() {
                 getEngine()?.setLobbyPaused?.(true);
                 setActiveDialog('play');
               }}
-              title="Click to Change Game Mode (Bullet, Blitz, Rapid)"
+              title="Change Game Mode"
             >
               <span className="clock-mode-icon" aria-hidden="true">
                 {timeControlCategory === 'bullet' ? (
@@ -2612,7 +2631,7 @@ export default function App() {
               className={`clock-side-readout white-side ${activeClockTurn === 'w' ? 'is-active-turn' : ''} ${
                 whiteClockSec <= 20 ? 'is-low-time' : ''
               }`}
-              title="White Army Remaining Time"
+              title="White Remaining Time"
             >
               <span className="clock-side-king" aria-hidden="true">♔</span>
               <span className="clock-side-digits" id="hud-clock-white">
@@ -2626,7 +2645,7 @@ export default function App() {
               className={`clock-side-readout black-side ${activeClockTurn === 'b' ? 'is-active-turn' : ''} ${
                 blackClockSec <= 20 ? 'is-low-time' : ''
               }`}
-              title="Black Army Remaining Time"
+              title="Black Remaining Time"
             >
               <span className="clock-side-king" aria-hidden="true">♚</span>
               <span className="clock-side-digits" id="hud-clock-black">
@@ -2644,12 +2663,12 @@ export default function App() {
               getEngine()?.setLobbyPaused?.(true);
               setActiveDialog('armory');
             }}
-            title="Open Skin Reliquary"
+            title="Open Skins Armory"
           >
             <span className="gold-coin-glyph" aria-hidden="true">
               <GoldCoinVectorIcon size={Math.round(14 * hudViewport.fontScale)} />
             </span>
-            <span className="gold-wallet-amount">{economy.gold}</span>
+            <span className="gold-wallet-amount">{economy.gold}G</span>
           </button>
 
           <div
@@ -2660,8 +2679,8 @@ export default function App() {
             aria-live={inCheck ? 'assertive' : 'polite'}
             title={
               inCheck
-                ? `${checkedColor === 'b' ? 'Black' : 'White'} Sovereign is in Check!`
-                : 'Check Alert Status: Both Kings Safe'
+                ? `${checkedColor === 'b' ? 'Black' : 'White'} King is in Check!`
+                : 'Both Kings Safe'
             }
           >
             <span className="check-indicator-icon" aria-hidden="true">
@@ -2670,11 +2689,11 @@ export default function App() {
             <span className="check-indicator-label">
               {inCheck
                 ? checkedColor === 'b'
-                  ? 'BLACK IN CHECK!'
+                  ? 'BLACK CHECK!'
                   : checkedColor === 'w'
-                    ? 'WHITE IN CHECK!'
+                    ? 'WHITE CHECK!'
                     : 'CHECK!'
-                : 'CHECK ALERT: CLEAR'}
+                : 'KINGS SAFE'}
             </span>
           </div>
         </div>
@@ -2906,279 +2925,216 @@ export default function App() {
       </div>
 
       {/* ===================================================================== */}
-      {/* 1. GATEWAY MAIN LOBBY (PLAY, SKINS, LOGIN, LEADERBOARDS, SETTINGS)    */}
+      {/* 1. FLOATING ARCADE LOBBY (FULL 3D BOARD VIEW + GLOWING GOLD DOCK)     */}
       {/* ===================================================================== */}
-      {activeDialog === 'gateway' && (
+      {!isEngineLoading && activeDialog === 'gateway' && (
         <div
-          className="sanctum-modal-backdrop"
-          onClick={() => {
-            if (hasStartedGame) setActiveDialog('none');
-          }}
+          className="arcade-gateway-overlay"
+          id="gateway-hub-drawer"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="gateway-modal-title"
         >
-          <div
-            className="sanctum-modal-card gateway-modal-card"
-            id="gateway-hub-drawer"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="gateway-modal-title"
-          >
-            <div className="sanctum-corner tl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
-            <div className="sanctum-corner tr" aria-hidden="true"><CozyCornerFlourishSvg /></div>
-            <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
-            <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
-
-            <div className="sanctum-modal-header gateway-header">
-              <div className="sanctum-header-titles">
-                <div className="cozy-ribbon-kicker-wrap">
-                  <CozyRibbonBannerSvg />
-                  <div className="sanctum-modal-kicker">✦ THE SUNLIT SANCTUM ✦</div>
+          {/* Top Floating Commander & Status Strip */}
+          <div className="arcade-top-bar">
+            <div className="arcade-commander-group">
+              <button
+                type="button"
+                className={`rank-portrait-shell rank-border-${displayedRankTier.id} clickable-portrait-btn arcade-portrait-btn`}
+                title="Customize Profile & Rank Crest"
+                onClick={() => {
+                  getEngine()?.playLobbyClickSfx?.('tab');
+                  setActiveDialog('settings');
+                }}
+              >
+                <div className="rank-border-aura" aria-hidden="true"></div>
+                <div className="rank-border-ring" aria-hidden="true"></div>
+                <div className="rank-portrait-inner">
+                  {customProfilePhoto || currentUser?.photoURL ? (
+                    <img
+                      src={customProfilePhoto || currentUser?.photoURL || ''}
+                      alt={customCommanderName || currentUser?.displayName || 'Commander'}
+                      className="rank-commander-img"
+                    />
+                  ) : (
+                    <div className="rank-commander-glyph-avatar">
+                      <CommanderSigilVectorIcon sigil={customCommanderAvatar} size={30} />
+                    </div>
+                  )}
                 </div>
-                <h2 className="sanctum-modal-title" id="gateway-modal-title">
-                  Wizard Chess
-                </h2>
-                <div className="sanctum-record-line">
-                  <span>Treasury: <strong>{economy.gold} Gold</strong></span>
-                  <span aria-hidden="true">·</span>
-                  <span>Rating: <strong>{playerRating} ELO</strong></span>
-                  <span aria-hidden="true">·</span>
-                  <span>Rank: <strong style={{ color: displayedRankTier.primaryHex }}>{displayedRankTier.name} ({displayedRankTier.title})</strong></span>
+                <div className="rank-crest-seal" aria-hidden="true">
+                  <CommanderSigilVectorIcon sigil={displayedRankTier.crestGlyph} size={11} />
                 </div>
-              </div>
+              </button>
 
-              <div className="gateway-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {hasStartedGame && (
-                  <button
-                    type="button"
-                    className="sanctum-modal-close gold-trim"
-                    onClick={() => {
-                      requestAppFullscreenPortrait();
-                      getEngine()?.setLobbyPaused?.(false);
-                      setActiveDialog('none');
-                    }}
+              <div className="arcade-identity-col">
+                <div className="arcade-title-line">
+                  <h2 className="sanctum-modal-title arcade-brand-title" id="gateway-modal-title">
+                    Wizard Chess
+                  </h2>
+                  <span
+                    className="arcade-rank-badge"
+                    style={{ borderColor: displayedRankTier.primaryHex }}
                   >
-                    <PlaySwordsVectorIcon size={15} /> Resume Match
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="sanctum-tapered-rule" aria-hidden="true">
-              <CozyDividerFlourishSvg />
-            </div>
-
-            <div className="sanctum-modal-body gateway-scroll-body">
-            {/* Commander Portrait & Rank Tier Progression Banner */}
-            <div
-              className={`sanctum-rank-banner rank-banner-${displayedRankTier.id}`}
-              aria-label="Player Rank Tier and Portrait"
-            >
-              <div className="rank-portrait-column">
-                <button
-                  type="button"
-                  className={`rank-portrait-shell rank-border-${displayedRankTier.id} clickable-portrait-btn`}
-                  title="Click to Change Profile Photo & Commander Name"
-                  onClick={() => {
-                    getEngine()?.playLobbyClickSfx?.('tab');
-                    setActiveDialog('settings');
-                  }}
-                >
-                  <div className="rank-border-aura" aria-hidden="true"></div>
-                  <div className="rank-border-ring" aria-hidden="true"></div>
-                  <span className="rank-corner-ornament tl" aria-hidden="true"></span>
-                  <span className="rank-corner-ornament tr" aria-hidden="true"></span>
-                  <span className="rank-corner-ornament bl" aria-hidden="true"></span>
-                  <span className="rank-corner-ornament br" aria-hidden="true"></span>
-
-                  <div className="rank-portrait-inner">
-                    {customProfilePhoto || currentUser?.photoURL ? (
-                      <img
-                        src={customProfilePhoto || currentUser?.photoURL || ''}
-                        alt={customCommanderName || currentUser?.displayName || 'Commander'}
-                        className="rank-commander-img"
-                      />
-                    ) : (
-                      <div className="rank-commander-glyph-avatar">
-                        <CommanderSigilVectorIcon sigil={customCommanderAvatar} size={44} />
-                      </div>
-                    )}
-                    <div className="rank-portrait-shimmer" aria-hidden="true"></div>
-                  </div>
-
-                  <div className="rank-crest-seal" aria-hidden="true">
-                    <CommanderSigilVectorIcon sigil={displayedRankTier.crestGlyph} size={14} />
-                  </div>
-                </button>
-              </div>
-
-              <div className="rank-details-column">
-                <div className="rank-title-row">
-                  <div className="rank-title-group">
-                    <span
-                      className="rank-tier-kicker"
-                      style={{ color: displayedRankTier.primaryHex }}
-                    >
-                      Rank {displayedRankTier.numeral} · {displayedRankTier.name} Tier
-                      {' · '}
-                      {customCommanderName ||
-                        (currentUser ? currentUser.displayName || currentUser.email : 'Local Commander')}
-                    </span>
-                    <div className="rank-tier-heading">
-                      <span className="rank-tier-main-title">{displayedRankTier.title}</span>
-                      <span className="rank-border-tag">
-                        ✦ {displayedRankTier.borderEffectName}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="rank-metrics-cluster">
-                    <div className="rank-win-counter">
-                      <span className="rank-win-num">{economy.stats.wins}</span>
-                      <span className="rank-win-label">
-                        {economy.stats.wins === 1 ? 'Victory' : 'Victories'} · {playerRating} ELO
-                      </span>
-                    </div>
-
-                    <div
-                      className={`rank-streak-counter ${
-                        (economy.stats.winStreak || 0) >= 2
-                          ? 'is-hot-streak'
-                          : (economy.stats.winStreak || 0) === 1
-                            ? 'is-active-streak'
-                            : ''
-                      }`}
-                      id="rank-victory-streak-tracker"
-                      title="Current consecutive Victory Streak (resets on a loss)"
-                    >
-                      <div className="rank-streak-top">
-                        <VictoryStreakFlameVectorIcon
-                          size={19}
-                          active={(economy.stats.winStreak || 0) > 0}
-                        />
-                        <span className="rank-streak-num">{economy.stats.winStreak || 0}</span>
-                      </div>
-                      <span className="rank-streak-label">Victory Streak</span>
-                    </div>
-                  </div>
+                    {displayedRankTier.name} {displayedRankTier.numeral}
+                  </span>
                 </div>
-
-                <div className="rank-progress-wrap">
-                  <div className="rank-progress-labels">
-                    <span className="rank-border-desc">{displayedRankTier.borderDescription}</span>
-                    <span className="rank-next-target">
-                      {rankProgress.nextTier
-                        ? `${rankProgress.winsRemaining} more ${
-                            rankProgress.winsRemaining === 1 ? 'win' : 'wins'
-                          } to ${rankProgress.nextTier.name} (${rankProgress.nextTier.minWins}W)`
-                        : 'Max Rank Tier Achieved (21+ Wins)'}
-                    </span>
-                  </div>
-                  <div className="rank-progress-track" aria-hidden="true">
+                <div className="arcade-progress-row">
+                  <span className="arcade-commander-name">
+                    {customCommanderName ||
+                      (currentUser ? currentUser.displayName || currentUser.email : 'Commander')}
+                  </span>
+                  <div className="arcade-xp-track" aria-hidden="true">
                     <div
-                      className="rank-progress-fill"
+                      className="arcade-xp-fill"
                       style={{
                         width: `${rankProgress.progressPercent}%`,
                         background: `linear-gradient(90deg, ${displayedRankTier.secondaryHex}, ${displayedRankTier.primaryHex})`
                       }}
                     ></div>
                   </div>
+                  <span className="arcade-xp-label">
+                    {rankProgress.nextTier
+                      ? `${rankProgress.winsRemaining}W to ${rankProgress.nextTier.name}`
+                      : 'Max Rank'}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* 5 Prominent Action Portal Cards */}
-            <div className="gateway-actions-grid" role="group" aria-label="Sanctum Main Hub Actions">
-              {/* 1. PLAY */}
+            <div className={`arcade-metrics-row ${hasStartedGame ? 'has-resume' : ''}`}>
+              <div
+                className={`arcade-metric-pill streak-pill ${
+                  (economy.stats.winStreak || 0) >= 2
+                    ? 'is-hot-streak'
+                    : (economy.stats.winStreak || 0) === 1
+                      ? 'is-active-streak'
+                      : ''
+                }`}
+                id="rank-victory-streak-tracker"
+                title="Victory Streak"
+              >
+                <VictoryStreakFlameVectorIcon
+                  size={15}
+                  active={(economy.stats.winStreak || 0) > 0}
+                />
+                <span>{economy.stats.winStreak || 0} Streak</span>
+              </div>
+
+              <div className="arcade-metric-pill" title="Skill Rating">
+                <span>{playerRating} ELO</span>
+              </div>
+
               <button
                 type="button"
-                className="gateway-action-card play-card"
+                className="arcade-metric-pill gold-pill"
                 onClick={() => {
-                  requestAppFullscreenPortrait();
                   getEngine()?.playLobbyClickSfx?.('tab');
-                  setActiveDialog('play');
+                  setActiveDialog('armory');
                 }}
+                title="Open Armory"
               >
-                <div className="gateway-card-glow" aria-hidden="true"></div>
-                <div className="gateway-card-icon" aria-hidden="true">
-                  <PlaySwordsVectorIcon size={32} />
-                </div>
-                <div className="gateway-card-content">
-                  <span className="gateway-card-title">PLAY</span>
-                  <span className="gateway-card-sub">
-                    Bullet · Blitz · Rapid · Play vs Bots · Online PvP · 2P
-                  </span>
-                </div>
-                <span className="gateway-card-chevron" aria-hidden="true">›</span>
+                <GoldCoinVectorIcon size={14} />
+                <span>{economy.gold} Gold</span>
               </button>
 
-              {/* 2. SKINS */}
+              {hasStartedGame && (
+                <button
+                  type="button"
+                  className="sanctum-modal-close gold-trim arcade-resume-btn"
+                  onClick={() => {
+                    requestAppFullscreenPortrait();
+                    getEngine()?.setLobbyPaused?.(false);
+                    setActiveDialog('none');
+                  }}
+                >
+                  <PlaySwordsVectorIcon size={14} />
+                  <span>Resume</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Floating Arcane Command Dock */}
+          <div className="arcade-bottom-dock" role="group" aria-label="Sanctum Main Hub Actions">
+            <button
+              type="button"
+              className="arcade-play-hero-btn"
+              onClick={() => {
+                requestAppFullscreenPortrait();
+                getEngine()?.playLobbyClickSfx?.('tab');
+                setActiveDialog('play');
+              }}
+            >
+              <span className="arcade-play-sheen" aria-hidden="true"></span>
+              <span className="arcade-play-icon" aria-hidden="true">
+                <PlaySwordsVectorIcon size={24} />
+              </span>
+              <span className="arcade-play-text">
+                <span className="arcade-play-title">PLAY NOW</span>
+                <span className="arcade-play-sub">Bullet · Blitz · Rapid · Bot · PvP</span>
+              </span>
+              <span className="arcade-play-arrow" aria-hidden="true">▶</span>
+            </button>
+
+            <div className="arcade-quick-dock-grid">
               <button
                 type="button"
-                className="gateway-action-card skins-card"
+                className="gateway-action-card skins-card arcade-dock-tile"
                 onClick={() => {
                   getEngine()?.playLobbyClickSfx?.('tab');
                   setActiveDialog('armory');
                 }}
               >
-                <div className="gateway-card-glow" aria-hidden="true"></div>
-                <div className="gateway-card-icon" aria-hidden="true">
-                  <SkinsCrownVectorIcon size={30} />
-                </div>
-                <div className="gateway-card-content">
-                  <span className="gateway-card-title">SKINS</span>
-                  <span className="gateway-card-sub">Piece Sets · Sceneries · Boards · Finishes</span>
-                </div>
-                <span className="gateway-card-chevron" aria-hidden="true">›</span>
+                <span className="arcade-tile-icon" aria-hidden="true">
+                  <SkinsCrownVectorIcon size={20} />
+                </span>
+                <span className="gateway-card-title">SKINS</span>
+                <span className="arcade-tile-meta">{equippedArchetypeObj.name}</span>
               </button>
 
-              {/* 3. LOGIN (GOOGLE) + LOAD LAST SAVE / PROGRESS */}
-              <div
-                className={`gateway-action-card login-card ${currentUser ? 'signed-in' : ''}`}
-                role="region"
-                aria-label="Google Cloud Login and Load Last Save"
+              <button
+                type="button"
+                className="gateway-action-card leaderboards-card arcade-dock-tile"
+                onClick={() => {
+                  getEngine()?.playLobbyClickSfx?.('tab');
+                  setActiveDialog('leaderboard');
+                }}
               >
-                <div className="gateway-card-glow" aria-hidden="true"></div>
-                <div
-                  className="gateway-login-main-click"
+                <span className="arcade-tile-icon" aria-hidden="true">
+                  <TrophyChaliceVectorIcon size={20} />
+                </span>
+                <span className="gateway-card-title">RANKS</span>
+                <span className="arcade-tile-meta">{economy.stats.wins} Wins</span>
+              </button>
+
+              <div
+                className={`gateway-action-card login-card arcade-dock-tile arcade-cloud-tile ${
+                  currentUser ? 'signed-in' : ''
+                }`}
+                role="region"
+                aria-label="Google Cloud Save"
+              >
+                <button
+                  type="button"
+                  className="arcade-cloud-head-btn"
                   onClick={() => {
-                    if (currentUser) {
-                      setActiveDialog('settings');
-                    } else {
-                      handleGoogleLogin();
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      if (currentUser) setActiveDialog('settings');
-                      else handleGoogleLogin();
-                    }
+                    if (currentUser) setActiveDialog('settings');
+                    else handleGoogleLogin();
                   }}
                 >
-                  <div className="gateway-card-icon" aria-hidden="true">
-                    {currentUser ? <CloudCheckVectorIcon size={28} /> : <GoogleShieldVectorIcon size={28} />}
-                  </div>
-                  <div className="gateway-card-content">
-                    <span className="gateway-card-title">
-                      {currentUser ? 'GOOGLE SYNCED' : 'LOGIN (GOOGLE)'}
-                    </span>
-                    <span className="gateway-card-sub">
-                      {currentUser
-                        ? `${currentUser.displayName || currentUser.email} · Cloud Active`
-                        : 'Sign In, Save & Load Player Progress from Cloud'}
-                    </span>
-                    {lastCloudSaveSnap && (
-                      <span className="gateway-card-save-meta">
-                        Last Save: {lastCloudSaveSnap.gold}G · {lastCloudSaveSnap.wins}W ·{' '}
-                        {formatCloudSaveTime(lastCloudSaveSnap.updatedAt)}
-                      </span>
+                  <span className="arcade-tile-icon" aria-hidden="true">
+                    {currentUser ? (
+                      <CloudCheckVectorIcon size={20} />
+                    ) : (
+                      <GoogleShieldVectorIcon size={20} />
                     )}
-                  </div>
-                </div>
-
-                <div className="gateway-login-quick-actions">
+                  </span>
+                  <span className="gateway-card-title">
+                    {currentUser ? 'SYNCED' : 'CLOUD'}
+                  </span>
+                </button>
+                <div className="gateway-login-quick-actions arcade-cloud-pills">
                   <button
                     type="button"
                     className="gateway-load-save-btn"
@@ -3187,9 +3143,9 @@ export default function App() {
                       e.stopPropagation();
                       handleLoadLastSave();
                     }}
-                    title="Load Last Saved Progress from Google Cloud"
+                    title="Load Last Save from Google Cloud"
                   >
-                    Load Last Save
+                    Load
                   </button>
                   <button
                     type="button"
@@ -3197,59 +3153,30 @@ export default function App() {
                     id="btn-gateway-sync-save"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (currentUser) {
-                        handleManualCloudSync();
-                      } else {
-                        handleGoogleLogin();
-                      }
+                      if (currentUser) handleManualCloudSync();
+                      else handleGoogleLogin();
                     }}
-                    title={currentUser ? 'Save Current Progress to Cloud' : 'Sign In with Google'}
+                    title={currentUser ? 'Save Progress Now' : 'Sign In with Google'}
                   >
-                    {currentUser ? 'Save Now' : 'Sign In'}
+                    {currentUser ? 'Save' : 'Sign In'}
                   </button>
                 </div>
               </div>
 
-              {/* 4. LIVE LEADERBOARDS */}
               <button
                 type="button"
-                className="gateway-action-card leaderboards-card"
-                onClick={() => {
-                  getEngine()?.playLobbyClickSfx?.('tab');
-                  setActiveDialog('leaderboard');
-                }}
-              >
-                <div className="gateway-card-glow" aria-hidden="true"></div>
-                <div className="gateway-card-icon" aria-hidden="true">
-                  <TrophyChaliceVectorIcon size={30} />
-                </div>
-                <div className="gateway-card-content">
-                  <span className="gateway-card-title">LIVE LEADERBOARDS</span>
-                  <span className="gateway-card-sub">Tier Feed · Bronze to Obsidian Rankings</span>
-                </div>
-                <span className="gateway-card-chevron" aria-hidden="true">›</span>
-              </button>
-
-              {/* 5. SETTINGS */}
-              <button
-                type="button"
-                className="gateway-action-card settings-card"
+                className="gateway-action-card settings-card arcade-dock-tile"
                 onClick={() => {
                   getEngine()?.playLobbyClickSfx?.('tab');
                   setActiveDialog('settings');
                 }}
               >
-                <div className="gateway-card-glow" aria-hidden="true"></div>
-                <div className="gateway-card-icon" aria-hidden="true">
-                  <SettingsGearVectorIcon size={28} />
-                </div>
-                <div className="gateway-card-content">
-                  <span className="gateway-card-title">SETTINGS</span>
-                  <span className="gateway-card-sub">Change Profile Photo &amp; Name · Audio Volume</span>
-                </div>
-                <span className="gateway-card-chevron" aria-hidden="true">›</span>
+                <span className="arcade-tile-icon" aria-hidden="true">
+                  <SettingsGearVectorIcon size={20} />
+                </span>
+                <span className="gateway-card-title">SETTINGS</span>
+                <span className="arcade-tile-meta">Audio · GFX</span>
               </button>
-            </div>
             </div>
           </div>
         </div>
@@ -3266,7 +3193,7 @@ export default function App() {
           }}
         >
           <div
-            className="sanctum-modal-card"
+            className="sanctum-modal-card compact-play-modal"
             id="arena-hub-drawer"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
@@ -3278,651 +3205,520 @@ export default function App() {
             <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
             <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
-            <div className="sanctum-modal-header">
+            <div className="sanctum-modal-header compact-modal-header">
               <div className="sanctum-header-titles">
-                <div className="cozy-ribbon-kicker-wrap">
-                  <CozyRibbonBannerSvg />
-                  <div className="sanctum-modal-kicker">
-                    {hasStartedGame ? 'Sanctum Battlegrounds' : 'Royal Tabletop Arena'}
-                  </div>
-                </div>
                 <h2 className="sanctum-modal-title" id="arena-modal-title">
-                  {hasStartedGame ? 'Match Setup' : 'Wizard Chess'}
+                  {hasStartedGame ? 'Match Setup' : 'Battle Setup'}
                 </h2>
                 <div className="sanctum-record-line">
-                  <span>Treasury: <strong>{economy.gold} Gold</strong></span>
+                  <span><strong>{economy.gold}</strong> Gold</span>
                   <span aria-hidden="true">·</span>
-                  <span>Victories: <strong>{economy.stats.wins}</strong></span>
+                  <span><strong>{economy.stats.wins}</strong> Wins</span>
                   <span aria-hidden="true">·</span>
-                  <span>Pieces Shattered: <strong>{economy.stats.captures}</strong></span>
+                  <span><strong>{playerRating}</strong> ELO</span>
                 </div>
               </div>
 
-              <div className="armory-header-right" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div className="armory-header-right">
                 {hasStartedGame && (
                   <button
                     type="button"
                     className="sanctum-modal-close"
-                    onClick={() => setActiveDialog("none")}
+                    onClick={() => setActiveDialog('none')}
                   >
-                    Resume Match
+                    Resume
                   </button>
                 )}
                 <button
                   type="button"
                   className="sanctum-modal-close gold-trim"
-                  onClick={() => setActiveDialog("gateway")}
+                  onClick={() => setActiveDialog('gateway')}
                 >
-                  ← Back to Lobby
+                  ← Lobby
                 </button>
               </div>
-            </div>
-
-            <div className="sanctum-tapered-rule" aria-hidden="true">
-              <CozyDividerFlourishSvg />
             </div>
 
             <div className="sanctum-modal-body arena-modal-scroll-body">
-            {/* Engraved 4-Slot Sanctum Loadout Ledger */}
-            <div className="sanctum-loadout-ledger" aria-label="Equipped Sanctum Loadout">
-              <button
-                type="button"
-                className="loadout-ledger-slot"
-                onClick={() => {
-                  setArmoryTab('types');
-                  setActiveDialog('armory');
-                }}
-              >
-                <span className="ledger-slot-label">Sculpted Army</span>
-                <span className="ledger-slot-value">
-                  {PIECE_ARCHETYPES.find((a) => a.id === economy.activePieceType)?.name}
-                </span>
-                <span className="ledger-slot-action">Change Set</span>
-              </button>
-
-              <button
-                type="button"
-                className="loadout-ledger-slot"
-                onClick={() => {
-                  setArmoryTab('boards');
-                  setActiveDialog('armory');
-                }}
-              >
-                <span className="ledger-slot-label">Altar &amp; Chamber</span>
-                <span className="ledger-slot-value">
-                  {BOARD_SKINS.find((b) => b.id === economy.activeBoardSkin)?.name}
-                </span>
-                <span className="ledger-slot-action">Change Board</span>
-              </button>
-
-              <button
-                type="button"
-                className="loadout-ledger-slot"
-                onClick={() => {
-                  setArmoryTab('sceneries');
-                  setActiveDialog('armory');
-                }}
-              >
-                <span className="ledger-slot-label">3D World Scenery</span>
-                <span className="ledger-slot-value">
-                  {WORLD_SCENERIES.find((w) => w.id === economy.activeScenery)?.name}
-                </span>
-                <span className="ledger-slot-action">Change Scenery</span>
-              </button>
-
-              <button
-                type="button"
-                className="loadout-ledger-slot"
-                onClick={() => {
-                  setArmoryTab('pieces');
-                  setActiveDialog('armory');
-                }}
-              >
-                <span className="ledger-slot-label">Stone &amp; Metal Finish</span>
-                <span className="ledger-slot-value">
-                  {PIECE_SKINS.find((s) => s.id === economy.activePieceSkin)?.name}
-                </span>
-                <span className="ledger-slot-action">Change Finish</span>
-              </button>
-            </div>
-
-            <div
-              className="sanctum-tab-bar segmented-tabs"
-              role="tablist"
-              aria-label="Match Mode Tabs"
-              onKeyDown={(e) => {
-                const order: Array<'online' | 'bot' | 'pass'> = ['online', 'bot', 'pass'];
-                const idx = order.indexOf(arenaTab);
-                if (e.key === 'ArrowRight') {
-                  e.preventDefault();
-                  setArenaTab(order[(idx + 1) % order.length]);
-                } else if (e.key === 'ArrowLeft') {
-                  e.preventDefault();
-                  setArenaTab(order[(idx - 1 + order.length) % order.length]);
-                }
-              }}
-            >
-              <button
-                type="button"
-                role="tab"
-                tabIndex={arenaTab === 'online' ? 0 : -1}
-                aria-selected={arenaTab === 'online'}
-                className={`sanctum-tab-btn ${arenaTab === 'online' ? 'active' : ''}`}
-                onClick={() => setArenaTab('online')}
-              >
-                <span className="tab-numeral">I.</span>
-                <span>Online Match</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                tabIndex={arenaTab === 'bot' ? 0 : -1}
-                aria-selected={arenaTab === 'bot'}
-                className={`sanctum-tab-btn ${arenaTab === 'bot' ? 'active' : ''}`}
-                onClick={() => setArenaTab('bot')}
-              >
-                <span className="tab-numeral">II.</span>
-                <span>Play vs Bots</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                tabIndex={arenaTab === 'pass' ? 0 : -1}
-                aria-selected={arenaTab === 'pass'}
-                className={`sanctum-tab-btn ${arenaTab === 'pass' ? 'active' : ''}`}
-                onClick={() => setArenaTab('pass')}
-              >
-                <span className="tab-numeral">III.</span>
-                <span>2P Pass &amp; Play</span>
-              </button>
-            </div>
-
-            {/* BULLET · BLITZ · RAPID GAME MODE & TIME CONTROL SELECTOR */}
-            <div className="time-control-modes-section" aria-label="Select Game Mode Time Control">
-              <div className="sanctum-section-head time-control-section-head">
-                <span className="sanctum-field-label">Select Game Mode (Time Control)</span>
-                <span className="sanctum-field-note">
-                  Active Mode:{' '}
-                  <strong>
-                    {TIME_CONTROL_CATEGORIES.find((c) => c.id === timeControlCategory)?.name} (
-                    {TIME_CONTROL_CATEGORIES.flatMap((c) => c.presets).find(
-                      (p) => p.id === timeControlPresetId
-                    )?.shortLabel || '5 Min'}
-                    )
-                  </strong>
-                </span>
-              </div>
-
-              <div className="time-control-cards-grid">
-                {TIME_CONTROL_CATEGORIES.map((modeCat) => {
-                  const isCatSelected = timeControlCategory === modeCat.id;
-                  return (
-                    <div
-                      key={modeCat.id}
-                      className={`difficulty-card time-mode-card mode-${modeCat.id} ${
-                        isCatSelected ? 'selected' : ''
-                      }`}
-                      onClick={() => handleSelectTimeControlCategory(modeCat.id)}
-                      role="button"
-                      tabIndex={0}
-                      aria-pressed={isCatSelected}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleSelectTimeControlCategory(modeCat.id);
-                        }
-                      }}
-                    >
-                      <div className="time-mode-card-top">
-                        <div className="time-mode-icon-badge" aria-hidden="true">
-                          {modeCat.id === 'bullet' ? (
-                            <BulletModeVectorIcon size={24} />
-                          ) : modeCat.id === 'blitz' ? (
-                            <BlitzModeVectorIcon size={24} />
-                          ) : (
-                            <RapidModeVectorIcon size={24} />
-                          )}
-                        </div>
-                        <div className="time-mode-titles">
-                          <div className="difficulty-card-kicker">
-                            <span>{modeCat.rangeTag}</span>
-                          </div>
-                          <div className="difficulty-name">{modeCat.name}</div>
-                        </div>
-                      </div>
-
-                      <p className="difficulty-desc time-mode-desc">{modeCat.description}</p>
-
-                      <div
-                        className="time-preset-pills-row"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {modeCat.presets.map((preset) => {
-                          const isPresetActive = timeControlPresetId === preset.id;
-                          return (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              className={`time-preset-pill-btn ${isPresetActive ? 'active' : ''}`}
-                              onClick={() => handleSelectTimeControlPreset(preset)}
-                            >
-                              {preset.shortLabel}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* TAB 1: PLAY VS BOT (Easy, Medium, Hard) */}
-            {arenaTab === 'bot' && (
-              <div className="arena-tab-section-stack">
-                <div className="sanctum-section-head">
-                  <span className="sanctum-field-label">Select Opponent Rank</span>
-                  <span className="sanctum-field-note">
-                    Pawn +15G · Minor Piece +35G · Rook +55G · Queen +95G
+              {/* Compact 4-Slot Equipped Loadout Pills */}
+              <div className="sanctum-loadout-ledger compact-loadout-strip" aria-label="Equipped Sanctum Loadout">
+                <button
+                  type="button"
+                  className="loadout-ledger-slot"
+                  onClick={() => {
+                    setArmoryTab('types');
+                    setActiveDialog('armory');
+                  }}
+                >
+                  <span className="ledger-slot-label">Army</span>
+                  <span className="ledger-slot-value">
+                    {PIECE_ARCHETYPES.find((a) => a.id === economy.activePieceType)?.name}
                   </span>
-                </div>
-
-                <div className="difficulty-grid">
-                  {(
-                    [
-                      {
-                        id: 'easy',
-                        numeral: 'I',
-                        rank: 'Novice Acolyte',
-                        title: 'Easy',
-                        desc: 'Forgiving stone automaton suited for learning board lines and setting up melee captures.',
-                        reward: '150 Gold Victory'
-                      },
-                      {
-                        id: 'medium',
-                        numeral: 'II',
-                        rank: 'Sanctum Warden',
-                        title: 'Medium',
-                        desc: 'Measured tactical guardian that contests the center squares and punishes unguarded pieces.',
-                        reward: '225 Gold Victory'
-                      },
-                      {
-                        id: 'hard',
-                        numeral: 'III',
-                        rank: 'Grandmaster Archon',
-                        title: 'Hard',
-                        desc: 'Deep multi-ply tactical search with ruthless positional calculation and endgame precision.',
-                        reward: '350 Gold Victory'
-                      }
-                    ] as const
-                  ).map((tier) => (
-                    <button
-                      type="button"
-                      key={tier.id}
-                      className={`difficulty-card ${botDifficulty === tier.id ? 'selected' : ''}`}
-                      onClick={() => {
-                        setBotDifficulty(tier.id);
-                        getEngine()?.setBotDifficulty?.(tier.id);
-                      }}
-                    >
-                      <div className="difficulty-card-kicker">
-                        <span>Rank {tier.numeral}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{tier.title}</span>
-                      </div>
-                      <div className="difficulty-name">{tier.rank}</div>
-                      <p className="difficulty-desc">{tier.desc}</p>
-                      <div className="difficulty-reward">{tier.reward}</div>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="sanctum-section-head">
-                  <span className="sanctum-field-label">Choose Allegiance</span>
-                  <span className="sanctum-field-note">
-                    Victory Purse: +{MATCH_WIN_BOUNTY[`bot_${botDifficulty}`]} Gold
-                  </span>
-                </div>
-
-                <div className="side-picker-row">
-                  <button
-                    type="button"
-                    className={`side-picker-btn ${botSide === 'w' ? 'selected' : ''}`}
-                    onClick={() => setBotSide('w')}
-                  >
-                    <span className="side-glyph" aria-hidden="true">♔</span>
-                    <span className="side-text-wrap">
-                      <span className="side-title">White Army</span>
-                      <span className="side-sub">First Move on the Altar</span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`side-picker-btn ${botSide === 'b' ? 'selected' : ''}`}
-                    onClick={() => setBotSide('b')}
-                  >
-                    <span className="side-glyph" aria-hidden="true">♚</span>
-                    <span className="side-text-wrap">
-                      <span className="side-title">Black Army</span>
-                      <span className="side-sub">Counter-Strike from the North</span>
-                    </span>
-                  </button>
-                </div>
+                </button>
 
                 <button
                   type="button"
-                  className="arena-primary-btn"
-                  onClick={handleStartBotGame}
+                  className="loadout-ledger-slot"
+                  onClick={() => {
+                    setArmoryTab('boards');
+                    setActiveDialog('armory');
+                  }}
                 >
-                  Enter the Sanctum · Start Match
+                  <span className="ledger-slot-label">Board</span>
+                  <span className="ledger-slot-value">
+                    {BOARD_SKINS.find((b) => b.id === economy.activeBoardSkin)?.name}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="loadout-ledger-slot"
+                  onClick={() => {
+                    setArmoryTab('sceneries');
+                    setActiveDialog('armory');
+                  }}
+                >
+                  <span className="ledger-slot-label">Realm</span>
+                  <span className="ledger-slot-value">
+                    {WORLD_SCENERIES.find((w) => w.id === economy.activeScenery)?.name}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="loadout-ledger-slot"
+                  onClick={() => {
+                    setArmoryTab('pieces');
+                    setActiveDialog('armory');
+                  }}
+                >
+                  <span className="ledger-slot-label">Finish</span>
+                  <span className="ledger-slot-value">
+                    {PIECE_SKINS.find((s) => s.id === economy.activePieceSkin)?.name}
+                  </span>
                 </button>
               </div>
-            )}
 
-            {/* TAB 2: PLAYER VS PLAYER (ONLINE MATCHMAKING + ROOM CODES) */}
-            {arenaTab === 'online' && (
-              <div className="arena-tab-section-stack">
-                <div className="online-section-box">
-                  <div className="online-section-header">
-                    <div>
-                      <div className="sanctum-field-label">Public Matchmaking Queue</div>
-                      <p className="online-section-sub">
-                        Finds suitable online players currently searching in the queue by Skill Rating &amp; Army preference. Auto-cancels after 30s if no match is found.
-                      </p>
-                    </div>
-                    <div className="matchmaking-rating-badge">
-                      <span className="rating-badge-label">Your Rating</span>
-                      <span className="rating-badge-val">{playerRating} ELO</span>
-                    </div>
+              {/* Compact 3-Column Mode Switcher */}
+              <div
+                className="sanctum-tab-bar segmented-tabs arena-mode-tabs"
+                role="tablist"
+                aria-label="Match Mode Tabs"
+                onKeyDown={(e) => {
+                  const order: Array<'online' | 'bot' | 'pass'> = ['online', 'bot', 'pass'];
+                  const idx = order.indexOf(arenaTab);
+                  if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    setArenaTab(order[(idx + 1) % order.length]);
+                  } else if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    setArenaTab(order[(idx - 1 + order.length) % order.length]);
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  tabIndex={arenaTab === 'online' ? 0 : -1}
+                  aria-selected={arenaTab === 'online'}
+                  className={`sanctum-tab-btn ${arenaTab === 'online' ? 'active' : ''}`}
+                  onClick={() => setArenaTab('online')}
+                >
+                  <span>Online PvP</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  tabIndex={arenaTab === 'bot' ? 0 : -1}
+                  aria-selected={arenaTab === 'bot'}
+                  className={`sanctum-tab-btn ${arenaTab === 'bot' ? 'active' : ''}`}
+                  onClick={() => setArenaTab('bot')}
+                >
+                  <span>Vs AI Bot</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  tabIndex={arenaTab === 'pass' ? 0 : -1}
+                  aria-selected={arenaTab === 'pass'}
+                  className={`sanctum-tab-btn ${arenaTab === 'pass' ? 'active' : ''}`}
+                  onClick={() => setArenaTab('pass')}
+                >
+                  <span>2P Pass</span>
+                </button>
+              </div>
+
+              {/* BULLET · BLITZ · RAPID TIME CONTROL */}
+              <div className="time-control-modes-section compact-time-section" aria-label="Time Control">
+                <div className="sanctum-section-head time-control-section-head">
+                  <span className="sanctum-field-label">Time Control</span>
+                  <span className="sanctum-field-note">
+                    <strong>
+                      {TIME_CONTROL_CATEGORIES.find((c) => c.id === timeControlCategory)?.name} ·{' '}
+                      {TIME_CONTROL_CATEGORIES.flatMap((c) => c.presets).find(
+                        (p) => p.id === timeControlPresetId
+                      )?.shortLabel || '5m'}
+                    </strong>
+                  </span>
+                </div>
+
+                <div className="time-control-cards-grid">
+                  {TIME_CONTROL_CATEGORIES.map((modeCat) => {
+                    const isCatSelected = timeControlCategory === modeCat.id;
+                    return (
+                      <div
+                        key={modeCat.id}
+                        className={`difficulty-card time-mode-card mode-${modeCat.id} ${
+                          isCatSelected ? 'selected' : ''
+                        }`}
+                        onClick={() => handleSelectTimeControlCategory(modeCat.id)}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={isCatSelected}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSelectTimeControlCategory(modeCat.id);
+                          }
+                        }}
+                      >
+                        <div className="time-mode-card-top">
+                          <div className="time-mode-icon-badge" aria-hidden="true">
+                            {modeCat.id === 'bullet' ? (
+                              <BulletModeVectorIcon size={18} />
+                            ) : modeCat.id === 'blitz' ? (
+                              <BlitzModeVectorIcon size={18} />
+                            ) : (
+                              <RapidModeVectorIcon size={18} />
+                            )}
+                          </div>
+                          <div className="time-mode-titles">
+                            <div className="difficulty-name">{modeCat.name}</div>
+                            <div className="difficulty-card-kicker">{modeCat.rangeTag}</div>
+                          </div>
+                        </div>
+
+                        <div
+                          className="time-preset-pills-row"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {modeCat.presets.map((preset) => {
+                            const isPresetActive = timeControlPresetId === preset.id;
+                            return (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                className={`time-preset-pill-btn ${isPresetActive ? 'active' : ''}`}
+                                onClick={() => handleSelectTimeControlPreset(preset)}
+                              >
+                                {preset.shortLabel}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* TAB 1: PLAY VS BOT */}
+              {arenaTab === 'bot' && (
+                <div className="arena-tab-section-stack">
+                  <div className="sanctum-section-head">
+                    <span className="sanctum-field-label">Bot Difficulty</span>
+                    <span className="sanctum-field-note">
+                      Win Reward: +{MATCH_WIN_BOUNTY[`bot_${botDifficulty}`]}G
+                    </span>
                   </div>
 
-                  <div className="online-loadout-plaque">
-                    <div className="online-loadout-info">
-                      <span className="online-loadout-kicker">
-                        Your Equipped Online Army (Visible to Opponent)
-                      </span>
-                      <div className="online-loadout-name">
-                        <span className="online-loadout-glyph" aria-hidden="true">
-                          {equippedArchetypeObj.id === 'dragon_elemental'
-                            ? '🐉'
-                            : equippedArchetypeObj.id === 'arcane_cyber'
-                              ? '⚡'
-                              : equippedArchetypeObj.id === 'classic_staunton'
-                                ? '♔'
-                                : '⚔'}
-                        </span>
-                        <span>{equippedArchetypeObj.name}</span>
-                        <span className="online-loadout-sep">·</span>
-                        <span className="online-loadout-skin">{equippedPieceSkinObj.name}</span>
-                      </div>
-                      <p className="online-loadout-desc">
-                        Both players&apos; equipped 3D sculptures &amp; finishes render live on their side of the altar.
-                      </p>
-                    </div>
+                  <div className="difficulty-grid">
+                    {(
+                      [
+                        { id: 'easy', title: 'Easy', rank: 'Novice', reward: '+150G' },
+                        { id: 'medium', title: 'Medium', rank: 'Warden', reward: '+225G' },
+                        { id: 'hard', title: 'Hard', rank: 'Archon', reward: '+350G' }
+                      ] as const
+                    ).map((tier) => (
+                      <button
+                        type="button"
+                        key={tier.id}
+                        className={`difficulty-card compact-diff-card ${botDifficulty === tier.id ? 'selected' : ''}`}
+                        onClick={() => {
+                          setBotDifficulty(tier.id);
+                          getEngine()?.setBotDifficulty?.(tier.id);
+                        }}
+                      >
+                        <div className="difficulty-card-kicker">{tier.title}</div>
+                        <div className="difficulty-name">{tier.rank}</div>
+                        <div className="difficulty-reward">{tier.reward}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="side-picker-row">
                     <button
                       type="button"
-                      className="sanctum-modal-close gold-trim"
-                      onClick={() => {
-                        setArmoryTab('types');
-                        setActiveDialog('armory');
-                      }}
+                      className={`side-picker-btn ${botSide === 'w' ? 'selected' : ''}`}
+                      onClick={() => setBotSide('w')}
                     >
-                      Change Set
+                      <span className="side-glyph" aria-hidden="true">♔</span>
+                      <span className="side-title">Play White</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`side-picker-btn ${botSide === 'b' ? 'selected' : ''}`}
+                      onClick={() => setBotSide('b')}
+                    >
+                      <span className="side-glyph" aria-hidden="true">♚</span>
+                      <span className="side-title">Play Black</span>
                     </button>
                   </div>
 
-                  {(onlineWhiteArmyName || onlineBlackArmyName) && activeRoomCode && (
-                    <div className="online-clash-banner">
-                      <div className="online-clash-side">
-                        <span className="clash-side-tag">♔ White Army</span>
-                        <span className="clash-side-val">
-                          {onlineWhiteArmyName || 'Awaiting Challenger...'}
+                  <button
+                    type="button"
+                    className="arena-primary-btn"
+                    onClick={handleStartBotGame}
+                  >
+                    Start Match
+                  </button>
+                </div>
+              )}
+
+              {/* TAB 2: ONLINE PVP */}
+              {arenaTab === 'online' && (
+                <div className="arena-tab-section-stack">
+                  <div className="online-section-box">
+                    <div className="online-section-header">
+                      <div>
+                        <div className="sanctum-field-label">Public Matchmaking</div>
+                        <span className="online-loadout-desc">
+                          {equippedArchetypeObj.name} · {equippedPieceSkinObj.name}
                         </span>
                       </div>
-                      <span className="online-clash-vs">VS</span>
-                      <div className="online-clash-side">
-                        <span className="clash-side-tag">♚ Black Army</span>
-                        <span className="clash-side-val">
-                          {onlineBlackArmyName || 'Awaiting Challenger...'}
-                        </span>
+                      <div className="matchmaking-rating-badge">
+                        <span className="rating-badge-val">{playerRating} ELO</span>
                       </div>
                     </div>
-                  )}
 
-                  {onlineQueueStatus !== 'searching' && (
-                    <div className="matchmaking-pref-row">
-                      <span className="matchmaking-pref-label">Preferred Army:</span>
-                      <div className="matchmaking-pref-btns">
-                        {(
-                          [
-                            { id: 'any', label: '⚔ Any Army (Fastest)' },
-                            { id: 'w', label: '♔ White' },
-                            { id: 'b', label: '♚ Black' }
-                          ] as const
-                        ).map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            className={`matchmaking-pref-btn ${matchmakingPreferredColor === opt.id ? 'selected' : ''}`}
-                            onClick={() => setMatchmakingPreferredColor(opt.id)}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {onlineQueueStatus === 'searching' ? (
-                    <div className="matchmaking-searching-box">
-                      <div className="searching-top-row">
-                        <div className="searching-spinner" aria-hidden="true"></div>
-                        <div className="searching-text-wrap">
-                          <div className="searching-title-row">
-                            <span className="searching-title">
-                              Finding Suitable Online Player...
-                            </span>
-                            <span className="searching-timer-badge">
-                              {matchmakingRemainingSec}s / 30s
-                            </span>
-                          </div>
-                          <div className="searching-sub">
-                            Skill Range: {Math.max(800, playerRating - matchmakingRatingWindow)} –{' '}
-                            {playerRating + matchmakingRatingWindow} ELO ·{' '}
-                            {matchmakingQueueCount > 1
-                              ? `${matchmakingQueueCount} Players in Queue`
-                              : 'Scanning Sanctum Queue (Auto-cancels in ' +
-                                matchmakingRemainingSec +
-                                's)'}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          className="sanctum-modal-close"
-                          onClick={handleCancelMatchmaking}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                      <div className="searching-progress-track" aria-hidden="true">
-                        <div
-                          className="searching-progress-fill"
-                          style={{
-                            width: `${Math.max(0, Math.min(100, (matchmakingRemainingSec / 30) * 100))}%`
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {matchmakingTimedOut && (
-                        <div className="matchmaking-timeout-banner" role="status">
-                          <span>
-                            ⏱ No suitable online challenger found within 30s. Matchmaking was cancelled.
+                    {(onlineWhiteArmyName || onlineBlackArmyName) && activeRoomCode && (
+                      <div className="online-clash-banner">
+                        <div className="online-clash-side">
+                          <span className="clash-side-tag">♔ White</span>
+                          <span className="clash-side-val">
+                            {onlineWhiteArmyName || 'Waiting...'}
                           </span>
                         </div>
-                      )}
-                      <button
-                        type="button"
-                        className="arena-primary-btn"
-                        onClick={handleQuickMatchmaking}
-                      >
-                        {matchmakingTimedOut
-                          ? 'Search Again for Suitable Challenger (30s)'
-                          : 'Find Suitable Online Match (30s Max)'}
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                <div className="online-divider-row">
-                  <span>Private Chamber Cipher</span>
-                </div>
-
-                <div className="online-room-split">
-                  <div className="online-room-col">
-                    <div className="sanctum-field-label">Host Private Chamber</div>
-                    <div className="side-picker-row compact">
-                      <button
-                        type="button"
-                        className={`side-picker-btn compact ${onlinePreferredSide === 'w' ? 'selected' : ''}`}
-                        onClick={() => setOnlinePreferredSide('w')}
-                      >
-                        ♔ White Army
-                      </button>
-                      <button
-                        type="button"
-                        className={`side-picker-btn compact ${onlinePreferredSide === 'b' ? 'selected' : ''}`}
-                        onClick={() => setOnlinePreferredSide('b')}
-                      >
-                        ♚ Black Army
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      className="arena-secondary-btn"
-                      onClick={handleCreatePrivateRoom}
-                    >
-                      Create 4-Letter Room
-                    </button>
-
-                    {activeRoomCode && (
-                      <div className="created-room-box">
-                        <div className="created-room-code">{activeRoomCode}</div>
-                        <div className="created-room-status">
-                          {bothPlayersConnected ? '2/2 Masters Present' : 'Awaiting Second Master...'}
-                        </div>
-                        <div className="created-room-actions">
-                          <button type="button" className="sanctum-modal-close" onClick={handleCopyRoomCode}>
-                            Copy Code
-                          </button>
-                          <button type="button" className="sanctum-modal-close" onClick={handleCopyInviteLink}>
-                            Copy Link
-                          </button>
-                          <button
-                            type="button"
-                            className="sanctum-modal-close gold-trim"
-                            onClick={() => {
-                              setHasStartedGame(true);
-                              setActiveDialog('none');
-                            }}
-                          >
-                            Enter Board
-                          </button>
+                        <span className="online-clash-vs">VS</span>
+                        <div className="online-clash-side">
+                          <span className="clash-side-tag">♚ Black</span>
+                          <span className="clash-side-val">
+                            {onlineBlackArmyName || 'Waiting...'}
+                          </span>
                         </div>
                       </div>
                     )}
+
+                    {onlineQueueStatus !== 'searching' && (
+                      <div className="matchmaking-pref-row">
+                        <span className="matchmaking-pref-label">Side:</span>
+                        <div className="matchmaking-pref-btns">
+                          {(
+                            [
+                              { id: 'any', label: '⚔ Any' },
+                              { id: 'w', label: '♔ White' },
+                              { id: 'b', label: '♚ Black' }
+                            ] as const
+                          ).map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              className={`matchmaking-pref-btn ${matchmakingPreferredColor === opt.id ? 'selected' : ''}`}
+                              onClick={() => setMatchmakingPreferredColor(opt.id)}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {onlineQueueStatus === 'searching' ? (
+                      <div className="matchmaking-searching-box">
+                        <div className="searching-top-row">
+                          <div className="searching-spinner" aria-hidden="true"></div>
+                          <div className="searching-text-wrap">
+                            <div className="searching-title-row">
+                              <span className="searching-title">Finding Player...</span>
+                              <span className="searching-timer-badge">
+                                {matchmakingRemainingSec}s / 30s
+                              </span>
+                            </div>
+                            <div className="searching-sub">
+                              {Math.max(800, playerRating - matchmakingRatingWindow)}–{playerRating + matchmakingRatingWindow} ELO
+                              {matchmakingQueueCount > 1 ? ` · ${matchmakingQueueCount} Online` : ''}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="sanctum-modal-close"
+                            onClick={handleCancelMatchmaking}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        <div className="searching-progress-track" aria-hidden="true">
+                          <div
+                            className="searching-progress-fill"
+                            style={{
+                              width: `${Math.max(0, Math.min(100, (matchmakingRemainingSec / 30) * 100))}%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {matchmakingTimedOut && (
+                          <div className="matchmaking-timeout-banner" role="status">
+                            <span>No player found in 30s. Tap to retry.</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          className="arena-primary-btn"
+                          onClick={handleQuickMatchmaking}
+                        >
+                          {matchmakingTimedOut ? 'Retry Matchmaking' : 'Find Online Match'}
+                        </button>
+                      </>
+                    )}
                   </div>
 
-                  <div className="online-room-col">
-                    <div className="sanctum-field-label">Join by Chamber Code</div>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      placeholder="CODE (E.G. K7M2)"
-                      className="room-code-input"
-                      value={joinCodeInput}
-                      onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleJoinPrivateRoom();
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="arena-secondary-btn"
-                      onClick={handleJoinPrivateRoom}
-                    >
-                      Join Chamber
-                    </button>
+                  <div className="online-room-split">
+                    <div className="online-room-col">
+                      <div className="sanctum-field-label">Host Room</div>
+                      <div className="side-picker-row compact">
+                        <button
+                          type="button"
+                          className={`side-picker-btn compact ${onlinePreferredSide === 'w' ? 'selected' : ''}`}
+                          onClick={() => setOnlinePreferredSide('w')}
+                        >
+                          ♔ White
+                        </button>
+                        <button
+                          type="button"
+                          className={`side-picker-btn compact ${onlinePreferredSide === 'b' ? 'selected' : ''}`}
+                          onClick={() => setOnlinePreferredSide('b')}
+                        >
+                          ♚ Black
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        className="arena-secondary-btn"
+                        onClick={handleCreatePrivateRoom}
+                      >
+                        Create Room
+                      </button>
+
+                      {activeRoomCode && (
+                        <div className="created-room-box">
+                          <div className="created-room-code">{activeRoomCode}</div>
+                          <div className="created-room-status">
+                            {bothPlayersConnected ? '2/2 Connected' : 'Waiting for Opponent...'}
+                          </div>
+                          <div className="created-room-actions">
+                            <button type="button" className="sanctum-modal-close" onClick={handleCopyRoomCode}>
+                              Copy Code
+                            </button>
+                            <button type="button" className="sanctum-modal-close" onClick={handleCopyInviteLink}>
+                              Copy Link
+                            </button>
+                            <button
+                              type="button"
+                              className="sanctum-modal-close gold-trim"
+                              onClick={() => {
+                                setHasStartedGame(true);
+                                setActiveDialog('none');
+                              }}
+                            >
+                              Enter Board
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="online-room-col">
+                      <div className="sanctum-field-label">Join Room</div>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        placeholder="ROOM CODE"
+                        className="room-code-input"
+                        value={joinCodeInput}
+                        onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleJoinPrivateRoom();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="arena-secondary-btn"
+                        onClick={handleJoinPrivateRoom}
+                      >
+                        Join Room
+                      </button>
+                    </div>
                   </div>
+
+                  {onlineStatusText && (
+                    <div className="online-status-note">{onlineStatusText}</div>
+                  )}
                 </div>
+              )}
 
-                {onlineStatusText && (
-                  <div className="online-status-note">{onlineStatusText}</div>
-                )}
-              </div>
-            )}
-
-            {/* TAB 3: P1 VS P2 (1 PHONE PASS-AND-PLAY WITH AUTO SWITCHING) */}
-            {arenaTab === 'pass' && (
-              <div className="arena-tab-section-stack">
-                <div className="pass-mode-explainer">
-                  <h3 className="pass-explainer-title">Two Masters on One Device</h3>
-                  <p className="pass-explainer-desc">
-                    Play across the same phone or tablet. After White completes a move—and any melee capture
-                    shatters—the camera smoothly orbits 180° across the altar to Black&apos;s perspective.
-                  </p>
-                </div>
-
-                <div className="pass-options-list">
-                  <label className="pass-toggle-row">
-                    <div>
-                      <div className="pass-toggle-title">Auto-Rotate Camera Between Turns</div>
-                      <div className="pass-toggle-sub">
-                        Orbits the 3D view between White and Black seats after each turn finishes
+              {/* TAB 3: 2P PASS & PLAY */}
+              {arenaTab === 'pass' && (
+                <div className="arena-tab-section-stack">
+                  <div className="pass-options-list">
+                    <label className="pass-toggle-row">
+                      <div>
+                        <div className="pass-toggle-title">Auto-Rotate Camera</div>
+                        <div className="pass-toggle-sub">Orbits 180° between White &amp; Black turns</div>
                       </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={passAutoFlip}
-                      onChange={(e) => {
-                        setPassAutoFlip(e.target.checked);
-                        getEngine()?.setPassAutoFlip?.(e.target.checked);
-                      }}
-                    />
-                  </label>
+                      <input
+                        type="checkbox"
+                        checked={passAutoFlip}
+                        onChange={(e) => {
+                          setPassAutoFlip(e.target.checked);
+                          getEngine()?.setPassAutoFlip?.(e.target.checked);
+                        }}
+                      />
+                    </label>
 
-                  <label className="pass-toggle-row">
-                    <div>
-                      <div className="pass-toggle-title">Show Turn Handoff Banner</div>
-                      <div className="pass-toggle-sub">
-                        Pauses with a confirmation screen while passing the device to the next player
+                    <label className="pass-toggle-row">
+                      <div>
+                        <div className="pass-toggle-title">Turn Handoff Screen</div>
+                        <div className="pass-toggle-sub">Confirm banner when passing the device</div>
                       </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={passPrivacyCurtain}
-                      onChange={(e) => setPassPrivacyCurtain(e.target.checked)}
-                    />
-                  </label>
-                </div>
+                      <input
+                        type="checkbox"
+                        checked={passPrivacyCurtain}
+                        onChange={(e) => setPassPrivacyCurtain(e.target.checked)}
+                      />
+                    </label>
+                  </div>
 
-                <div className="sanctum-section-head">
-                  <span className="sanctum-field-label">Match Spoils</span>
-                  <span className="sanctum-field-note">
-                    Piece Captures +15G to +95G · Match Completion +{MATCH_WIN_BOUNTY.pass}G
-                  </span>
+                  <button
+                    type="button"
+                    className="arena-primary-btn"
+                    onClick={handleStartPassGame}
+                  >
+                    Start 2P Match
+                  </button>
                 </div>
-
-                <button
-                  type="button"
-                  className="arena-primary-btn"
-                  onClick={handleStartPassGame}
-                >
-                  Start Pass &amp; Play Match
-                </button>
-              </div>
-            )}
+              )}
             </div>
           </div>
         </div>
@@ -3949,27 +3745,19 @@ export default function App() {
             <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
             <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
-            <div className="sanctum-modal-header">
+            <div className="sanctum-modal-header compact-modal-header">
               <div className="sanctum-header-titles">
-                <div className="cozy-ribbon-kicker-wrap">
-                  <CozyRibbonBannerSvg />
-                  <div className="sanctum-modal-kicker">Sanctum Vault &amp; Reliquary</div>
-                </div>
-                <h2 className="sanctum-modal-title" id="armory-modal-title">Armory of the Altar</h2>
+                <h2 className="sanctum-modal-title" id="armory-modal-title">Skins Armory</h2>
                 <div className="sanctum-record-line">
-                  <span>Equipped Set: <strong>{equippedArchetypeObj.name}</strong></span>
-                  <span aria-hidden="true">·</span>
-                  <span>Scenery: <strong>{equippedSceneryObj.name}</strong></span>
+                  <span>Set: <strong>{equippedArchetypeObj.name}</strong></span>
                   <span aria-hidden="true">·</span>
                   <span>Board: <strong>{equippedBoardSkinObj.name}</strong></span>
-                  <span aria-hidden="true">·</span>
-                  <span>Finish: <strong>{equippedPieceSkinObj.name}</strong></span>
                 </div>
               </div>
 
               <div className="armory-header-right">
                 <div className="armory-treasury-readout">
-                  <span className="treasury-label">Treasury</span>
+                  <GoldCoinVectorIcon size={14} />
                   <span className="treasury-amount">{economy.gold} Gold</span>
                 </div>
                 {hasStartedGame && (
@@ -3978,7 +3766,7 @@ export default function App() {
                     className="sanctum-modal-close"
                     onClick={() => setActiveDialog('none')}
                   >
-                    Resume Match
+                    Resume
                   </button>
                 )}
                 <button
@@ -3986,16 +3774,12 @@ export default function App() {
                   className="sanctum-modal-close gold-trim"
                   onClick={() => setActiveDialog('gateway')}
                 >
-                  ← Back to Lobby
+                  ← Lobby
                 </button>
               </div>
             </div>
 
-            <div className="sanctum-tapered-rule" aria-hidden="true">
-              <CozyDividerFlourishSvg />
-            </div>
-
-            {/* Segmented Category Tab Bar with Proper Keyboard & Mouse Tabbing */}
+            {/* Segmented Category Tab Bar */}
             <div
               className="sanctum-tab-bar segmented-tabs armory-tabs"
               role="tablist"
@@ -4028,8 +3812,7 @@ export default function App() {
                   setPoliigonTargetSlot('pieces');
                 }}
               >
-                <span className="tab-numeral">I.</span>
-                <span>Piece Sets</span>
+                <span>Pieces</span>
                 <span className="tab-count-badge">
                   {economy.ownedPieceTypes.length}/{PIECE_ARCHETYPES.length}
                 </span>
@@ -4042,8 +3825,7 @@ export default function App() {
                 className={`sanctum-tab-btn ${armoryTab === 'sceneries' ? 'active' : ''}`}
                 onClick={() => setArmoryTab('sceneries')}
               >
-                <span className="tab-numeral">II.</span>
-                <span>Sceneries</span>
+                <span>Realms</span>
                 <span className="tab-count-badge">
                   {economy.ownedSceneries.length}/{WORLD_SCENERIES.length}
                 </span>
@@ -4059,8 +3841,7 @@ export default function App() {
                   setPoliigonTargetSlot('table');
                 }}
               >
-                <span className="tab-numeral">III.</span>
-                <span>Altar Boards</span>
+                <span>Boards</span>
                 <span className="tab-count-badge">
                   {economy.ownedBoardSkins.length}/{BOARD_SKINS.length}
                 </span>
@@ -4076,7 +3857,6 @@ export default function App() {
                   setPoliigonTargetSlot('pieces');
                 }}
               >
-                <span className="tab-numeral">IV.</span>
                 <span>Finishes</span>
                 <span className="tab-count-badge">
                   {economy.ownedPieceSkins.length}/{PIECE_SKINS.length}
@@ -4604,44 +4384,36 @@ export default function App() {
             <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
             <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
-            <div className="sanctum-modal-header">
+            <div className="sanctum-modal-header compact-modal-header">
               <div className="sanctum-header-titles">
-                <div className="cozy-ribbon-kicker-wrap">
-                  <CozyRibbonBannerSvg />
-                  <div className="sanctum-modal-kicker">✦ SANCTUM GRANDMASTERS ✦</div>
-                </div>
                 <h2 className="sanctum-modal-title" id="leaderboard-modal-title">
                   Live Leaderboards
                 </h2>
                 <div className="sanctum-record-line">
-                  <span>Your Standing: <strong>{rankProgress.currentTier.name} Tier</strong></span>
+                  <span>Tier: <strong>{rankProgress.currentTier.name}</strong></span>
                   <span aria-hidden="true">·</span>
-                  <span>Rating: <strong>{playerRating} ELO</strong></span>
+                  <span><strong>{playerRating}</strong> ELO</span>
                   <span aria-hidden="true">·</span>
-                  <span>Victories: <strong>{economy.stats.wins}</strong></span>
+                  <span><strong>{economy.stats.wins}</strong> Wins</span>
                 </div>
               </div>
 
               <div className="armory-header-right">
                 <span className="live-feed-badge">
                   <span className="live-feed-dot" aria-hidden="true"></span>
-                  LIVE FEED
+                  LIVE
                 </span>
                 <button
                   type="button"
                   className="sanctum-modal-close gold-trim"
                   onClick={() => setActiveDialog('gateway')}
                 >
-                  ← Back to Lobby
+                  ← Lobby
                 </button>
               </div>
             </div>
 
-            <div className="sanctum-tapered-rule" aria-hidden="true">
-              <CozyDividerFlourishSvg />
-            </div>
-
-            {/* Filter Tabs: ALL, OBSIDIAN, ASTRAL, GOLD, SILVER, BRONZE */}
+            {/* Filter Tabs */}
             <div className="leaderboard-filter-bar" role="group" aria-label="Filter by Rank Tier">
               <button
                 type="button"
@@ -4655,35 +4427,35 @@ export default function App() {
                 className={`lb-filter-chip chip-obsidian ${leaderboardTab === 'obsidian' ? 'active' : ''}`}
                 onClick={() => setLeaderboardTab('obsidian')}
               >
-                <span>◆</span> Obsidian (21+ W)
+                <span>◆</span> Obsidian
               </button>
               <button
                 type="button"
                 className={`lb-filter-chip chip-platinum ${leaderboardTab === 'platinum' ? 'active' : ''}`}
                 onClick={() => setLeaderboardTab('platinum')}
               >
-                <span>✦</span> Astral (13–20 W)
+                <span>✦</span> Astral
               </button>
               <button
                 type="button"
                 className={`lb-filter-chip chip-gold ${leaderboardTab === 'gold' ? 'active' : ''}`}
                 onClick={() => setLeaderboardTab('gold')}
               >
-                <span>◈</span> Gold (7–12 W)
+                <span>◈</span> Gold
               </button>
               <button
                 type="button"
                 className={`lb-filter-chip chip-silver ${leaderboardTab === 'silver' ? 'active' : ''}`}
                 onClick={() => setLeaderboardTab('silver')}
               >
-                <span>❖</span> Silver (3–6 W)
+                <span>❖</span> Silver
               </button>
               <button
                 type="button"
                 className={`lb-filter-chip chip-bronze ${leaderboardTab === 'bronze' ? 'active' : ''}`}
                 onClick={() => setLeaderboardTab('bronze')}
               >
-                <span>▲</span> Bronze (0–2 W)
+                <span>▲</span> Bronze
               </button>
             </div>
 
@@ -4825,21 +4597,13 @@ export default function App() {
             <div className="sanctum-corner bl" aria-hidden="true"><CozyCornerFlourishSvg /></div>
             <div className="sanctum-corner br" aria-hidden="true"><CozyCornerFlourishSvg /></div>
 
-            <div className="sanctum-modal-header">
+            <div className="sanctum-modal-header compact-modal-header">
               <div className="sanctum-header-titles">
-                <div className="cozy-ribbon-kicker-wrap">
-                  <CozyRibbonBannerSvg />
-                  <div className="sanctum-modal-kicker">Sanctum Preferences</div>
-                </div>
                 <h2 className="sanctum-modal-title" id="settings-modal-title">
                   Settings &amp; Profile
                 </h2>
                 <div className="sanctum-record-line">
-                  <span>Audio &amp; Volume</span>
-                  <span aria-hidden="true">·</span>
-                  <span>Commander Profile</span>
-                  <span aria-hidden="true">·</span>
-                  <span>Google Cloud Save</span>
+                  <span>Profile · Graphics · Audio · Cloud</span>
                 </div>
               </div>
 
@@ -4848,21 +4612,14 @@ export default function App() {
                 className="sanctum-modal-close gold-trim"
                 onClick={() => setActiveDialog('gateway')}
               >
-                ← Back to Lobby
+                ← Lobby
               </button>
             </div>
 
-            <div className="sanctum-tapered-rule" aria-hidden="true">
-              <CozyDividerFlourishSvg />
-            </div>
-
             <div className="sanctum-modal-body">
-              {/* SECTION 1: CHANGE PROFILE — PHOTO UPLOAD, COMMANDER NAME & RANK CREST */}
+              {/* SECTION 1: PROFILE PHOTO, NAME & CREST */}
               <div className="settings-section" id="settings-profile-section">
-                <h3 className="settings-section-title">Change Profile — Photo, Name &amp; Crest</h3>
-                <p className="settings-section-sub">
-                  Upload a custom profile photo, edit your Commander display name, or choose a royal crest sigil.
-                </p>
+                <h3 className="settings-section-title">Commander Profile</h3>
 
                 <div className="settings-profile-upload-card">
                   <div className={`rank-portrait-shell rank-border-${displayedRankTier.id} settings-portrait-preview`}>
@@ -5020,16 +4777,15 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SECTION 3: AUDIO VOLUME & MUTE CONTROLS */}
+              {/* SECTION 3: AUDIO & GAMEPLAY */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Audio &amp; Volume Controls</h3>
+                <h3 className="settings-section-title">Audio &amp; Gameplay</h3>
                 <div className="settings-volume-list">
                   {/* Music Volume */}
                   <div className="volume-slider-group">
                     <div className="volume-slider-head">
                       <div className="volume-label-col">
-                        <span className="volume-label">Sanctum Lobby Background Music</span>
-                        <span className="volume-sub">Chamber choirs, organ &amp; war drums</span>
+                        <span className="volume-label">Lobby Music</span>
                       </div>
                       <div className="volume-head-right">
                         <span className="volume-val">{lobbyMusicEnabled ? `${musicVolume}%` : 'MUTED'}</span>
@@ -5056,8 +4812,7 @@ export default function App() {
                   <div className="volume-slider-group">
                     <div className="volume-slider-head">
                       <div className="volume-label-col">
-                        <span className="volume-label">Combat &amp; UI Sound Effects (SFX)</span>
-                        <span className="volume-sub">Stone shatter physics, blade slashes &amp; button clicks</span>
+                        <span className="volume-label">Sound Effects (SFX)</span>
                       </div>
                       <div className="volume-head-right">
                         <span className="volume-val">{sfxEnabled ? `${sfxVolume}%` : 'MUTED'}</span>
@@ -5083,8 +4838,8 @@ export default function App() {
                   {/* Victory Fanfare */}
                   <label className="settings-toggle-row">
                     <div>
-                      <span className="settings-toggle-title">Checkmate &amp; Check Victory Fanfare</span>
-                      <span className="settings-toggle-sub">Trumpet fanfare and voice announcement upon checkmate</span>
+                      <span className="settings-toggle-title">Victory Fanfare</span>
+                      <span className="settings-toggle-sub">Check &amp; checkmate audio cues</span>
                     </div>
                     <input
                       type="checkbox"
@@ -5096,8 +4851,8 @@ export default function App() {
                   {/* Gameplay Landscape Orientation */}
                   <label className="settings-toggle-row">
                     <div>
-                      <span className="settings-toggle-title">Gameplay Landscape Orientation</span>
-                      <span className="settings-toggle-sub">Switch between widescreen Landscape and vertical Portrait view</span>
+                      <span className="settings-toggle-title">Landscape Orientation</span>
+                      <span className="settings-toggle-sub">Widescreen board view</span>
                     </div>
                     <input
                       type="checkbox"
@@ -5106,11 +4861,11 @@ export default function App() {
                     />
                   </label>
 
-                  {/* Camera Zoom When Eating an Enemy Piece */}
+                  {/* Capture Camera Zoom */}
                   <label className="settings-toggle-row">
                     <div>
-                      <span className="settings-toggle-title">Capture Camera Zoom (Eating Enemy Piece)</span>
-                      <span className="settings-toggle-sub">Turn OFF only the camera zooming when eating a piece (3D attack &amp; shatter animations stay ON)</span>
+                      <span className="settings-toggle-title">Capture Camera Zoom</span>
+                      <span className="settings-toggle-sub">Zoom in during piece captures</span>
                     </div>
                     <input
                       type="checkbox"
@@ -5121,36 +4876,29 @@ export default function App() {
                 </div>
               </div>
 
-              {/* SECTION 3: GOOGLE CLOUD SAVE, LOAD LAST SAVE & AUTH */}
+              {/* SECTION 4: GOOGLE CLOUD SAVE & UPDATE */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Google Cloud Save &amp; Load Progress</h3>
+                <h3 className="settings-section-title">Cloud Save &amp; Updates</h3>
                 <div className="cloud-save-card">
                   <div className="cloud-card-info">
                     <div className="cloud-card-title">
-                      {currentUser ? 'Cloud Backup & Load Progress Active' : 'Sign In with Google · Load or Save Progress'}
+                      {currentUser ? `Synced: ${currentUser.displayName || currentUser.email}` : 'Google Cloud Save'}
                     </div>
-                    <p className="cloud-card-desc">
-                      {currentUser
-                        ? `Connected as ${currentUser.displayName || currentUser.email}. Restore your last cloud save or back up your current Gold, 3D piece sets, finishes, and victories to Firebase Firestore.`
-                        : 'Link your Google Account to load your last saved progress or back up your Gold, unlocked 3D piece sets, and victory rank across devices.'}
-                    </p>
 
                     {lastCloudSaveSnap && (
                       <div className="cloud-last-save-summary" id="cloud-last-save-summary">
                         <div className="cloud-save-summary-head">
-                          <span className="cloud-save-summary-kicker">Last Cloud Save Checkpoint</span>
+                          <span className="cloud-save-summary-kicker">Last Cloud Save</span>
                           <span className="cloud-save-summary-time">
                             {formatCloudSaveTime(lastCloudSaveSnap.updatedAt)}
                           </span>
                         </div>
                         <div className="cloud-save-summary-metrics">
-                          <span>Treasury: <strong>{lastCloudSaveSnap.gold} Gold</strong></span>
+                          <span><strong>{lastCloudSaveSnap.gold}G</strong></span>
                           <span aria-hidden="true">·</span>
-                          <span>Victories: <strong>{lastCloudSaveSnap.wins}</strong></span>
+                          <span><strong>{lastCloudSaveSnap.wins}W</strong></span>
                           <span aria-hidden="true">·</span>
-                          <span>Captures: <strong>{lastCloudSaveSnap.captures || 0}</strong></span>
-                          <span aria-hidden="true">·</span>
-                          <span>Rating: <strong>{lastCloudSaveSnap.rating || 1000} ELO</strong></span>
+                          <span><strong>{lastCloudSaveSnap.rating || 1000} ELO</strong></span>
                         </div>
                       </div>
                     )}
@@ -5171,7 +4919,7 @@ export default function App() {
                           id="btn-cloud-load-last-save"
                           onClick={handleLoadLastSave}
                         >
-                          Load Last Save / Progress
+                          Load Save
                         </button>
                         <button
                           type="button"
@@ -5179,7 +4927,7 @@ export default function App() {
                           id="btn-cloud-save-progress"
                           onClick={handleManualCloudSync}
                         >
-                          Save Progress Now
+                          Save Progress
                         </button>
                         <button
                           type="button"
@@ -5197,7 +4945,7 @@ export default function App() {
                           id="btn-cloud-login-load-save"
                           onClick={handleLoadLastSave}
                         >
-                          Sign In &amp; Load Last Save
+                          Load Last Save
                         </button>
                         <button
                           type="button"
@@ -5304,11 +5052,13 @@ export default function App() {
 
       <div
         id="hud-bottom"
-        className={hasStartedGame && activeDialog === 'none' ? 'hud-bottom-entrance-active' : ''}
+        className={`${hasStartedGame && activeDialog === 'none' ? 'hud-bottom-entrance-active' : ''} ${
+          gameMode === 'pass' ? 'has-pass-flip' : ''
+        }`}
         style={{ display: activeDialog !== 'none' ? 'none' : undefined }}
       >
         <div className="hint-pill" id="controls-hint">
-          <strong>Controls:</strong> Click Piece to Move &nbsp;•&nbsp; Drag: Orbit &nbsp;•&nbsp; Scroll: Zoom &nbsp;•&nbsp; H: Hide UI
+          <strong>Controls:</strong> Tap Piece • Drag Orbit • Pinch Zoom • H Hide UI
         </div>
         {gameMode === 'pass' && (
           <button

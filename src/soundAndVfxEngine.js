@@ -4,6 +4,10 @@ import {
   mountHalloweenModel,
   preloadHalloween3DAssets
 } from './halloweenAssetLoader.js';
+import {
+  mountWinterModel,
+  preloadWinter3DAssets
+} from './winterWorldAssetLoader.js';
 
 /** @type {any} */
 const THREE = THREE_NS;
@@ -189,6 +193,23 @@ export const ARCHETYPE_COMBAT_PROFILES = {
       bishop: { title: 'TOON ORACLE MITRE BLAST',          subtitle: 'Arcane Comic-Ink Halo & Radiant Star Comet Strike' },
       queen:  { title: 'CARTOON EMPRESS CROWN NOVA',       subtitle: 'Royal Diadem Whirlwind & Cel-Shaded Golden Starburst' },
       king:   { title: 'TOON SOVEREIGN GRAND SLAM',        subtitle: 'Imperial Cross-Crown Leap & Comic-Book Shockwave Finale' }
+    }
+  },
+  xmas_snow: {
+    id: 'xmas_snow',
+    setName: 'North Pole Snow Court',
+    attackName: 'BLIZZARD SLEIGH-CHARGE & FROST-NOVA',
+    effectSummary: 'Sleigh-Bell Frost Charge, Crystalline Ice Spire Eruption & Starlight Snowfall Burst',
+    primaryHex: 0x38bdf8,
+    secondaryHex: 0xf5c344,
+    coreHex: 0xffffff,
+    titles: {
+      pawn:   { title: 'SNOWMAN SENTRY FROSTBALL BARRAGE', subtitle: 'Glacial Snowball Impact & Sparkling Sleigh-Bell Burst' },
+      rook:   { title: 'EVERGREEN STAR CITADEL AVALANCHE', subtitle: 'Snowy Pine Spire Smash & Bethlehem Star Frost-Nova' },
+      knight: { title: 'REINDEER SLEIGH-BELL ANTLER CHARGE', subtitle: 'Ruby-Lit Midnight Leap & Arctic Blizzard Shockwave' },
+      bishop: { title: 'WINTER SAGE LANTERN DEEP-FREEZE',  subtitle: 'Frost-Lantern Cryo Beam & Crystalline Ice Eruption' },
+      queen:  { title: 'SNOW QUEEN AURORA BLIZZARD NOVA',  subtitle: 'Glacial Scepter Tempest & Northern Lights Crystal Shatter' },
+      king:   { title: 'SANTA MONARCH CHRISTMAS EVE FINALE', subtitle: 'North Pole Star Staff Smash & Grand Golden Snowstorm' }
     }
   }
 };
@@ -1988,6 +2009,24 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
           fadeOut: 0.22
         });
         playHalloweenWhisperAndWindGustSfx(stage === 'kill' ? 'whisper' : 'select');
+      } else if (arch === 'xmas_snow') {
+        // North Pole Snow Court: Sparkling Sleigh-Bell Chime Chord & Crystalline Frost Shatter
+        const bellFreqs = stage === 'kill' ? [1046.5, 1318.5, 1567.98, 2093.0, 2637.0] : [1318.5, 1567.98, 2093.0];
+        const dur = stage === 'kill' ? 0.62 : 0.34;
+        bellFreqs.forEach((f, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+          const startT = now + idx * 0.022;
+          osc.frequency.setValueAtTime(f / Math.pow(weight, 0.25), startT);
+          gain.gain.setValueAtTime(0.001, startT);
+          gain.gain.linearRampToValueAtTime(stage === 'kill' ? 0.12 : 0.085, startT + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
+          osc.connect(gain);
+          gain.connect(bus);
+          osc.start(startT);
+          osc.stop(startT + dur + 0.04);
+        });
       } else {
         // Gothic Sanctum Warriors: Heavy Forged Anvil Harmonic & Cathedral Sub-Drop
         const osc = ctx.createOscillator();
@@ -3305,6 +3344,80 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
     }
 
     // ========================================================================
+    // 3c. NORTH POLE SNOW COURT (XMAS): BLIZZARD FROST-NOVA RING & CRYSTALLINE SNOWFLAKE BURST
+    // ========================================================================
+    if (arch === 'xmas_snow') {
+      const frostWaves = [];
+      const frostConfigs = [
+        { tiltX: Math.PI * 0.42, tiltZ: 0.35, scaleMul: 1.15, speed: 12.0, pHex: 0x38bdf8, sHex: 0xf5c344 },
+        { tiltX: -Math.PI * 0.42, tiltZ: -0.35, scaleMul: 1.05, speed: -13.5, pHex: 0xbae6fd, sHex: 0x38bdf8 },
+        { tiltX: Math.PI * 0.50, tiltZ: 0.0, scaleMul: 1.28, speed: 16.0, pHex: 0xf5c344, sHex: 0xffffff }
+      ];
+      for (const cfg of frostConfigs) {
+        const sMat = createUnitySlashRibbonShaderMaterial(cfg.pHex, cfg.sHex, 0xffffff);
+        disposableMats.push(sMat);
+        const sMesh = new THREE.Mesh(sharedSlashRibbonGeo, sMat);
+        sMesh.rotation.set(cfg.tiltX, headingY, cfg.tiltZ);
+        group.add(sMesh);
+        frostWaves.push({ mesh: sMesh, mat: sMat, cfg });
+      }
+
+      // 28 Bursting Ice Crystals & Golden Christmas Star Sparks
+      const snowShards = [];
+      const iceCrystalGeo = new THREE.OctahedronGeometry(0.036, 0);
+      disposableGeos.push(iceCrystalGeo);
+      for (let i = 0; i < 28; i++) {
+        const shardMesh = new THREE.Mesh(
+          iceCrystalGeo,
+          i % 4 === 0 ? secondaryMat : i % 2 === 0 ? flashMat : primaryMat
+        );
+        const ang = (i / 28) * Math.PI * 2;
+        shardMesh.scale.set(0.85, 1.45, 0.85);
+        snowShards.push({
+          mesh: shardMesh,
+          vx: Math.cos(ang) * (0.75 + Math.random() * 0.95) + dirX * 0.42,
+          vy: 0.65 + Math.random() * 1.15,
+          vz: Math.sin(ang) * (0.75 + Math.random() * 0.95) + dirZ * 0.42,
+          rotSpeed: 6.0 + Math.random() * 8.0
+        });
+        group.add(shardMesh);
+      }
+
+      addVfxUpdater(
+        group,
+        0.54,
+        (u, elapsed, dt) => {
+          for (const fw of frostWaves) {
+            fw.mat.uniforms.uTime.value = elapsed;
+            fw.mat.uniforms.uProgress.value = u;
+            fw.mesh.scale.setScalar((0.78 + u * 1.24) * fw.cfg.scaleMul);
+            fw.mesh.rotation.z += dt * fw.cfg.speed;
+          }
+          flareSprite.scale.setScalar(0.42 + Math.sin(u * Math.PI) * 0.50);
+          flareSpriteMat.opacity = 1.0 - u * u;
+          flashSphere.scale.setScalar(0.08 + Math.sin(u * Math.PI) * 0.20);
+          flashMat.opacity = 0.98 * (1 - u * u);
+          primaryMat.opacity = 0.96 * (1 - u);
+          secondaryMat.opacity = 0.92 * (1 - u);
+
+          for (const sh of snowShards) {
+            sh.mesh.position.x += sh.vx * dt;
+            sh.mesh.position.y += sh.vy * dt;
+            sh.mesh.position.z += sh.vz * dt;
+            sh.vy -= 3.2 * dt;
+            sh.mesh.rotation.x += sh.rotSpeed * dt;
+            sh.mesh.rotation.y += sh.rotSpeed * 0.8 * dt;
+            const sc = Math.max(0.05, 1 - u);
+            sh.mesh.scale.set(0.85 * sc, 1.45 * sc, 0.85 * sc);
+          }
+        },
+        disposableMats,
+        disposableGeos
+      );
+      return;
+    }
+
+    // ========================================================================
     // 4. GOTHIC SANCTUM WARRIORS: EDGEFLUX TRIPLE SWORD-SLASH WAVES & ANVIL SPARKS
     // ========================================================================
     const slashWaves = [];
@@ -3775,6 +3888,88 @@ export function createSoundAndVfxManager(scene, boardSurfaceY = 0.775) {
             const flap = hs.isGhost ? 1.0 : 1.0 + Math.sin(elapsed * 24.0 + hs.ang) * 0.22;
             hs.sprite.scale.set(hs.baseScale * flap * fade, hs.baseScale * fade, 1);
             hs.mat.opacity = 0.96 * fade;
+          }
+          pMat.opacity = 0.95 * Math.pow(1 - u, 1.25);
+          sMat.opacity = 0.92 * Math.pow(1 - u, 1.35);
+          cMat.opacity = 0.98 * Math.pow(1 - u, 1.5);
+        },
+        mats,
+        geos
+      );
+      return;
+    }
+
+    if (arch === 'xmas_snow') {
+      // NORTH POLE SNOW COURT SIGNATURE SHATTER:
+      // Erupting 3D Winter Frost Clusters & Broken Ice Spires (from Low Poly Winter Nature Pack)
+      // + Swirling Aurora Blizzard Rings + Shimmering Starlight Snowflakes
+      preloadWinter3DAssets();
+      const frostRings = [];
+      for (let v = 0; v < 4; v++) {
+        const vr = new THREE.Mesh(sharedRingGeo, v % 2 === 0 ? pMat : sMat);
+        vr.position.y = 0.08 + v * 0.16;
+        group.add(vr);
+        frostRings.push({ mesh: vr, idx: v });
+      }
+
+      const frostClusters = [];
+      const winterClusterKeys = [
+        'FROST_01_ClusterSmall',
+        'ICE_12_BrokenIceCluster',
+        'FROST_03_ClusterLarge',
+        'FROST_01_ClusterSmall',
+        'ICE_12_BrokenIceCluster',
+        'FROST_03_ClusterLarge'
+      ];
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2;
+        const holder = new THREE.Group();
+        const rad = 0.18 + (i % 2) * 0.06;
+        holder.position.set(Math.cos(ang) * rad, -0.20, Math.sin(ang) * rad);
+        holder.rotation.y = -ang + Math.PI / 2;
+        mountWinterModel(holder, winterClusterKeys[i % winterClusterKeys.length], {
+          scale: 0.095,
+          castShadow: false,
+          receiveShadow: false
+        });
+        group.add(holder);
+        frostClusters.push({ mesh: holder, peakH: 0.22 + (i % 2) * 0.06 });
+      }
+
+      const snowMotes = [];
+      const moteGeo = new THREE.OctahedronGeometry(0.032, 0);
+      geos.push(moteGeo);
+      for (let i = 0; i < 20; i++) {
+        const m = new THREE.Mesh(moteGeo, i % 3 === 0 ? sMat : i % 2 === 0 ? cMat : pMat);
+        const ang = (i / 20) * Math.PI * 2;
+        m.position.set(Math.cos(ang) * 0.16, 0.10 + (i % 4) * 0.09, Math.sin(ang) * 0.16);
+        group.add(m);
+        snowMotes.push({ mesh: m, ang, vy: 0.55 + (i % 4) * 0.20 });
+      }
+
+      addVfxUpdater(
+        group,
+        1.48,
+        (u, elapsed, dt) => {
+          const ease = 1 - Math.pow(1 - u, 3);
+          stepCommonUnityShaders(u, elapsed, dt, ease);
+          const spireEnv = u < 0.28 ? ease / 0.28 : Math.max(0, 1 - (u - 0.28) / 0.72);
+          for (const fc of frostClusters) {
+            fc.mesh.position.y = -0.20 + spireEnv * fc.peakH;
+            fc.mesh.scale.setScalar(Math.max(0.01, spireEnv));
+          }
+          for (const vr of frostRings) {
+            vr.mesh.position.y = 0.06 + vr.idx * 0.18 + u * 0.62;
+            const rS = (0.14 + vr.idx * 0.06) * (1 + ease * 1.35);
+            vr.mesh.scale.set(rS, 1, rS);
+            vr.mesh.rotation.y += dt * (6.5 + vr.idx * 1.8);
+          }
+          for (const sm of snowMotes) {
+            const curAng = sm.ang + elapsed * 3.8;
+            const curR = 0.16 + ease * 0.44;
+            sm.mesh.position.set(Math.cos(curAng) * curR, 0.10 + u * sm.vy, Math.sin(curAng) * curR);
+            sm.mesh.rotation.y += dt * 7.0;
+            sm.mesh.scale.setScalar(Math.max(0.05, 1 - u));
           }
           pMat.opacity = 0.95 * Math.pow(1 - u, 1.25);
           sMat.opacity = 0.92 * Math.pow(1 - u, 1.35);

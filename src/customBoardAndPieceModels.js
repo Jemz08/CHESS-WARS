@@ -10,6 +10,7 @@ import {
   preloadCyberCity3DAssets,
   getCyberCityMaterials
 } from './cyberCityAssetLoader.js';
+import { mountWinterModel, preloadWinter3DAssets } from './winterWorldAssetLoader.js';
 
 /**
  * High-Detail Sculpted 3D Chess Piece & Board Architecture Builder
@@ -1567,6 +1568,987 @@ function buildHollowReapersPiece(rig, pieceType, primaryMat, goldTrimMat, forged
   }
 }
 
+// ============================================================================
+// 5b. CHRISTMAS SNOW PIECE SET ('xmas_snow' — "North Pole Snow Court")
+// Sculpted Xmas Figures: Santa Claus King, Snow Queen Empress, Snowy Pine & Star
+// Rook, Holiday Reindeer Knight, Snowman Wizard Bishop, Snowman Sentry Pawn.
+// Uses primaryMat on main bodies for instant White vs Black readability while
+// layering festive gold trim, glacier ice accents, holly scarves, and glowing stars.
+// ============================================================================
+function buildStarFinialMesh(radius = 0.085, trimMat, glowMat) {
+  const starGroup = new THREE.Group();
+  const rKey = radius.toFixed(3);
+  const spikeGeo = getCachedGeo(`xmas_star_spike_${rKey}`, () =>
+    new THREE.ConeGeometry(radius * 0.28, radius * 1.15, 5)
+  );
+  const dirs = [
+    [0, 1, 0, 0, 0, 0],
+    [0, -1, 0, Math.PI, 0, 0],
+    [1, 0, 0, 0, 0, -Math.PI / 2],
+    [-1, 0, 0, 0, 0, Math.PI / 2],
+    [0, 0, 1, Math.PI / 2, 0, 0],
+    [0, 0, -1, -Math.PI / 2, 0, 0]
+  ];
+  for (const [dx, dy, dz, rx, ry, rz] of dirs) {
+    const sp = new THREE.Mesh(spikeGeo, trimMat);
+    sp.position.set(dx * radius * 0.45, dy * radius * 0.45, dz * radius * 0.45);
+    sp.rotation.set(rx, ry, rz);
+    starGroup.add(sp);
+  }
+  const coreGeo = getCachedGeo(`xmas_star_core_${rKey}`, () =>
+    new THREE.OctahedronGeometry(radius * 0.42, 0)
+  );
+  const core = new THREE.Mesh(coreGeo, glowMat);
+  core.userData.isDragonFire = true;
+  starGroup.add(core);
+  return starGroup;
+}
+
+function buildXmasSnowPiece(rig, pieceType, primaryMat, trimMat, bladeMat, animParts, color = 'w') {
+  const isWhite = color === 'w';
+  const starGlowMat = new THREE.MeshBasicMaterial({ color: 0xfff3a8 });
+  const frostGlowMat = new THREE.MeshBasicMaterial({ color: 0x7dd3fc });
+  const rubyGlowMat = new THREE.MeshBasicMaterial({ color: 0xff2a4b });
+  const coalMat = new THREE.MeshStandardMaterial({
+    color: isWhite ? 0x161b26 : 0xdbeafe,
+    roughness: 0.45,
+    metalness: 0.25,
+    emissive: isWhite ? 0x000000 : 0x38bdf8,
+    emissiveIntensity: isWhite ? 0.0 : 0.35
+  });
+  const carrotMat = new THREE.MeshStandardMaterial({
+    color: 0xff7b1c,
+    roughness: 0.36,
+    metalness: 0.08,
+    emissive: 0xd9480f,
+    emissiveIntensity: 0.22
+  });
+  const scarfMat = new THREE.MeshStandardMaterial({
+    color: isWhite ? 0xdc2626 : 0x0ea5e9,
+    roughness: 0.48,
+    metalness: 0.12,
+    emissive: isWhite ? 0x7f1d1d : 0x0369a1,
+    emissiveIntensity: 0.25
+  });
+
+  // Shared Frosted Snowdrift Pedestal Base (grounded flush at y = 0)
+  const baseGeo = getCachedGeo('xmas_snow_base_v1', () =>
+    buildSculptedLathe(
+      [
+        [0.0, 0.0],
+        [0.33, 0.0],
+        [0.34, 0.036],
+        [0.30, 0.072],
+        [0.31, 0.105],
+        [0.255, 0.145],
+        [0.225, 0.175],
+        [0.0, 0.175]
+      ],
+      {
+        sampleCount: 28,
+        radialSegments: 28,
+        fluteCount: 12,
+        fluteDepth: 0.008,
+        fluteYMin: 0.03,
+        fluteYMax: 0.15
+      }
+    )
+  );
+  rig.add(new THREE.Mesh(baseGeo, primaryMat));
+
+  const baseGoldRingGeo = getCachedGeo('xmas_base_gold_ring_v1', () =>
+    new THREE.TorusGeometry(0.285, 0.015, 10, 28)
+  );
+  const baseRing = new THREE.Mesh(baseGoldRingGeo, trimMat);
+  baseRing.rotation.x = Math.PI / 2;
+  baseRing.position.y = 0.095;
+  rig.add(baseRing);
+
+  const frostCollarGeo = getCachedGeo('xmas_base_frost_collar_v1', () =>
+    new THREE.TorusGeometry(0.23, 0.012, 8, 24)
+  );
+  const frostCollar = new THREE.Mesh(frostCollarGeo, bladeMat);
+  frostCollar.rotation.x = Math.PI / 2;
+  frostCollar.position.y = 0.165;
+  rig.add(frostCollar);
+
+  if (pieceType === 'pawn') {
+    // =========================================================================
+    // PAWN — SNOWMAN SENTRY (Sculpted Snowman + Cozy Scarf + Knit Bobble Beanie + Snowball)
+    // =========================================================================
+    const lowerSphere = new THREE.Mesh(
+      getCachedGeo('xmas_pawn_belly', () => new THREE.SphereGeometry(0.185, 22, 18)),
+      primaryMat
+    );
+    lowerSphere.scale.set(1.0, 0.88, 1.0);
+    lowerSphere.position.set(0, 0.30, 0);
+    rig.add(lowerSphere);
+
+    const midSphere = new THREE.Mesh(
+      getCachedGeo('xmas_pawn_chest', () => new THREE.SphereGeometry(0.142, 22, 16)),
+      primaryMat
+    );
+    midSphere.scale.set(1.0, 0.92, 1.0);
+    midSphere.position.set(0, 0.50, 0);
+    rig.add(midSphere);
+
+    // 3 Coal Buttons on chest
+    const buttonGeo = getCachedGeo('xmas_coal_button', () => new THREE.SphereGeometry(0.016, 10, 8));
+    for (const [by, bz] of [[0.34, 0.178], [0.45, 0.135], [0.52, 0.138]]) {
+      const btn = new THREE.Mesh(buttonGeo, coalMat);
+      btn.position.set(0, by, bz);
+      rig.add(btn);
+    }
+
+    // Ribbed Festive Scarf & Trailing End
+    const scarfRing = new THREE.Mesh(
+      getCachedGeo('xmas_pawn_scarf_ring', () => new THREE.TorusGeometry(0.112, 0.028, 10, 22)),
+      scarfMat
+    );
+    scarfRing.rotation.x = Math.PI / 2;
+    scarfRing.position.set(0, 0.61, 0);
+    rig.add(scarfRing);
+
+    const scarfTail = new THREE.Mesh(
+      getCachedGeo('xmas_pawn_scarf_tail', () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(0.07, 0.60, 0.095),
+            new THREE.Vector3(0.10, 0.50, 0.135),
+            new THREE.Vector3(0.11, 0.41, 0.145)
+          ],
+          0.028,
+          0.018,
+          10,
+          8
+        )
+      ),
+      scarfMat
+    );
+    rig.add(scarfTail);
+
+    // Expressive Snowman Head Group (nods & tilts)
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.71, 0);
+    rig.add(headGroup);
+
+    const headSphere = new THREE.Mesh(
+      getCachedGeo('xmas_pawn_head', () => new THREE.SphereGeometry(0.105, 20, 16)),
+      primaryMat
+    );
+    headGroup.add(headSphere);
+
+    // Coal Eyes & Sculpted Carrot Nose
+    const eyeGeo = getCachedGeo('xmas_snowman_eye', () => new THREE.SphereGeometry(0.014, 8, 8));
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(eyeGeo, coalMat);
+      eye.position.set(s * 0.038, 0.025, 0.092);
+      headGroup.add(eye);
+    }
+    const nose = new THREE.Mesh(
+      getCachedGeo('xmas_carrot_nose', () => new THREE.ConeGeometry(0.018, 0.085, 10)),
+      carrotMat
+    );
+    nose.rotation.x = Math.PI / 2;
+    nose.position.set(0, 0.002, 0.125);
+    headGroup.add(nose);
+
+    // Knit Bobble Beanie Cap + Fluffy Gold Cuff + Pom-Pom
+    const beanieCuff = new THREE.Mesh(
+      getCachedGeo('xmas_beanie_cuff', () => new THREE.TorusGeometry(0.092, 0.022, 10, 20)),
+      trimMat
+    );
+    beanieCuff.rotation.x = Math.PI / 2;
+    beanieCuff.position.set(0, 0.072, 0);
+    headGroup.add(beanieCuff);
+
+    const beanieCrown = new THREE.Mesh(
+      getCachedGeo('xmas_beanie_crown', () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(0, 0.075, 0),
+            new THREE.Vector3(0.018, 0.155, -0.02),
+            new THREE.Vector3(0.045, 0.195, -0.065)
+          ],
+          0.088,
+          0.018,
+          12,
+          12
+        )
+      ),
+      scarfMat
+    );
+    headGroup.add(beanieCrown);
+
+    const pomPom = new THREE.Mesh(
+      getCachedGeo('xmas_beanie_pom', () => new THREE.SphereGeometry(0.032, 12, 10)),
+      trimMat
+    );
+    pomPom.position.set(0.052, 0.20, -0.072);
+    headGroup.add(pomPom);
+
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
+
+    // Left Twig/Frost Arm
+    const leftArm = new THREE.Mesh(
+      getCachedGeo('xmas_pawn_arm_l', () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(-0.12, 0.52, 0.0),
+            new THREE.Vector3(-0.20, 0.55, 0.05),
+            new THREE.Vector3(-0.24, 0.60, 0.10)
+          ],
+          0.016,
+          0.009,
+          10,
+          8
+        )
+      ),
+      trimMat
+    );
+    rig.add(leftArm);
+
+    // Right Articulated Throwing Arm holding a glowing Glacial Snowball
+    const rightArmPivot = new THREE.Group();
+    rightArmPivot.position.set(0.12, 0.53, 0.02);
+    rig.add(rightArmPivot);
+
+    const rightArmMesh = new THREE.Mesh(
+      getCachedGeo('xmas_pawn_arm_r', () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0.08, 0.03, 0.07),
+            new THREE.Vector3(0.06, 0.08, 0.15)
+          ],
+          0.016,
+          0.010,
+          10,
+          8
+        )
+      ),
+      trimMat
+    );
+    rightArmPivot.add(rightArmMesh);
+
+    const snowball = new THREE.Mesh(
+      getCachedGeo('xmas_pawn_snowball', () => new THREE.IcosahedronGeometry(0.052, 1)),
+      bladeMat
+    );
+    snowball.position.set(0.06, 0.10, 0.17);
+    rightArmPivot.add(snowball);
+
+    animParts.push({ mesh: rightArmPivot, kind: 'xmasArm', baseRotX: 0, baseRotY: 0, baseRotZ: 0 });
+  } else if (pieceType === 'rook') {
+    // =========================================================================
+    // ROOK — SNOWY PINE & STAR CITADEL (Fortified Turret + 3-Tier Christmas Tree + Golden Star)
+    // =========================================================================
+    const turretBase = new THREE.Mesh(
+      getCachedGeo('xmas_rook_turret', () =>
+        buildSculptedLathe(
+          [
+            [0.0, 0.16],
+            [0.24, 0.17],
+            [0.215, 0.30],
+            [0.23, 0.38],
+            [0.25, 0.42],
+            [0.0, 0.42]
+          ],
+          {
+            sampleCount: 24,
+            radialSegments: 24,
+            fluteCount: 10,
+            fluteDepth: 0.010,
+            fluteYMin: 0.18,
+            fluteYMax: 0.38
+          }
+        )
+      ),
+      primaryMat
+    );
+    rig.add(turretBase);
+
+    // Festive Gold Garland Trim around the Turret Rim
+    const garlandRing = new THREE.Mesh(
+      getCachedGeo('xmas_rook_garland', () => new THREE.TorusGeometry(0.242, 0.018, 10, 28)),
+      trimMat
+    );
+    garlandRing.rotation.x = Math.PI / 2;
+    garlandRing.position.y = 0.415;
+    rig.add(garlandRing);
+
+    // 3-Tier Sculpted Snowy Evergreen Christmas Tree Spire
+    const tiers = [
+      { y: 0.40, h: 0.28, r: 0.245, baubles: 6 },
+      { y: 0.59, h: 0.25, r: 0.195, baubles: 5 },
+      { y: 0.76, h: 0.22, r: 0.135, baubles: 4 }
+    ];
+    const baubleGeo = getCachedGeo('xmas_rook_bauble', () => new THREE.SphereGeometry(0.022, 10, 8));
+    tiers.forEach((tier, ti) => {
+      const coneGeo = getCachedGeo(`xmas_rook_pine_tier_${ti}`, () =>
+        buildSculptedLathe(
+          [
+            [0.0, 0.0],
+            [tier.r, 0.0],
+            [tier.r * 0.94, tier.h * 0.14],
+            [tier.r * 0.62, tier.h * 0.55],
+            [tier.r * 0.28, tier.h * 0.85],
+            [0.0, tier.h]
+          ],
+          {
+            sampleCount: 20,
+            radialSegments: 24,
+            fluteCount: 8,
+            fluteDepth: tier.r * 0.08,
+            fluteYMin: 0.01,
+            fluteYMax: tier.h * 0.75
+          }
+        )
+      );
+      const tierMesh = new THREE.Mesh(coneGeo, primaryMat);
+      tierMesh.position.y = tier.y;
+      rig.add(tierMesh);
+
+      // Frosted Ice Rim Collar edging each bough tier
+      const frostRim = new THREE.Mesh(
+        getCachedGeo(`xmas_rook_frost_rim_${ti}`, () => new THREE.TorusGeometry(tier.r * 0.94, 0.011, 8, 22)),
+        bladeMat
+      );
+      frostRim.rotation.x = Math.PI / 2;
+      frostRim.position.y = tier.y + 0.012;
+      rig.add(frostRim);
+
+      // Hanging Golden & Festive Ornaments around each tier
+      for (let b = 0; b < tier.baubles; b++) {
+        const ang = (b / tier.baubles) * Math.PI * 2 + ti * 0.6;
+        const bauble = new THREE.Mesh(baubleGeo, b % 2 === 0 ? trimMat : scarfMat);
+        bauble.position.set(Math.cos(ang) * (tier.r * 0.86), tier.y + 0.025, Math.sin(ang) * (tier.r * 0.86));
+        rig.add(bauble);
+      }
+    });
+
+    // Blazing 6-Pointed Golden Bethlehem Star Finial at the Pine Apex
+    const starCrown = buildStarFinialMesh(0.095, trimMat, starGlowMat);
+    starCrown.position.set(0, 1.03, 0);
+    rig.add(starCrown);
+    animParts.push({ mesh: starCrown, kind: 'headNod' });
+
+    // Orbiting Frost Snowflake Ring around the upper spire
+    const snowRing = new THREE.Mesh(
+      getCachedGeo('xmas_rook_orbit_ring', () => new THREE.TorusGeometry(0.19, 0.010, 8, 28)),
+      bladeMat
+    );
+    snowRing.rotation.x = Math.PI / 2;
+    snowRing.position.y = 0.82;
+    rig.add(snowRing);
+    animParts.push({ mesh: snowRing, kind: 'orbitRing', baseY: 0.82, speed: 1.9 });
+  } else if (pieceType === 'knight') {
+    // =========================================================================
+    // KNIGHT — HOLIDAY REINDEER (Proud Stag Neck + Jingle-Bell Harness + Branching Antlers + Ruby Nose)
+    // =========================================================================
+    // Sculpted Muscular Stag Chest & Arched Neck
+    const stagNeckGeo = getCachedGeo('xmas_reindeer_neck_v1', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.16, -0.05),
+          new THREE.Vector3(0, 0.34, -0.02),
+          new THREE.Vector3(0, 0.56, 0.03),
+          new THREE.Vector3(0, 0.74, 0.06)
+        ],
+        0.165,
+        0.082,
+        20,
+        16
+      )
+    );
+    rig.add(new THREE.Mesh(stagNeckGeo, primaryMat));
+
+    // Fluffy Winter Chest Ruff Mane
+    const ruffGeo = getCachedGeo('xmas_reindeer_ruff', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.22],
+          [0.185, 0.26],
+          [0.195, 0.36],
+          [0.145, 0.48],
+          [0.0, 0.52]
+        ],
+        {
+          sampleCount: 18,
+          radialSegments: 20,
+          fluteCount: 10,
+          fluteDepth: 0.016,
+          fluteYMin: 0.25,
+          fluteYMax: 0.48
+        }
+      )
+    );
+    const ruffMesh = new THREE.Mesh(ruffGeo, bladeMat);
+    ruffMesh.position.set(0, 0, 0.035);
+    rig.add(ruffMesh);
+
+    // Festive Sleigh-Bell Harness Collar with 5 Hanging Gold Jingle Bells
+    const harnessRing = new THREE.Mesh(
+      getCachedGeo('xmas_reindeer_harness', () => new THREE.TorusGeometry(0.145, 0.022, 10, 24)),
+      scarfMat
+    );
+    harnessRing.rotation.x = Math.PI * 0.42;
+    harnessRing.position.set(0, 0.46, 0.02);
+    rig.add(harnessRing);
+
+    const bellGeo = getCachedGeo('xmas_jingle_bell', () => new THREE.SphereGeometry(0.024, 10, 8));
+    for (let i = -2; i <= 2; i++) {
+      const ang = i * 0.42;
+      const bell = new THREE.Mesh(bellGeo, trimMat);
+      bell.position.set(Math.sin(ang) * 0.145, 0.43 - Math.cos(ang) * 0.03, 0.02 + Math.cos(ang) * 0.145);
+      rig.add(bell);
+    }
+
+    // Articulated Noble Reindeer Head & Sweeping Multi-Tine Antlers
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.75, 0.06);
+    rig.add(headGroup);
+
+    const snoutGeo = getCachedGeo('xmas_reindeer_snout_v1', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0, 0.04, -0.04),
+          new THREE.Vector3(0, 0.01, 0.08),
+          new THREE.Vector3(0, -0.045, 0.21)
+        ],
+        0.088,
+        0.042,
+        16,
+        14
+      )
+    );
+    headGroup.add(new THREE.Mesh(snoutGeo, primaryMat));
+
+    // Glowing Ruby Rudolph Nose at the Snout Tip!
+    const rubyNose = new THREE.Mesh(
+      getCachedGeo('xmas_reindeer_ruby_nose', () => new THREE.SphereGeometry(0.034, 14, 12)),
+      rubyGlowMat
+    );
+    rubyNose.userData.isDragonFire = true;
+    rubyNose.position.set(0, -0.042, 0.228);
+    headGroup.add(rubyNose);
+
+    // Eyes, Alert Stag Ears & Sweeping Multi-Tine Branching Antlers
+    const earGeo = getCachedGeo('xmas_reindeer_ear', () => {
+      const g = new THREE.ConeGeometry(0.024, 0.095, 8);
+      g.scale(0.65, 1.0, 1.15);
+      return g;
+    });
+    const eyeGeo = getCachedGeo('xmas_reindeer_eye', () => new THREE.SphereGeometry(0.017, 10, 8));
+
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(eyeGeo, coalMat);
+      eye.position.set(s * 0.056, 0.035, 0.068);
+      headGroup.add(eye);
+
+      const ear = new THREE.Mesh(earGeo, primaryMat);
+      ear.position.set(s * 0.068, 0.085, -0.025);
+      ear.rotation.set(-0.22, 0, s * -0.58);
+      headGroup.add(ear);
+
+      // Main Sweeping Antler Beam
+      const mainBeamGeo = getCachedGeo(`xmas_antler_main_${s}`, () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(s * 0.035, 0.08, -0.01),
+            new THREE.Vector3(s * 0.11, 0.18, -0.03),
+            new THREE.Vector3(s * 0.18, 0.27, 0.03),
+            new THREE.Vector3(s * 0.15, 0.36, 0.11)
+          ],
+          0.020,
+          0.007,
+          16,
+          8
+        )
+      );
+      headGroup.add(new THREE.Mesh(mainBeamGeo, trimMat));
+
+      // Forward Brow Tine
+      const browTineGeo = getCachedGeo(`xmas_antler_brow_${s}`, () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(s * 0.09, 0.15, -0.02),
+            new THREE.Vector3(s * 0.10, 0.19, 0.07),
+            new THREE.Vector3(s * 0.08, 0.24, 0.13)
+          ],
+          0.013,
+          0.005,
+          10,
+          7
+        )
+      );
+      headGroup.add(new THREE.Mesh(browTineGeo, bladeMat));
+
+      // Upper Crown Tine
+      const upperTineGeo = getCachedGeo(`xmas_antler_upper_${s}`, () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(s * 0.16, 0.24, 0.01),
+            new THREE.Vector3(s * 0.23, 0.30, -0.03),
+            new THREE.Vector3(s * 0.24, 0.37, -0.01)
+          ],
+          0.013,
+          0.005,
+          10,
+          7
+        )
+      );
+      headGroup.add(new THREE.Mesh(upperTineGeo, trimMat));
+    }
+
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
+  } else if (pieceType === 'bishop') {
+    // =========================================================================
+    // BISHOP — SNOWMAN WIZARD (Robed Frost Sage + Tall Top Hat + Glowing Snowflake Lantern Staff)
+    // =========================================================================
+    const robeGeo = getCachedGeo('xmas_bishop_robe', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.16],
+          [0.23, 0.17],
+          [0.19, 0.36],
+          [0.155, 0.56],
+          [0.17, 0.66],
+          [0.115, 0.72],
+          [0.0, 0.72]
+        ],
+        {
+          sampleCount: 28,
+          radialSegments: 26,
+          fluteCount: 10,
+          fluteDepth: 0.012,
+          fluteYMin: 0.18,
+          fluteYMax: 0.66
+        }
+      )
+    );
+    rig.add(new THREE.Mesh(robeGeo, primaryMat));
+
+    // Cozy Frost-Trimmed Stole & Scarf Collar
+    const scarfCollar = new THREE.Mesh(
+      getCachedGeo('xmas_bishop_scarf', () => new THREE.TorusGeometry(0.125, 0.028, 10, 24)),
+      scarfMat
+    );
+    scarfCollar.rotation.x = Math.PI / 2;
+    scarfCollar.position.y = 0.70;
+    rig.add(scarfCollar);
+
+    // Snowman Wizard Head + Tall Victorian Top Hat
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.80, 0);
+    rig.add(headGroup);
+
+    headGroup.add(
+      new THREE.Mesh(
+        getCachedGeo('xmas_bishop_head', () => new THREE.SphereGeometry(0.105, 20, 16)),
+        primaryMat
+      )
+    );
+
+    // Coal Eyes, Carrot Nose & Frosty Wizard Beard
+    const eyeGeo = getCachedGeo('xmas_snowman_eye', () => new THREE.SphereGeometry(0.014, 8, 8));
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(eyeGeo, coalMat);
+      eye.position.set(s * 0.038, 0.025, 0.094);
+      headGroup.add(eye);
+    }
+    const nose = new THREE.Mesh(
+      getCachedGeo('xmas_carrot_nose', () => new THREE.ConeGeometry(0.018, 0.085, 10)),
+      carrotMat
+    );
+    nose.rotation.x = Math.PI / 2;
+    nose.position.set(0, 0.002, 0.125);
+    headGroup.add(nose);
+
+    const beard = new THREE.Mesh(
+      getCachedGeo('xmas_wizard_beard', () => new THREE.ConeGeometry(0.065, 0.14, 10)),
+      bladeMat
+    );
+    beard.rotation.x = Math.PI;
+    beard.position.set(0, -0.09, 0.075);
+    headGroup.add(beard);
+
+    // Tall Victorian Top Hat + Gilded Ribbon Band + Holly Berry Accent
+    const brim = new THREE.Mesh(
+      getCachedGeo('xmas_tophat_brim', () => new THREE.CylinderGeometry(0.165, 0.165, 0.022, 24)),
+      primaryMat
+    );
+    brim.position.y = 0.085;
+    headGroup.add(brim);
+
+    const hatBand = new THREE.Mesh(
+      getCachedGeo('xmas_tophat_band', () => new THREE.CylinderGeometry(0.104, 0.102, 0.036, 22)),
+      trimMat
+    );
+    hatBand.position.y = 0.112;
+    headGroup.add(hatBand);
+
+    const hatCrown = new THREE.Mesh(
+      getCachedGeo('xmas_tophat_crown', () => new THREE.CylinderGeometry(0.116, 0.098, 0.19, 22)),
+      primaryMat
+    );
+    hatCrown.position.y = 0.21;
+    headGroup.add(hatCrown);
+
+    const hollyBerry = new THREE.Mesh(
+      getCachedGeo('xmas_holly_berry', () => new THREE.SphereGeometry(0.022, 10, 8)),
+      rubyGlowMat
+    );
+    hollyBerry.userData.isDragonFire = true;
+    hollyBerry.position.set(0.085, 0.115, 0.068);
+    headGroup.add(hollyBerry);
+
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
+
+    // Right Articulated Arm holding the Frost-Lantern Staff
+    const staffPivot = new THREE.Group();
+    staffPivot.position.set(0.16, 0.56, 0.04);
+    rig.add(staffPivot);
+
+    const staffShaft = new THREE.Mesh(
+      getCachedGeo('xmas_bishop_staff_shaft', () => new THREE.CylinderGeometry(0.015, 0.019, 0.88, 12)),
+      trimMat
+    );
+    staffShaft.position.set(0.03, 0.08, 0.06);
+    staffShaft.rotation.x = 0.12;
+    staffPivot.add(staffShaft);
+
+    const lanternCage = new THREE.Mesh(
+      getCachedGeo('xmas_bishop_lantern_cage', () => new THREE.OctahedronGeometry(0.072, 0)),
+      bladeMat
+    );
+    lanternCage.position.set(0.03, 0.54, 0.115);
+    staffPivot.add(lanternCage);
+
+    const lanternCore = new THREE.Mesh(
+      getCachedGeo('xmas_bishop_lantern_core', () => new THREE.OctahedronGeometry(0.042, 0)),
+      frostGlowMat
+    );
+    lanternCore.userData.isDragonFire = true;
+    lanternCore.position.set(0.03, 0.54, 0.115);
+    staffPivot.add(lanternCore);
+
+    animParts.push({ mesh: staffPivot, kind: 'xmasArm', baseRotX: 0, baseRotY: 0, baseRotZ: 0 });
+  } else if (pieceType === 'queen') {
+    // =========================================================================
+    // QUEEN — SNOW QUEEN EMPRESS (Sculpted Ice Gown + Crystalline Collar + Snowflake Diadem + Aurora Scepter)
+    // =========================================================================
+    const gownGeo = getCachedGeo('xmas_queen_gown', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.16],
+          [0.245, 0.17],
+          [0.20, 0.38],
+          [0.125, 0.58],
+          [0.105, 0.68],
+          [0.155, 0.80],
+          [0.085, 0.88],
+          [0.0, 0.88]
+        ],
+        {
+          sampleCount: 32,
+          radialSegments: 28,
+          fluteCount: 12,
+          fluteDepth: 0.013,
+          fluteYMin: 0.18,
+          fluteYMax: 0.64
+        }
+      )
+    );
+    rig.add(new THREE.Mesh(gownGeo, primaryMat));
+
+    // Royal Waist Sash
+    const waistBelt = new THREE.Mesh(
+      getCachedGeo('xmas_queen_belt', () => new THREE.TorusGeometry(0.112, 0.018, 10, 24)),
+      trimMat
+    );
+    waistBelt.rotation.x = Math.PI / 2;
+    waistBelt.position.y = 0.65;
+    rig.add(waistBelt);
+
+    // Sweeping Crystalline Snowflake Collar flaring behind the shoulders
+    const collarCrystalGeo = getCachedGeo('xmas_queen_collar_crystal', () =>
+      new THREE.ConeGeometry(0.036, 0.24, 5)
+    );
+    for (let i = -2; i <= 2; i++) {
+      const ang = i * 0.45;
+      const spire = new THREE.Mesh(collarCrystalGeo, bladeMat);
+      spire.position.set(Math.sin(ang) * 0.15, 0.90, -0.06 - Math.cos(ang) * 0.05);
+      spire.rotation.set(-0.35, 0, -ang * 0.72);
+      rig.add(spire);
+    }
+
+    // Snow Queen Head & 6-Spire Snowflake Diadem Crown
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.96, 0.01);
+    rig.add(headGroup);
+
+    headGroup.add(
+      new THREE.Mesh(
+        getCachedGeo('xmas_queen_head', () => new THREE.SphereGeometry(0.095, 22, 18)),
+        primaryMat
+      )
+    );
+
+    const diademRing = new THREE.Mesh(
+      getCachedGeo('xmas_queen_diadem_ring', () => new THREE.TorusGeometry(0.096, 0.015, 10, 24)),
+      trimMat
+    );
+    diademRing.rotation.x = Math.PI / 2;
+    diademRing.position.y = 0.068;
+    headGroup.add(diademRing);
+
+    const crownSpireGeo = getCachedGeo('xmas_queen_crown_spire', () =>
+      new THREE.ConeGeometry(0.020, 0.145, 5)
+    );
+    for (let i = 0; i < 6; i++) {
+      const ang = (i / 6) * Math.PI * 2;
+      const isFront = i === 1 || i === 2;
+      const sp = new THREE.Mesh(crownSpireGeo, i % 2 === 0 ? bladeMat : trimMat);
+      sp.position.set(Math.cos(ang) * 0.092, 0.125 + (isFront ? 0.025 : 0), Math.sin(ang) * 0.092);
+      sp.rotation.z = -Math.cos(ang) * 0.18;
+      sp.rotation.x = Math.sin(ang) * 0.18;
+      headGroup.add(sp);
+    }
+
+    // Hovering Aurora Star above the Queen's Diadem
+    const crownStar = buildStarFinialMesh(0.068, bladeMat, frostGlowMat);
+    crownStar.position.set(0, 0.24, 0);
+    headGroup.add(crownStar);
+
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
+
+    // Aurora Ice Scepter held in Right Hand
+    const scepterPivot = new THREE.Group();
+    scepterPivot.position.set(0.16, 0.72, 0.04);
+    rig.add(scepterPivot);
+
+    const scepterShaft = new THREE.Mesh(
+      getCachedGeo('xmas_queen_scepter_shaft', () => new THREE.CylinderGeometry(0.014, 0.017, 0.86, 12)),
+      trimMat
+    );
+    scepterShaft.position.set(0.04, 0.08, 0.08);
+    scepterShaft.rotation.x = 0.18;
+    scepterPivot.add(scepterShaft);
+
+    const scepterStar = buildStarFinialMesh(0.082, bladeMat, frostGlowMat);
+    scepterStar.position.set(0.04, 0.52, 0.155);
+    scepterPivot.add(scepterStar);
+
+    animParts.push({ mesh: scepterPivot, kind: 'xmasArm', baseRotX: 0, baseRotY: 0, baseRotZ: 0 });
+  } else {
+    // =========================================================================
+    // KING — SANTA CLAUS MONARCH (Fur-Trimmed Coat + Royal Gold Belt + Lush Beard + Drooping Cap + Star Staff)
+    // =========================================================================
+    const coatGeo = getCachedGeo('xmas_king_coat', () =>
+      buildSculptedLathe(
+        [
+          [0.0, 0.16],
+          [0.26, 0.17],
+          [0.245, 0.34],
+          [0.22, 0.54],
+          [0.195, 0.68],
+          [0.21, 0.82],
+          [0.125, 0.92],
+          [0.0, 0.92]
+        ],
+        {
+          sampleCount: 30,
+          radialSegments: 28,
+          fluteCount: 10,
+          fluteDepth: 0.008,
+          fluteYMin: 0.20,
+          fluteYMax: 0.54
+        }
+      )
+    );
+    rig.add(new THREE.Mesh(coatGeo, primaryMat));
+
+    // Plush Fur Hem Trim & Vertical Front Placket
+    const hemFur = new THREE.Mesh(
+      getCachedGeo('xmas_king_hem_fur', () => new THREE.TorusGeometry(0.252, 0.028, 10, 26)),
+      bladeMat
+    );
+    hemFur.rotation.x = Math.PI / 2;
+    hemFur.position.y = 0.195;
+    rig.add(hemFur);
+
+    const placket = new THREE.Mesh(
+      getCachedGeo('xmas_king_placket', () => new THREE.BoxGeometry(0.068, 0.66, 0.055)),
+      bladeMat
+    );
+    placket.position.set(0, 0.52, 0.20);
+    rig.add(placket);
+
+    // Wide Royal Santa Belt & Oversized Golden Square Buckle
+    const beltRing = new THREE.Mesh(
+      getCachedGeo('xmas_king_belt', () => new THREE.TorusGeometry(0.218, 0.028, 10, 28)),
+      coalMat
+    );
+    beltRing.rotation.x = Math.PI / 2;
+    beltRing.position.y = 0.52;
+    rig.add(beltRing);
+
+    const buckle = new THREE.Mesh(
+      getCachedGeo('xmas_king_buckle', () => new THREE.BoxGeometry(0.115, 0.092, 0.045)),
+      trimMat
+    );
+    buckle.position.set(0, 0.52, 0.232);
+    rig.add(buckle);
+
+    // Regal Fur Shoulder Mantle
+    const shoulderMantle = new THREE.Mesh(
+      getCachedGeo('xmas_king_mantle', () => new THREE.TorusGeometry(0.185, 0.034, 10, 24)),
+      bladeMat
+    );
+    shoulderMantle.rotation.x = Math.PI / 2;
+    shoulderMantle.position.y = 0.84;
+    rig.add(shoulderMantle);
+
+    // Santa Claus Head, Lush Sculpted Beard, Mustache & Iconic Drooping Cap
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.99, 0.01);
+    rig.add(headGroup);
+
+    headGroup.add(
+      new THREE.Mesh(
+        getCachedGeo('xmas_king_head', () => new THREE.SphereGeometry(0.112, 22, 18)),
+        primaryMat
+      )
+    );
+
+    // Twinkling Eyes & Rosy Nose
+    const eyeGeo = getCachedGeo('xmas_snowman_eye', () => new THREE.SphereGeometry(0.014, 8, 8));
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(eyeGeo, coalMat);
+      eye.position.set(s * 0.040, 0.025, 0.10);
+      headGroup.add(eye);
+    }
+    const nose = new THREE.Mesh(
+      getCachedGeo('xmas_king_nose', () => new THREE.SphereGeometry(0.024, 12, 10)),
+      rubyGlowMat
+    );
+    nose.userData.isDragonFire = true;
+    nose.position.set(0, 0.002, 0.115);
+    headGroup.add(nose);
+
+    // Lush Layered Santa Beard & Curling Mustache
+    const beardGeo = getCachedGeo('xmas_king_beard', () => {
+      const g = new THREE.ConeGeometry(0.112, 0.24, 14);
+      g.scale(1.05, 1.0, 0.65);
+      return g;
+    });
+    const beard = new THREE.Mesh(beardGeo, bladeMat);
+    beard.rotation.x = Math.PI;
+    beard.position.set(0, -0.115, 0.088);
+    headGroup.add(beard);
+
+    for (const s of [-1, 1]) {
+      const stache = new THREE.Mesh(
+        getCachedGeo(`xmas_king_stache_${s}`, () =>
+          buildTaperedCurveGeo(
+            [
+              new THREE.Vector3(0, -0.022, 0.11),
+              new THREE.Vector3(s * 0.045, -0.028, 0.115),
+              new THREE.Vector3(s * 0.085, -0.012, 0.095)
+            ],
+            0.022,
+            0.008,
+            10,
+            8
+          )
+        ),
+        bladeMat
+      );
+      headGroup.add(stache);
+    }
+
+    // Iconic Santa Hat: Plush Fur Brim + Drooping Curved Cone + Golden Pom-Pom Bell + Crown Star
+    const hatBrim = new THREE.Mesh(
+      getCachedGeo('xmas_king_hat_brim', () => new THREE.TorusGeometry(0.108, 0.028, 10, 24)),
+      bladeMat
+    );
+    hatBrim.rotation.x = Math.PI / 2;
+    hatBrim.position.y = 0.072;
+    headGroup.add(hatBrim);
+
+    const santaHat = new THREE.Mesh(
+      getCachedGeo('xmas_king_santa_hat', () =>
+        buildTaperedCurveGeo(
+          [
+            new THREE.Vector3(0, 0.075, 0),
+            new THREE.Vector3(0.015, 0.20, -0.02),
+            new THREE.Vector3(0.085, 0.265, -0.055),
+            new THREE.Vector3(0.155, 0.215, -0.075)
+          ],
+          0.104,
+          0.020,
+          16,
+          14
+        )
+      ),
+      scarfMat
+    );
+    headGroup.add(santaHat);
+
+    const hatPom = new THREE.Mesh(
+      getCachedGeo('xmas_king_hat_pom', () => new THREE.SphereGeometry(0.038, 12, 10)),
+      trimMat
+    );
+    hatPom.position.set(0.165, 0.205, -0.078);
+    headGroup.add(hatPom);
+
+    // Royal Bethlehem Star Crest above Santa's Brow (Classic King Chess Cross Silhouette!)
+    const kingStar = buildStarFinialMesh(0.075, trimMat, starGlowMat);
+    kingStar.position.set(0, 0.31, 0);
+    headGroup.add(kingStar);
+
+    animParts.push({ mesh: headGroup, kind: 'headNod' });
+
+    // Right Articulated Arm wielding the Grand North Pole Star & Candy-Cane Staff
+    const staffPivot = new THREE.Group();
+    staffPivot.position.set(0.20, 0.72, 0.04);
+    rig.add(staffPivot);
+
+    const caneGeo = getCachedGeo('xmas_king_candycane', () =>
+      buildTaperedCurveGeo(
+        [
+          new THREE.Vector3(0.03, -0.46, 0.06),
+          new THREE.Vector3(0.03, 0.34, 0.11),
+          new THREE.Vector3(0.03, 0.48, 0.14),
+          new THREE.Vector3(0.03, 0.50, 0.22),
+          new THREE.Vector3(0.03, 0.42, 0.25)
+        ],
+        0.020,
+        0.018,
+        20,
+        10
+      )
+    );
+    staffPivot.add(new THREE.Mesh(caneGeo, trimMat));
+
+    const caneStar = buildStarFinialMesh(0.072, trimMat, starGlowMat);
+    caneStar.position.set(0.03, 0.56, 0.16);
+    staffPivot.add(caneStar);
+
+    animParts.push({ mesh: staffPivot, kind: 'xmasArm', baseRotX: 0, baseRotY: 0, baseRotZ: 0 });
+
+    // Miniature Sculpted Gift Sack strapped at Santa's Left Hip
+    const giftSack = new THREE.Mesh(
+      getCachedGeo('xmas_king_gift_sack', () => new THREE.DodecahedronGeometry(0.095, 1)),
+      scarfMat
+    );
+    giftSack.scale.set(0.85, 1.15, 0.95);
+    giftSack.position.set(-0.22, 0.42, -0.06);
+    rig.add(giftSack);
+  }
+}
+
 export function buildProceduralPieceGroup(archetypeId, pieceType, color, mats) {
   const { whitePieceMat, blackPieceMat, goldTrimMat, forgedSteelMat } = mats;
   const primaryMat = color === 'w' ? whitePieceMat : blackPieceMat;
@@ -1588,6 +2570,8 @@ export function buildProceduralPieceGroup(archetypeId, pieceType, color, mats) {
     buildDragonElementalPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
   } else if (archetypeId === 'hollow_reapers') {
     buildHollowReapersPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
+  } else if (archetypeId === 'xmas_snow') {
+    buildXmasSnowPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts, color);
   } else {
     buildStauntonPiece(animRig, pieceType, primaryMat, goldTrimMat, forgedSteelMat, animParts);
   }
@@ -5364,7 +6348,7 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
             const u = Math.min(1, (t - 0.86) / 0.18);
             part.mesh.rotation.set(0.12 * (1 - u), 0, 0);
           }
-        } else if (arch === 'classic_staunton' || arch === 'toon_classic') {
+        } else if (arch === 'classic_staunton' || arch === 'toon_classic' || arch === 'xmas_snow') {
           // All 6 pieces (Pawn, Rook, Knight, Bishop, Queen, King) coil their head/crown back,
           // then whip forward into a dramatic overhead power-slam!
           const isToon = arch === 'toon_classic';
@@ -5420,6 +6404,29 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
           part.mesh.scale.set(1, 1, 1);
         }
       }
+    } else if (part.kind === 'xmasArm') {
+      if (isAttacking) {
+        const t = state.clipTime;
+        if (t < 0.28) {
+          const u = t / 0.28;
+          const ease = u * u * (3 - 2 * u);
+          part.mesh.rotation.set(part.baseRotX - 0.95 * ease, part.baseRotY, part.baseRotZ - 0.18 * ease);
+        } else if (t < 0.66) {
+          const u = (t - 0.28) / 0.38;
+          const slam = u * u * (3 - 2 * u);
+          part.mesh.rotation.set(part.baseRotX - 0.95 + 1.85 * slam, part.baseRotY, part.baseRotZ - 0.18 + 0.30 * slam);
+        } else {
+          const u = Math.min(1, (t - 0.66) / 0.34);
+          const rem = 1 - u * u * (3 - 2 * u);
+          part.mesh.rotation.set(part.baseRotX + 0.90 * rem, part.baseRotY, part.baseRotZ + 0.12 * rem);
+        }
+      } else {
+        part.mesh.rotation.set(
+          part.baseRotX + Math.sin(elapsedTotal * 2.6 + phaseSeed) * 0.10,
+          part.baseRotY + Math.cos(elapsedTotal * 1.9 + phaseSeed) * 0.06,
+          part.baseRotZ
+        );
+      }
     }
   }
 
@@ -5437,6 +6444,16 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       rig.position.set(0, 0, 0);
       rig.rotation.set(0, 0, 0);
       rig.scale.set(1, 1, 1);
+    } else if (arch === 'xmas_snow') {
+      // Merry gentle holiday idle sway while keeping the snowdrift pedestal grounded at y=0
+      const breath = 1.0 + Math.sin(elapsedTotal * 2.5 + phaseSeed) * 0.016;
+      rig.position.set(0, 0, 0);
+      rig.rotation.set(
+        Math.cos(elapsedTotal * 1.9 + phaseSeed) * 0.02,
+        0,
+        Math.sin(elapsedTotal * 2.3 + phaseSeed) * 0.032
+      );
+      rig.scale.set(1, breath, 1);
     } else {
       const breath = 1.0 + Math.sin(elapsedTotal * 2.4 + phaseSeed) * 0.018;
       rig.position.set(0, 0, 0);
@@ -5449,6 +6466,12 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
       const hover = 0.075 + Math.sin(state.clipTime * 11.0) * 0.028;
       rig.position.set(0, hover, 0);
       rig.rotation.set(0.16, 0, Math.sin(state.clipTime * 6.0) * 0.06);
+      rig.scale.set(1, 1, 1);
+    } else if (arch === 'xmas_snow') {
+      // Frosty sleigh-glide hover with jaunty festive lean
+      const hover = 0.068 + Math.sin(state.clipTime * 10.5) * 0.026;
+      rig.position.set(0, hover, 0);
+      rig.rotation.set(0.15, 0, Math.sin(state.clipTime * 7.5) * 0.065);
       rig.scale.set(1, 1, 1);
     } else if (arch === 'dragon_elemental') {
       // Winged bounding stride
@@ -5635,6 +6658,29 @@ export function updateProceduralPieceAnimation(piece, dt, elapsedTotal) {
         const rem = 1 - u * u * (3 - 2 * u);
         rig.position.set(0, 0.09 * powerMul * rem, 0.21 * powerMul * rem);
         rig.rotation.set(0.28 * rem, 0.16 * rem, -0.06 * rem);
+        rig.scale.set(1, 1, 1);
+      }
+    } else if (arch === 'xmas_snow') {
+      // PATTERN 5 — NORTH POLE SNOW COURT (XMAS):
+      // "BLIZZARD SLEIGH-CHARGE & FROST-NOVA LEAP SMASH"
+      if (t < 0.28) {
+        const u = t / 0.28;
+        const ease = u * u * (3 - 2 * u);
+        rig.position.set(0, 0.34 * powerMul * ease, -0.06 * ease);
+        rig.rotation.set(-0.32 * ease, Math.sin(u * Math.PI) * 0.16, 0);
+        rig.scale.set(1 + 0.05 * ease, 1 + 0.08 * ease, 1 + 0.05 * ease);
+      } else if (t < 0.66) {
+        const u = (t - 0.28) / 0.38;
+        const slam = Math.sin(u * Math.PI * 0.88);
+        const drop = u * u * (3 - 2 * u);
+        rig.position.set(0, 0.34 * powerMul * (1 - drop), (-0.06 + 0.34 * slam) * powerMul);
+        rig.rotation.set(-0.32 + 0.88 * slam, 0, Math.sin(u * Math.PI * 2.0) * 0.08);
+        rig.scale.set(1 + 0.06 * slam, 1 - 0.04 * slam, 1 + 0.06 * slam);
+      } else {
+        const u = Math.min(1, (t - 0.66) / 0.34);
+        const rem = 1 - u * u * (3 - 2 * u);
+        rig.position.set(0, 0, 0.16 * powerMul * rem);
+        rig.rotation.set(0.36 * rem, 0, 0);
         rig.scale.set(1, 1, 1);
       }
     } else {
@@ -6230,6 +7276,146 @@ export function rebuildBoardArchitectureGroup(
           mesh: lanternNode,
           baseY,
           phase: sx * 1.4 + sz * 0.9
+        });
+      }
+    }
+  } else if (archType === 'winter_hearth') {
+    // Frosted Pine & Hearth Altar (Christmas Event Board):
+    // Carved frosted cedar-and-gold rim, glowing glacier-cyan frost channels,
+    // miniature holiday wreaths, downloaded Low Poly Winter Nature Pack 3D frost clusters,
+    // snowbanks, firewood stacks, and 4 corner 3D Winter Lantern Posts with hovering golden Christmas stars!
+    preloadWinter3DAssets();
+
+    const rimW = 0.15;
+    const rimH = 0.058;
+    const horizGeo = new THREE.BoxGeometry(halfB * 2 + rimW * 2, rimH, rimW);
+    const vertGeo = new THREE.BoxGeometry(rimW, rimH, halfB * 2);
+    const frostStripH = new THREE.BoxGeometry(halfB * 2 + rimW * 1.38, rimH + 0.005, 0.032);
+    const frostStripV = new THREE.BoxGeometry(0.032, rimH + 0.005, halfB * 2);
+
+    for (const s of [-1, 1]) {
+      const hBar = new THREE.Mesh(horizGeo, frameSecondaryMat);
+      hBar.position.set(0, BOARD_SURFACE_Y - rimH * 0.45, s * (halfB + rimW * 0.5));
+      hBar.receiveShadow = true;
+      boardArchGroup.add(hBar);
+
+      const hFrost = new THREE.Mesh(frostStripH, accentMat);
+      hFrost.position.set(0, BOARD_SURFACE_Y - rimH * 0.42, s * (halfB + rimW * 0.5));
+      boardArchGroup.add(hFrost);
+
+      const vBar = new THREE.Mesh(vertGeo, frameSecondaryMat);
+      vBar.position.set(s * (halfB + rimW * 0.5), BOARD_SURFACE_Y - rimH * 0.45, 0);
+      vBar.receiveShadow = true;
+      boardArchGroup.add(vBar);
+
+      const vFrost = new THREE.Mesh(frostStripV, accentMat);
+      vFrost.position.set(s * (halfB + rimW * 0.5), BOARD_SURFACE_Y - rimH * 0.42, 0);
+      boardArchGroup.add(vFrost);
+    }
+
+    const wreathMat = new THREE.MeshStandardMaterial({
+      color: 0x15803d,
+      roughness: 0.55,
+      metalness: 0.08
+    });
+    const berryMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+    const lanternGlowMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+    const goldStarMat = new THREE.MeshStandardMaterial({
+      color: 0xf5c344,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.85,
+      roughness: 0.18,
+      metalness: 0.88
+    });
+
+    const wreathGeo = new THREE.TorusGeometry(0.055, 0.016, 8, 16);
+    const berryGeo = new THREE.SphereGeometry(0.013, 8, 6);
+    const edgeDist = halfB + rimW * 0.62;
+
+    // Mount miniature 3D Winter Nature Pack frost clusters, snowdrifts, firewood & holiday wreaths along edges
+    for (const s of [-1, 1]) {
+      for (let k = -3; k <= 3; k++) {
+        const offset = k * (BOARD_SQ_SIZE * 0.95);
+        if (k === 0) {
+          // Center of each edge: miniature glowing frost cluster + holiday wreath medallion
+          mountWinterModel(boardArchGroup, 'FROST_01_ClusterSmall', {
+            scale: 0.072,
+            position: [offset, BOARD_SURFACE_Y - 0.008, s * edgeDist],
+            rotationY: s > 0 ? 0 : Math.PI
+          });
+          mountWinterModel(boardArchGroup, 'FROST_01_ClusterSmall', {
+            scale: 0.072,
+            position: [s * edgeDist, BOARD_SURFACE_Y - 0.008, offset],
+            rotationY: s > 0 ? Math.PI / 2 : -Math.PI / 2
+          });
+
+          const wH = new THREE.Mesh(wreathGeo, wreathMat);
+          wH.position.set(offset, BOARD_SURFACE_Y - 0.01, s * (halfB + rimW * 1.02));
+          boardArchGroup.add(wH);
+          const bH = new THREE.Mesh(berryGeo, berryMat);
+          bH.position.set(offset, BOARD_SURFACE_Y + 0.04, s * (halfB + rimW * 1.04));
+          boardArchGroup.add(bH);
+        } else if (Math.abs(k) === 2) {
+          mountWinterModel(boardArchGroup, 'PLANT_08_FrostedShrub', {
+            scale: 0.075,
+            position: [offset, BOARD_SURFACE_Y - 0.008, s * edgeDist],
+            rotationY: k * 0.7
+          });
+          mountWinterModel(boardArchGroup, 'LOG_01_SnowyStump', {
+            scale: 0.068,
+            position: [s * edgeDist, BOARD_SURFACE_Y - 0.008, offset],
+            rotationY: k * 0.9
+          });
+        } else {
+          mountWinterModel(boardArchGroup, 'SNOW_14_WindSweptDrift', {
+            scale: 0.045,
+            position: [offset, BOARD_SURFACE_Y - 0.008, s * edgeDist],
+            rotationY: s > 0 ? 0 : Math.PI
+          });
+        }
+      }
+    }
+
+    // 4 Corner Frosted Plinths topped with 3D Winter Lantern Posts (`PROP_10_LanternPost`), Warm Glow Orbs & Hovering Stars
+    const plinthGeo = new THREE.CylinderGeometry(0.082, 0.105, 0.12, 8);
+    const lanternOrbGeo = new THREE.SphereGeometry(0.032, 12, 10);
+    const cornerOff = halfB + rimW * 0.76;
+
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const cx = sx * cornerOff;
+        const cz = sz * cornerOff;
+
+        const plinth = new THREE.Mesh(plinthGeo, frameSecondaryMat);
+        plinth.position.set(cx, BOARD_SURFACE_Y + 0.015, cz);
+        boardArchGroup.add(plinth);
+
+        mountWinterModel(boardArchGroup, 'PROP_10_LanternPost', {
+          scale: 0.155,
+          position: [cx, BOARD_SURFACE_Y + 0.06, cz],
+          rotationY: Math.atan2(-cx, -cz) + Math.PI * 0.5
+        });
+
+        // Companion snowbank / frost crystal tucked at each corner base
+        mountWinterModel(boardArchGroup, 'FROST_01_ClusterSmall', {
+          scale: 0.065,
+          position: [sx * (halfB + rimW * 0.34), BOARD_SURFACE_Y - 0.006, sz * (halfB + rimW * 0.34)]
+        });
+
+        // Warm glowing lantern heart orb
+        const orb = new THREE.Mesh(lanternOrbGeo, lanternGlowMat);
+        orb.position.set(cx * 0.97, BOARD_SURFACE_Y + 0.39, cz * 0.97);
+        boardArchGroup.add(orb);
+
+        // Hovering Rotating Golden Christmas Star above each corner lantern post
+        const starNode = buildStarFinialMesh(0.062, goldStarMat, lanternGlowMat);
+        const baseY = BOARD_SURFACE_Y + 0.52;
+        starNode.position.set(cx, baseY, cz);
+        boardArchGroup.add(starNode);
+        boardArchGroup.userData.dynamicNodes.push({
+          mesh: starNode,
+          baseY,
+          phase: sx * 1.3 + sz * 0.85
         });
       }
     }
